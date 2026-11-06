@@ -12,12 +12,17 @@ export interface WWebJsAdapterOptions {
   executablePath?: string;
 }
 
+/**
+ * Urutan prioritas browser di Linux/Ubuntu Server:
+ * PENTING: Prioritaskan `/usr/bin/google-chrome-stable` (.deb native) di atas
+ * `/usr/bin/chromium-browser` karena di Ubuntu 22.04/24.04 `chromium-browser`
+ * adalah wrapper Snap yang sering gagal berjalan di bawah service daemon.
+ */
 const CHROMIUM_CANDIDATES = [
-  '/usr/bin/chromium-browser',
-  '/usr/bin/chromium',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/google-chrome',
-  '/snap/bin/chromium',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
 ];
 
 function detectChromiumExecutable(explicit?: string): string | undefined {
@@ -56,7 +61,6 @@ interface WWebMessageLike {
  *   sehingga tetap tersambung 24/7 setelah restart tanpa perlu scan ulang.
  * - Meresolusi nomor telepon pengirim asli (`getContact().number`) sehingga tetap
  *   mengenali nomor Hedy (`082233038659`) meskipun WhatsApp menggunakan format `@lid` atau `@c.us`.
- * - Mendukung kontrol baik dari nomor lain maupun dari chat ke nomor sendiri (Self-Chat).
  */
 export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   readonly name = 'wwebjs';
@@ -107,12 +111,14 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const generateQr = qrMod.default?.generate ?? qrMod.generate;
 
     if (!Client || !LocalAuth) {
+      this.setState('disconnected');
       throw new Error('Gagal memuat Client/LocalAuth dari whatsapp-web.js');
     }
 
     const executablePath = detectChromiumExecutable(
       this.opts.executablePath ?? process.env.PUPPETEER_EXECUTABLE_PATH,
     );
+    console.log(`[WA] Memulai whatsapp-web.js (browser: ${executablePath ?? 'puppeteer-bundled'})...`);
 
     const client = new Client({
       authStrategy: new LocalAuth({
@@ -130,6 +136,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           '--no-first-run',
           '--no-zygote',
           '--disable-gpu',
+          '--disable-software-rasterizer',
         ],
       },
     });
@@ -147,7 +154,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('authenticated', () => {
-      console.log('[WA] ✅ Autentikasi WhatsApp berhasil! Menyimpan sesi...');
+      console.log('[WA] ✅ Autentikasi WhatsApp berhasil! Menyimpan sesi di', this.opts.authDir);
     });
 
     client.on('ready', () => {
@@ -169,13 +176,11 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const m = msgRaw as WWebMessageLike;
       if (!m) return;
       const msgId = String(m.id?._serialized ?? `${Date.now()}`);
-      // Abaikan pesan balasan yang dikirim oleh HdyBot sendiri agar tidak terjadi loop
       if (this.botSentIds.has(msgId)) return;
 
       const text = String(m.body ?? '').trim();
       if (!text) return;
 
-      // Jika pesan dikirim dari perangkat owner sendiri (fromMe), hanya proses jika diawali '.' (command eksplisit)
       if (m.fromMe && !text.startsWith('.')) return;
 
       const rawChatId = m.fromMe ? String(m.to ?? m.from ?? '') : String(m.from ?? '');
@@ -184,7 +189,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const isGroup = rawChatId.endsWith('@g.us');
       let senderJid = isGroup ? String(m.author ?? m.from ?? '') : String(m.from ?? '');
 
-      // Resolusi nomor telepon asli jika WhatsApp Web memakai format @lid atau @c.us
       if (typeof m.getContact === 'function') {
         try {
           const contact = await m.getContact();
@@ -213,12 +217,16 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       }
     };
 
-    // Gunakan message_create agar menangkap pesan masuk dari orang lain MAUPUN command yang diketik owner sendiri
     client.on('message_create', (msgRaw: unknown) => {
       void handleRawMessage(msgRaw);
     });
 
-    await client.initialize();
+    try {
+      await client.initialize();
+    } catch (err) {
+      this.setState('disconnected');
+      throw err;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -250,7 +258,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const sent = await this.client.sendMessage(chatId, msg.text);
       const serializedId = sent?.id?._serialized ?? msg.idempotencyKey;
       this.botSentIds.add(serializedId);
-      // Batasi ukuran cache ID pesan keluar
       if (this.botSentIds.size > 2000) {
         const first = this.botSentIds.values().next().value;
         if (first) this.botSentIds.delete(first);

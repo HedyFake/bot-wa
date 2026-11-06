@@ -106,7 +106,10 @@ async function main() {
     }
   });
 
-  await whatsapp.connect().catch((e: unknown) => log.error({ err: (e as Error).name }, 'whatsapp connect gagal'));
+  await whatsapp.connect().catch((e: unknown) => {
+    const errMsg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    log.error({ err: errMsg }, 'whatsapp connect gagal, akan dicoba ulang otomatis');
+  });
 
   // Pemantauan health/ready murni internal & disajikan melalui chat WhatsApp pribadi Hedy (.health, .status, .dashboard).
   const health = () =>

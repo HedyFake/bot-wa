@@ -2,7 +2,7 @@
 # =============================================================================
 # HdyBot — Nursing Class A Assistant
 # Installer & Runner 24/7 Sekali Klik untuk Ubuntu Server (22.04 / 24.04 LTS)
-# Menggunakan `whatsapp-web.js` + `qrcode-terminal` (QR Code tampil di terminal)
+# Menggunakan `whatsapp-web.js` + `qrcode-terminal` + Google Chrome Stable (.deb)
 #
 # Cara pakai:
 #   chmod +x install.sh && sudo ./install.sh
@@ -19,9 +19,9 @@
 # Catatan penting:
 #   - TIDAK memasang dan TIDAK mengaktifkan UFW maupun Fail2Ban agar IP VPS
 #     owner tidak pernah terblokir.
-#   - TIDAK membuka port TCP/HTTP sama sekali (bebas bentrok EADDRINUSE port 3000);
-#     seluruh pemantauan health/ready/status dilakukan lewat chat WhatsApp
-#     pribadi Hedy (.status, .health, .dashboard, .ping, .runtime).
+#   - TIDAK membuka port TCP/HTTP sama sekali (bebas bentrok EADDRINUSE port 3000).
+#   - Memasang Google Chrome Stable (.deb native, BUKAN Snap) agar Puppeteer &
+#     whatsapp-web.js berjalan mulus di dalam systemd service Ubuntu Server.
 # =============================================================================
 set -euo pipefail
 
@@ -59,6 +59,7 @@ case "${1:-}" in
     shift
     exec sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm run -s cli -- \"$*\"" ;;
   --restart)
+    systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl restart "$APP_NAME"
     sleep 2
     systemctl --no-pager status "$APP_NAME"
@@ -66,6 +67,7 @@ case "${1:-}" in
   --reset-wa)
     systemctl stop "$APP_NAME" || true
     rm -rf "${DATA_DIR}/whatsapp-auth/"*
+    systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl start "$APP_NAME"
     c_ok "Sesi WhatsApp di-reset. Menampilkan QR Code baru..."
     exec journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
@@ -79,20 +81,33 @@ esac
 
 randhex() { openssl rand -hex "${1:-24}"; }
 
-# ---------------------------------------------------------------- 1. Paket Dasar + Library Chromium untuk whatsapp-web.js (TANPA ufw & TANPA fail2ban)
-c_info "Memasang paket dasar, PostgreSQL, Redis, dan dependensi Chromium untuk whatsapp-web.js (tanpa UFW & tanpa Fail2Ban)..."
+# Hentikan service di awal agar tidak terus mencoba restart selama proses instalasi berlangsung
+systemctl stop hdybot.service 2>/dev/null || true
+systemctl disable --now hdybot-watchdog.timer hdybot-watchdog.service 2>/dev/null || true
+rm -f /etc/systemd/system/hdybot-watchdog.timer /etc/systemd/system/hdybot-watchdog.service
+systemctl reset-failed hdybot.service 2>/dev/null || true
+
+# ---------------------------------------------------------------- 1. Paket Dasar + Google Chrome Stable (.deb native)
+c_info "Memasang paket dasar, PostgreSQL, Redis, dan Google Chrome Stable untuk whatsapp-web.js (tanpa UFW & tanpa Fail2Ban)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y \
-  ca-certificates curl gnupg openssl rsync \
+  ca-certificates curl wget gnupg openssl rsync \
   postgresql postgresql-contrib redis-server \
   fonts-liberation libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
   libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
   libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils
-# Dukungan libasound untuk Ubuntu 24.04 (t64) maupun 22.04
 apt-get install -y libasound2t64 2>/dev/null || apt-get install -y libasound2 2>/dev/null || true
-apt-get install -y chromium-browser 2>/dev/null || apt-get install -y chromium 2>/dev/null || true
-c_ok "Paket dasar & library Chromium terpasang (UFW & Fail2Ban tidak digunakan)"
+
+# Pasang Google Chrome Stable (.deb native, BUKAN Snap!) agar Puppeteer berjalan stabil di systemd
+if [[ ! -x /usr/bin/google-chrome-stable ]]; then
+  c_info "Mengunduh & memasang Google Chrome Stable (.deb native untuk Ubuntu Server)..."
+  CHROME_DEB="/tmp/google-chrome-stable_current_amd64.deb"
+  wget -q -O "$CHROME_DEB" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  apt-get install -y "$CHROME_DEB" || { apt-get -f install -y && apt-get install -y "$CHROME_DEB"; }
+  rm -f "$CHROME_DEB"
+fi
+c_ok "Google Chrome Stable: $(/usr/bin/google-chrome-stable --version 2>/dev/null || echo 'terpasang')"
 
 # ---------------------------------------------------------------- 2. Node.js LTS (>= 20)
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
@@ -115,22 +130,26 @@ systemctl restart postgresql redis-server
 redis-cli ping | grep -q PONG && c_ok "PostgreSQL & Redis aktif normal"
 
 # ---------------------------------------------------------------- 4. User & Direktori
-id "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
-install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_DIR" "$DATA_DIR" "$DATA_DIR/whatsapp-auth" "$DATA_DIR/storage" "$BACKUP_DIR"
+id "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$APP_USER" --shell /bin/bash "$APP_USER"
+usermod -s /bin/bash "$APP_USER" 2>/dev/null || true
+install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_DIR" "$DATA_DIR" "$DATA_DIR/whatsapp-auth" "$DATA_DIR/storage" "$BACKUP_DIR" "/home/$APP_USER"
 chmod 0700 "$DATA_DIR/whatsapp-auth" "$BACKUP_DIR"
 
-systemctl stop hdybot.service 2>/dev/null || true
+# Hanya jalankan rsync bila install.sh tidak sedang dijalankan langsung dari dalam /opt/hdybot
+if [[ "$(readlink -f "$SRC_DIR")" != "$(readlink -f "$APP_DIR")" ]]; then
+  c_info "Menyalin source code proyek dari $SRC_DIR ke $APP_DIR ..."
+  rsync -a --delete \
+    --exclude node_modules --exclude dist --exclude .git --exclude '.env' --exclude '.pg-*.local' \
+    --exclude whatsapp-auth --exclude storage --exclude backups \
+    "$SRC_DIR/" "$APP_DIR/"
+else
+  c_info "install.sh dijalankan langsung di $APP_DIR (skip rsync ke diri sendiri)"
+fi
 rm -rf "$APP_DIR/dist" "$APP_DIR/src/app/http.ts"
-
-c_info "Menyalin source code proyek ke $APP_DIR ..."
-rsync -a --delete \
-  --exclude node_modules --exclude dist --exclude .git --exclude '.env' --exclude '.pg-*.local' \
-  --exclude whatsapp-auth --exclude storage --exclude backups \
-  "$SRC_DIR/" "$APP_DIR/"
 chmod +x "$APP_DIR/scripts/"*.sh 2>/dev/null || true
-chown -R "$APP_USER:$APP_USER" "$APP_DIR" "/home/$APP_USER"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR" "$DATA_DIR" "$BACKUP_DIR" "/home/$APP_USER"
 
-# ---------------------------------------------------------------- 5. File .env & Database (Otomatis set WHATSAPP_PROVIDER=wwebjs)
+# ---------------------------------------------------------------- 5. File .env & Database (WHATSAPP_PROVIDER=wwebjs)
 ENV_FILE="$APP_DIR/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   DB_PASS="$(randhex 24)"
@@ -146,19 +165,22 @@ if [[ ! -f "$ENV_FILE" ]]; then
   {
     echo ""
     echo "# Dibuat otomatis oleh install.sh pada $(date -Iseconds)"
+    echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable"
     echo "STORAGE_DIR=${DATA_DIR}/storage"
     echo "BACKUP_DIR=${BACKUP_DIR}"
     echo "BACKUP_ENCRYPTION_KEY=${BACKUP_KEY}"
   } >> "$ENV_FILE"
-  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs, OUTBOUND_ENABLED=true, DRY_RUN=false (permission 0600)"
+  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs & Chrome Stable (permission 0600)"
 else
-  # Pastikan jika .env lama masih memakai mock/dry-run, kita ubah ke wwebjs asli agar QR code tampil & bot aktif!
   sed -i "s|^WHATSAPP_PROVIDER=.*|WHATSAPP_PROVIDER=wwebjs|" "$ENV_FILE"
   sed -i "s|^WHATSAPP_AUTH_DIR=.*|WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth|" "$ENV_FILE"
   sed -i "s|^OUTBOUND_ENABLED=.*|OUTBOUND_ENABLED=true|" "$ENV_FILE"
   sed -i "s|^DRY_RUN=.*|DRY_RUN=false|" "$ENV_FILE"
+  grep -q '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" \
+    && sed -i "s|^PUPPETEER_EXECUTABLE_PATH=.*|PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable|" "$ENV_FILE" \
+    || echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable" >> "$ENV_FILE"
   DB_PASS="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')"
-  c_ok ".env diperbarui (WHATSAPP_PROVIDER=wwebjs, OUTBOUND_ENABLED=true, DRY_RUN=false aktif)"
+  c_ok ".env diperbarui (WHATSAPP_PROVIDER=wwebjs & PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable)"
 fi
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
@@ -170,17 +192,10 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'
   || sudo -u postgres createdb -O "$DB_USER" "$DB_NAME"
 c_ok "PostgreSQL database '${DB_NAME}' siap"
 
-# ---------------------------------------------------------------- 6. Install (termasuk whatsapp-web.js & qrcode-terminal), Migrate, Seed, Test, Build
+# ---------------------------------------------------------------- 6. Install, Migrate, Seed, Test, Build
 as_app() { sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && $*"; }
 c_info "Menjalankan npm install (whatsapp-web.js, qrcode-terminal, prisma)..."
-if [[ -x /usr/bin/chromium-browser || -x /usr/bin/chromium ]]; then
-  # Gunakan Chromium sistem Ubuntu agar cepat dan ringan
-  as_app "PUPPETEER_SKIP_DOWNLOAD=true npm install --no-fund --no-audit"
-else
-  as_app "npm install --no-fund --no-audit"
-  as_app "npm install-scripts approve puppeteer @prisma/client prisma @prisma/engines esbuild 2>/dev/null || true"
-  as_app "npm rebuild 2>/dev/null || true"
-fi
+as_app "PUPPETEER_SKIP_DOWNLOAD=true npm install --no-fund --no-audit"
 as_app "npx prisma generate"
 c_info "Menjalankan migrasi database PostgreSQL..."
 as_app "npx prisma migrate deploy"
@@ -193,9 +208,8 @@ as_app "npm run build"
 c_ok "Seluruh test, typecheck, migrasi, seed, dan build LULUS"
 
 # ---------------------------------------------------------------- 7. Systemd Daemon 24/7 + Backup Timer
-systemctl disable --now hdybot-watchdog.timer hdybot-watchdog.service 2>/dev/null || true
-rm -f /etc/systemd/system/hdybot-watchdog.timer /etc/systemd/system/hdybot-watchdog.service
-
+# Catatan: Jangan gunakan ProtectSystem=strict atau NoNewPrivileges=true agar
+# Google Chrome headless dapat membuat sub-proses & crashpad tanpa error resources.
 cat > /etc/systemd/system/hdybot.service <<EOF
 [Unit]
 Description=HdyBot — Nursing Class A Assistant (24/7 WhatsApp Admin Control)
@@ -208,17 +222,14 @@ Type=simple
 User=${APP_USER}
 Group=${APP_USER}
 WorkingDirectory=${APP_DIR}
+Environment="HOME=/home/${APP_USER}"
+Environment="PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable"
 EnvironmentFile=${ENV_FILE}
-ExecStart=/usr/bin/node dist/index.js
+ExecStart=/usr/bin/node ${APP_DIR}/dist/index.js
 Restart=always
 RestartSec=5
 TimeoutStopSec=25
 KillSignal=SIGTERM
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=false
-ReadWritePaths=${DATA_DIR} ${BACKUP_DIR} /home/${APP_USER}
 UMask=0077
 StandardOutput=journal
 StandardError=journal
@@ -228,7 +239,6 @@ SyslogIdentifier=hdybot
 WantedBy=multi-user.target
 EOF
 
-# Backup harian terenkripsi pukul 02:30 WIB
 cat > /etc/systemd/system/hdybot-backup.service <<EOF
 [Unit]
 Description=HdyBot Encrypted PostgreSQL Backup
@@ -265,11 +275,12 @@ fi
 echo
 echo "==================================================================="
 echo " HDYBOT — INSTALASI UBUNTU SERVER SELESAI (24/7 MODE)"
-echo "  Provider WA : whatsapp-web.js + qrcode-terminal (wwebjs)"
+echo "  Browser WA  : Google Chrome Stable (/usr/bin/google-chrome-stable)"
 echo "  Lihat QR    : sudo ./install.sh --qr"
 echo "  Reset Sesi  : sudo ./install.sh --reset-wa"
 echo "  Status      : sudo ./install.sh --status"
 echo "==================================================================="
 echo
-echo "📲 Menunggu QR Code dari whatsapp-web.js (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
+echo "📲 Menunggu QR Code dari whatsapp-web.js (biasanya 5-10 detik saat Chrome headless start)..."
+echo "   (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)"
 exec journalctl -u hdybot -f -n 80 -o cat
