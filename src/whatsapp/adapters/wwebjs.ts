@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import type {
   ConnectionState,
   InboundMessage,
@@ -6,6 +6,8 @@ import type {
   SendResult,
   WhatsAppProvider,
 } from './types.js';
+
+export const QR_CACHE_FILE = '/tmp/hdybot-qr.txt';
 
 export interface WWebJsAdapterOptions {
   authDir: string;
@@ -102,13 +104,23 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     const qrPkg = 'qrcode-terminal';
     const qrMod = (await import(qrPkg)) as unknown as {
-      default?: { generate: (qr: string, opts?: { small?: boolean }) => void };
-      generate?: (qr: string, opts?: { small?: boolean }) => void;
+      default?: {
+        generate: (
+          qr: string,
+          opts?: { small?: boolean },
+          cb?: (asciiQr: string) => void,
+        ) => void;
+      };
+      generate?: (
+        qr: string,
+        opts?: { small?: boolean },
+        cb?: (asciiQr: string) => void,
+      ) => void;
     };
 
     const Client = wwebMod.default?.Client ?? wwebMod.Client;
     const LocalAuth = wwebMod.default?.LocalAuth ?? wwebMod.LocalAuth;
-    const generateQr = qrMod.default?.generate ?? qrMod.generate;
+    const qrTerminal = qrMod.default?.generate ? qrMod.default : qrMod;
 
     if (!Client || !LocalAuth) {
       this.setState('disconnected');
@@ -145,19 +157,45 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     client.on('qr', (qrRaw: unknown) => {
       const qr = String(qrRaw ?? '');
-      console.log('\n===================================================================');
-      console.log(' 📱 SCAN QR CODE INI DI WHATSAPP ANDA UNTUK MENAUTKAN HDYBOT');
-      console.log('    Buka WhatsApp -> Perangkat Tertaut -> Tautkan Perangkat');
-      console.log('===================================================================\n');
-      generateQr?.(qr, { small: true });
-      console.log('\n===================================================================\n');
+      try {
+        qrTerminal.generate?.(qr, { small: true }, (asciiQr: string) => {
+          const banner = [
+            '',
+            '===================================================================',
+            ' 📱 SCAN QR CODE INI DI WHATSAPP ANDA UNTUK MENAUTKAN HDYBOT',
+            '    Buka WhatsApp -> Perangkat Tertaut -> Tautkan Perangkat',
+            '===================================================================',
+            asciiQr,
+            '===================================================================',
+            '',
+          ].join('\n');
+          process.stdout.write(`${banner}\n`);
+          try {
+            writeFileSync(QR_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o644 });
+          } catch {
+            // abaikan bila /tmp tidak dapat ditulis
+          }
+        });
+      } catch (err) {
+        console.error('[WA] Gagal merender QR Code di terminal:', err);
+      }
     });
 
     client.on('authenticated', () => {
+      try {
+        rmSync(QR_CACHE_FILE, { force: true });
+      } catch {
+        // abaikan
+      }
       console.log('[WA] ✅ Autentikasi WhatsApp berhasil! Menyimpan sesi di', this.opts.authDir);
     });
 
     client.on('ready', () => {
+      try {
+        rmSync(QR_CACHE_FILE, { force: true });
+      } catch {
+        // abaikan
+      }
       console.log('[WA] 🚀 HdyBot SIAP & TERHUBUNG ke WhatsApp Asli!');
       this.setState('connected');
     });

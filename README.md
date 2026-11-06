@@ -27,8 +27,11 @@ Apa yang otomatis dikerjakan [`install.sh`](file:///c:/Users/HEDY/Documents/botw
 ### Perintah Operasional Ubuntu Server
 
 ```bash
+sudo ./install.sh --qr                  # Tampilkan QR Code WhatsApp & log live
+sudo ./install.sh --reset-wa            # Reset sesi WA & tampilkan QR Code baru
 sudo ./install.sh --status              # Cek status service systemd
 sudo ./install.sh --logs                # Lihat log live (journalctl -u hdybot -f)
+sudo ./install.sh --cli                 # Simulasi chat admin dari terminal
 sudo ./install.sh --restart             # Restart service HdyBot
 sudo ./install.sh --uninstall-service   # Hapus unit systemd (database & data tetap aman)
 ```

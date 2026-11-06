@@ -49,7 +49,10 @@ fi
 case "${1:-}" in
   --qr|--logs)
     echo "Menampilkan log live & QR Code WhatsApp (Tekan Ctrl+C untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
-    exec journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
+    if [[ -f /tmp/hdybot-qr.txt ]]; then
+      cat /tmp/hdybot-qr.txt
+    fi
+    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
   --status)
     systemctl --no-pager status "$APP_NAME" hdybot-backup.timer || true
     exit 0 ;;
@@ -66,11 +69,11 @@ case "${1:-}" in
     exit 0 ;;
   --reset-wa)
     systemctl stop "$APP_NAME" || true
-    rm -rf "${DATA_DIR}/whatsapp-auth/"*
+    rm -rf "${DATA_DIR}/whatsapp-auth/"* /tmp/hdybot-qr.txt
     systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl start "$APP_NAME"
     c_ok "Sesi WhatsApp di-reset. Menampilkan QR Code baru..."
-    exec journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
+    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
   --uninstall-service)
     systemctl disable --now "$APP_NAME" hdybot-watchdog.timer hdybot-backup.timer 2>/dev/null || true
     rm -f /etc/systemd/system/hdybot*.service /etc/systemd/system/hdybot*.timer
@@ -223,6 +226,8 @@ User=${APP_USER}
 Group=${APP_USER}
 WorkingDirectory=${APP_DIR}
 Environment="HOME=/home/${APP_USER}"
+Environment="LANG=C.UTF-8"
+Environment="LC_ALL=C.UTF-8"
 Environment="PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable"
 EnvironmentFile=${ENV_FILE}
 ExecStart=/usr/bin/node ${APP_DIR}/dist/index.js
@@ -260,6 +265,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+rm -f /tmp/hdybot-qr.txt
 systemctl daemon-reload
 systemctl reset-failed hdybot.service postgresql.service redis-server.service 2>/dev/null || true
 systemctl enable --now hdybot.service hdybot-backup.timer
@@ -283,4 +289,7 @@ echo "==================================================================="
 echo
 echo "📲 Menunggu QR Code dari whatsapp-web.js (biasanya 5-10 detik saat Chrome headless start)..."
 echo "   (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)"
-exec journalctl -u hdybot -f -n 80 -o cat
+if [[ -f /tmp/hdybot-qr.txt ]]; then
+  cat /tmp/hdybot-qr.txt
+fi
+exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u hdybot -f -n 80 -o cat
