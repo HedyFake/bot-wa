@@ -59,7 +59,7 @@ export const EnvSchema = z.object({
   AI_FALLBACK_ENABLED: bool(true),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
 
-  WHATSAPP_PROVIDER: z.enum(['mock', 'baileys', 'cloud-api']).default('mock'),
+  WHATSAPP_PROVIDER: z.enum(['mock', 'wwebjs', 'baileys', 'cloud-api']).default('mock'),
   WHATSAPP_AUTH_DIR: z.string().default('./whatsapp-auth'),
   WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS: bool(false),
   WHATSAPP_PRIMARY_GROUP_JID: z.string().optional(),

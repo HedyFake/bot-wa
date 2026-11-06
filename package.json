@@ -19,12 +19,15 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "health": "tsx src/scripts/health.ts",
+    "cli": "tsx src/scripts/admin-cli.ts",
     "benchmark:id": "tsx src/scripts/benchmark-id.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
     "dotenv": "^16.4.7",
     "pino": "^9.6.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

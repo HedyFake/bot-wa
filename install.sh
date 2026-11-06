@@ -2,14 +2,18 @@
 # =============================================================================
 # HdyBot — Nursing Class A Assistant
 # Installer & Runner 24/7 Sekali Klik untuk Ubuntu Server (22.04 / 24.04 LTS)
+# Menggunakan `whatsapp-web.js` + `qrcode-terminal` (QR Code tampil di terminal)
 #
 # Cara pakai:
 #   chmod +x install.sh && sudo ./install.sh
 #
 # Sub-perintah operasional:
+#   sudo ./install.sh --qr                # tampilkan QR code / log WhatsApp live
 #   sudo ./install.sh --status            # cek status service systemd
-#   sudo ./install.sh --logs              # lihat log live (journalctl -f)
+#   sudo ./install.sh --logs              # lihat log live
+#   sudo ./install.sh --cli               # simulasi chat admin dari terminal
 #   sudo ./install.sh --restart           # restart service HdyBot
+#   sudo ./install.sh --reset-wa          # hapus sesi WA lama & munculkan QR baru
 #   sudo ./install.sh --uninstall-service # hapus unit systemd (data & DB aman)
 #
 # Catatan penting:
@@ -18,8 +22,6 @@
 #   - TIDAK membuka port TCP/HTTP sama sekali (bebas bentrok EADDRINUSE port 3000);
 #     seluruh pemantauan health/ready/status dilakukan lewat chat WhatsApp
 #     pribadi Hedy (.status, .health, .dashboard, .ping, .runtime).
-#   - Membersihkan override systemd postgresql.service yang tidak kompatibel
-#     dengan Type=oneshot di Ubuntu.
 # =============================================================================
 set -euo pipefail
 
@@ -45,16 +47,28 @@ if [[ -f /etc/os-release ]]; then
 fi
 
 case "${1:-}" in
+  --qr|--logs)
+    echo "Menampilkan log live & QR Code WhatsApp (Tekan Ctrl+C untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
+    exec journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
   --status)
     systemctl --no-pager status "$APP_NAME" hdybot-backup.timer || true
     exit 0 ;;
-  --logs)
-    exec journalctl -u "$APP_NAME" -f ;;
+  --cli)
+    exec sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm run -s cli" ;;
+  --cmd)
+    shift
+    exec sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm run -s cli -- \"$*\"" ;;
   --restart)
     systemctl restart "$APP_NAME"
     sleep 2
     systemctl --no-pager status "$APP_NAME"
     exit 0 ;;
+  --reset-wa)
+    systemctl stop "$APP_NAME" || true
+    rm -rf "${DATA_DIR}/whatsapp-auth/"*
+    systemctl start "$APP_NAME"
+    c_ok "Sesi WhatsApp di-reset. Menampilkan QR Code baru..."
+    exec journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
   --uninstall-service)
     systemctl disable --now "$APP_NAME" hdybot-watchdog.timer hdybot-backup.timer 2>/dev/null || true
     rm -f /etc/systemd/system/hdybot*.service /etc/systemd/system/hdybot*.timer
@@ -65,12 +79,20 @@ esac
 
 randhex() { openssl rand -hex "${1:-24}"; }
 
-# ---------------------------------------------------------------- 1. Paket Dasar (TANPA ufw & TANPA fail2ban)
-c_info "Memasang paket dasar sistem, PostgreSQL, dan Redis (tanpa UFW & tanpa Fail2Ban)..."
+# ---------------------------------------------------------------- 1. Paket Dasar + Library Chromium untuk whatsapp-web.js (TANPA ufw & TANPA fail2ban)
+c_info "Memasang paket dasar, PostgreSQL, Redis, dan dependensi Chromium untuk whatsapp-web.js (tanpa UFW & tanpa Fail2Ban)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg openssl rsync postgresql postgresql-contrib redis-server
-c_ok "Paket dasar terpasang (UFW & Fail2Ban tidak digunakan)"
+apt-get install -y \
+  ca-certificates curl gnupg openssl rsync \
+  postgresql postgresql-contrib redis-server \
+  fonts-liberation libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
+  libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
+  libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils
+# Dukungan libasound untuk Ubuntu 24.04 (t64) maupun 22.04
+apt-get install -y libasound2t64 2>/dev/null || apt-get install -y libasound2 2>/dev/null || true
+apt-get install -y chromium-browser 2>/dev/null || apt-get install -y chromium 2>/dev/null || true
+c_ok "Paket dasar & library Chromium terpasang (UFW & Fail2Ban tidak digunakan)"
 
 # ---------------------------------------------------------------- 2. Node.js LTS (>= 20)
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
@@ -83,12 +105,11 @@ fi
 c_ok "Node $(node -v), npm $(npm -v)"
 
 # ---------------------------------------------------------------- 3. Perbaiki & Nyalakan PostgreSQL + Redis
-# PENTING: Di Ubuntu, postgresql.service adalah wrapper Type=oneshot sehingga
-# TIDAK BOLEH diberi Restart=always di override.conf (menyebabkan "bad unit file setting").
 rm -rf /etc/systemd/system/postgresql.service.d /etc/systemd/system/redis-server.service.d
 sed -i 's/^#\?\s*bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf || true
 sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf || true
 systemctl daemon-reload
+systemctl reset-failed postgresql.service redis-server.service 2>/dev/null || true
 systemctl enable --now postgresql redis-server
 systemctl restart postgresql redis-server
 redis-cli ping | grep -q PONG && c_ok "PostgreSQL & Redis aktif normal"
@@ -98,7 +119,6 @@ id "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/ho
 install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_DIR" "$DATA_DIR" "$DATA_DIR/whatsapp-auth" "$DATA_DIR/storage" "$BACKUP_DIR"
 chmod 0700 "$DATA_DIR/whatsapp-auth" "$BACKUP_DIR"
 
-# Hentikan service lama sebelum menyalin agar file tidak terkunci
 systemctl stop hdybot.service 2>/dev/null || true
 rm -rf "$APP_DIR/dist" "$APP_DIR/src/app/http.ts"
 
@@ -108,9 +128,9 @@ rsync -a --delete \
   --exclude whatsapp-auth --exclude storage --exclude backups \
   "$SRC_DIR/" "$APP_DIR/"
 chmod +x "$APP_DIR/scripts/"*.sh 2>/dev/null || true
-chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR" "/home/$APP_USER"
 
-# ---------------------------------------------------------------- 5. File .env & Database
+# ---------------------------------------------------------------- 5. File .env & Database (Otomatis set WHATSAPP_PROVIDER=wwebjs)
 ENV_FILE="$APP_DIR/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   DB_PASS="$(randhex 24)"
@@ -119,7 +139,10 @@ if [[ ! -f "$ENV_FILE" ]]; then
   sed -i "s|^NODE_ENV=.*|NODE_ENV=production|" "$ENV_FILE"
   sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}|" "$ENV_FILE"
   sed -i "s|^REDIS_URL=.*|REDIS_URL=redis://127.0.0.1:6379|" "$ENV_FILE"
+  sed -i "s|^WHATSAPP_PROVIDER=.*|WHATSAPP_PROVIDER=wwebjs|" "$ENV_FILE"
   sed -i "s|^WHATSAPP_AUTH_DIR=.*|WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth|" "$ENV_FILE"
+  sed -i "s|^OUTBOUND_ENABLED=.*|OUTBOUND_ENABLED=true|" "$ENV_FILE"
+  sed -i "s|^DRY_RUN=.*|DRY_RUN=false|" "$ENV_FILE"
   {
     echo ""
     echo "# Dibuat otomatis oleh install.sh pada $(date -Iseconds)"
@@ -127,10 +150,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo "BACKUP_DIR=${BACKUP_DIR}"
     echo "BACKUP_ENCRYPTION_KEY=${BACKUP_KEY}"
   } >> "$ENV_FILE"
-  c_ok ".env dibuat dengan kredensial lokal acak (permission 0600)"
+  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs, OUTBOUND_ENABLED=true, DRY_RUN=false (permission 0600)"
 else
+  # Pastikan jika .env lama masih memakai mock/dry-run, kita ubah ke wwebjs asli agar QR code tampil & bot aktif!
+  sed -i "s|^WHATSAPP_PROVIDER=.*|WHATSAPP_PROVIDER=wwebjs|" "$ENV_FILE"
+  sed -i "s|^WHATSAPP_AUTH_DIR=.*|WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth|" "$ENV_FILE"
+  sed -i "s|^OUTBOUND_ENABLED=.*|OUTBOUND_ENABLED=true|" "$ENV_FILE"
+  sed -i "s|^DRY_RUN=.*|DRY_RUN=false|" "$ENV_FILE"
   DB_PASS="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')"
-  c_ok ".env sudah ada — dipertahankan"
+  c_ok ".env diperbarui (WHATSAPP_PROVIDER=wwebjs, OUTBOUND_ENABLED=true, DRY_RUN=false aktif)"
 fi
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
@@ -142,13 +170,16 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'
   || sudo -u postgres createdb -O "$DB_USER" "$DB_NAME"
 c_ok "PostgreSQL database '${DB_NAME}' siap"
 
-# ---------------------------------------------------------------- 6. Install, Migrate, Seed, Test, Build
+# ---------------------------------------------------------------- 6. Install (termasuk whatsapp-web.js & qrcode-terminal), Migrate, Seed, Test, Build
 as_app() { sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && $*"; }
-c_info "Menjalankan npm install & prisma generate..."
-if [[ -f "$APP_DIR/package-lock.json" ]]; then
-  as_app "npm ci --no-fund --no-audit || npm install --no-fund --no-audit"
+c_info "Menjalankan npm install (whatsapp-web.js, qrcode-terminal, prisma)..."
+if [[ -x /usr/bin/chromium-browser || -x /usr/bin/chromium ]]; then
+  # Gunakan Chromium sistem Ubuntu agar cepat dan ringan
+  as_app "PUPPETEER_SKIP_DOWNLOAD=true npm install --no-fund --no-audit"
 else
   as_app "npm install --no-fund --no-audit"
+  as_app "npm install-scripts approve puppeteer @prisma/client prisma @prisma/engines esbuild 2>/dev/null || true"
+  as_app "npm rebuild 2>/dev/null || true"
 fi
 as_app "npx prisma generate"
 c_info "Menjalankan migrasi database PostgreSQL..."
@@ -162,7 +193,6 @@ as_app "npm run build"
 c_ok "Seluruh test, typecheck, migrasi, seed, dan build LULUS"
 
 # ---------------------------------------------------------------- 7. Systemd Daemon 24/7 + Backup Timer
-# Bersihkan unit watchdog lama bila pernah dibuat
 systemctl disable --now hdybot-watchdog.timer hdybot-watchdog.service 2>/dev/null || true
 rm -f /etc/systemd/system/hdybot-watchdog.timer /etc/systemd/system/hdybot-watchdog.service
 
@@ -182,13 +212,13 @@ EnvironmentFile=${ENV_FILE}
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=5
-TimeoutStopSec=20
+TimeoutStopSec=25
 KillSignal=SIGTERM
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=${DATA_DIR} ${BACKUP_DIR}
+ProtectHome=false
+ReadWritePaths=${DATA_DIR} ${BACKUP_DIR} /home/${APP_USER}
 UMask=0077
 StandardOutput=journal
 StandardError=journal
@@ -226,7 +256,7 @@ systemctl enable --now hdybot.service hdybot-backup.timer
 sleep 3
 
 if systemctl is-active --quiet hdybot; then
-  c_ok "Service hdybot AKTIF dan berjalan terus-menerus tanpa membuka port HTTP (Restart=always)"
+  c_ok "Service hdybot AKTIF dan berjalan terus-menerus (Restart=always)"
 else
   journalctl -u hdybot -n 40 --no-pager
   die "Service hdybot gagal menyala"
@@ -235,11 +265,11 @@ fi
 echo
 echo "==================================================================="
 echo " HDYBOT — INSTALASI UBUNTU SERVER SELESAI (24/7 MODE)"
-echo "  Lokasi App  : ${APP_DIR}"
-echo "  Firewall    : UFW & Fail2Ban TIDAK digunakan (IP VPS aman)"
-echo "  Port HTTP   : TIDAK membuka port (bebas EADDRINUSE 3000)"
-echo "  Health/Ready: Dipantau via chat WA pribadi Hedy (.status / .health / .dashboard)"
+echo "  Provider WA : whatsapp-web.js + qrcode-terminal (wwebjs)"
+echo "  Lihat QR    : sudo ./install.sh --qr"
+echo "  Reset Sesi  : sudo ./install.sh --reset-wa"
 echo "  Status      : sudo ./install.sh --status"
-echo "  Live Log    : sudo ./install.sh --logs"
-echo "  Restart     : sudo ./install.sh --restart"
 echo "==================================================================="
+echo
+echo "📲 Menunggu QR Code dari whatsapp-web.js (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
+exec journalctl -u hdybot -f -n 80 -o cat

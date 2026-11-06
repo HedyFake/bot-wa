@@ -139,6 +139,9 @@ export class CommandDispatcher {
       case 'ping':
         return `🏓 Pong! ${config.BOT_DISPLAY_NAME} aktif.`;
 
+      case 'groupid':
+        return `🆔 *Informasi Chat/Grup*\n• Chat JID: \`${msg.chatJid}\`\n• Tipe: *${msg.chatType}*\n• Pengirim Terdeteksi: \`${msg.senderJid}\``;
+
       case 'runtime': {
         const upSec = Math.floor((now.getTime() - this.deps.startedAt.getTime()) / 1000);
         return `⏱️ Runtime ${config.BOT_NAME}: ${upSec} detik | Timezone: ${config.TIMEZONE} | Mode WA: ${this.deps.whatsapp.name}`;

@@ -11,8 +11,10 @@ import { loadConfig } from './config/env.js';
 import { ScheduleService } from './modules/schedule/service.js';
 import { createLogger } from './observability/logger.js';
 import { maskPhone } from './security/phone.js';
+import { BaileysWhatsAppProvider } from './whatsapp/adapters/baileys.js';
 import { MockWhatsAppProvider } from './whatsapp/adapters/mock.js';
 import type { WhatsAppProvider } from './whatsapp/adapters/types.js';
+import { WWebJsWhatsAppProvider } from './whatsapp/adapters/wwebjs.js';
 import { OutboundGate } from './whatsapp/outbound/gate.js';
 
 async function main() {
@@ -24,6 +26,16 @@ async function main() {
   let whatsapp: WhatsAppProvider;
   if (config.WHATSAPP_PROVIDER === 'mock') {
     whatsapp = new MockWhatsAppProvider();
+  } else if (config.WHATSAPP_PROVIDER === 'wwebjs') {
+    whatsapp = new WWebJsWhatsAppProvider({
+      authDir: config.WHATSAPP_AUTH_DIR,
+    });
+  } else if (config.WHATSAPP_PROVIDER === 'baileys') {
+    whatsapp = new BaileysWhatsAppProvider({
+      authDir: config.WHATSAPP_AUTH_DIR,
+      allowExperimental: config.WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS,
+      onPairingCode: (code) => log.info({ pairingCodeIssued: true, length: code.length }, 'Kode pairing WA siap'),
+    });
   } else {
     throw new Error(`Provider ${config.WHATSAPP_PROVIDER} memerlukan konfigurasi adapter aktif`);
   }

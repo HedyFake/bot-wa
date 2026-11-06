@@ -6,6 +6,7 @@
 
 export type CanonicalCommand =
   | 'owner'
+  | 'groupid'
   | 'dashboard'
   | 'system'
   | 'status'
@@ -133,6 +134,8 @@ export function parseCommand(textInput: string): ParsedCommand {
 
     switch (head) {
       case 'owner': return build('dot', 'owner');
+      case 'groupid':
+      case 'id': return build('dot', 'groupid');
       case 'dashboard': return build('dot', 'dashboard');
       case 'system': return build('dot', 'system');
       case 'status': return build('dot', 'status');
