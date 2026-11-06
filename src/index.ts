@@ -7,7 +7,6 @@ import { GroupIntelligenceService } from './ai/classification/group-intelligence
 import { ModelRouter } from './ai/model-router/router.js';
 import { HttpNvidiaTransport } from './ai/nvidia/registry.js';
 import { runHealth } from './app/health.js';
-import { startHealthServer } from './app/http.js';
 import { loadConfig } from './config/env.js';
 import { ScheduleService } from './modules/schedule/service.js';
 import { createLogger } from './observability/logger.js';
@@ -97,6 +96,7 @@ async function main() {
 
   await whatsapp.connect().catch((e: unknown) => log.error({ err: (e as Error).name }, 'whatsapp connect gagal'));
 
+  // Pemantauan health/ready murni internal & disajikan melalui chat WhatsApp pribadi Hedy (.health, .status, .dashboard).
   const health = () =>
     runHealth({
       config,
@@ -105,13 +105,7 @@ async function main() {
       dbProbe: prisma ? async () => { await prisma.$queryRaw`SELECT 1`; } : undefined,
     });
 
-  const http = startHealthServer({
-    host: process.env.HEALTH_HOST ?? '127.0.0.1',
-    port: config.PORT,
-    ready: health,
-  });
-
-  // Heartbeat periodik agar event loop tetap terjaga & memantau kesehatan koneksi 24/7.
+  // Heartbeat periodik menjaga event loop Node.js selalu hidup 24/7.
   const heartbeat = setInterval(async () => {
     try {
       const h = await health();
@@ -132,7 +126,7 @@ async function main() {
       dryRun: config.DRY_RUN,
       tz: config.TIMEZONE,
     },
-    `${config.BOT_DISPLAY_NAME} berjalan terus-menerus`,
+    `${config.BOT_DISPLAY_NAME} berjalan terus-menerus (kontrol & health via WA Admin DM)`,
   );
   log.info({ health: await health() }, 'health awal');
 
@@ -142,7 +136,6 @@ async function main() {
     stopping = true;
     clearInterval(heartbeat);
     log.info({ sig }, 'shutdown: stop ingest, tutup koneksi');
-    http.close();
     await whatsapp.disconnect().catch(() => undefined);
     await prisma?.$disconnect().catch(() => undefined);
     process.exit(0);

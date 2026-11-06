@@ -7,17 +7,19 @@
 #   chmod +x install.sh && sudo ./install.sh
 #
 # Sub-perintah operasional:
-#   sudo ./install.sh --status            # cek status service, watchdog, & health
+#   sudo ./install.sh --status            # cek status service systemd
 #   sudo ./install.sh --logs              # lihat log live (journalctl -f)
 #   sudo ./install.sh --restart           # restart service HdyBot
 #   sudo ./install.sh --uninstall-service # hapus unit systemd (data & DB aman)
 #
-# Jaminan berjalan terus-menerus (24/7):
-#   - systemd `Restart=always`, `RestartSec=5`, `StartLimitIntervalSec=0` (tak terbatas)
-#   - Otomatis menyala saat Ubuntu Server reboot (`systemctl enable hdybot`)
-#   - Watchdog timer setiap 2 menit mengecek `http://127.0.0.1:3000/health/ready`
-#     dan me-restart `hdybot.service` jika proses hang / tidak merespons
-#   - Backup PostgreSQL terenkripsi otomatis setiap pukul 02:30 WIB
+# Catatan sesuai instruksi Owner (Hedy):
+#   - TIDAK memasang dan TIDAK mengaktifkan UFW maupun Fail2Ban agar IP VPS
+#     owner tidak pernah terblokir.
+#   - TIDAK membuka port HTTP health; seluruh pemantauan health/ready/status
+#     dilakukan langsung melalui chat WhatsApp pribadi admin (.status, .health,
+#     .dashboard, .ping, .runtime).
+#   - Berjalan 24/7 tanpa henti melalui systemd `Restart=always`, `RestartSec=5`,
+#     `StartLimitIntervalSec=0`.
 # =============================================================================
 set -euo pipefail
 
@@ -44,10 +46,7 @@ fi
 
 case "${1:-}" in
   --status)
-    systemctl --no-pager status "$APP_NAME" hdybot-watchdog.timer hdybot-backup.timer || true
-    echo "--- Health Endpoint ---"
-    curl -fsS http://127.0.0.1:3000/health/ready || true
-    echo ""
+    systemctl --no-pager status "$APP_NAME" hdybot-backup.timer || true
     exit 0 ;;
   --logs)
     exec journalctl -u "$APP_NAME" -f ;;
@@ -66,12 +65,12 @@ esac
 
 randhex() { openssl rand -hex "${1:-24}"; }
 
-# ---------------------------------------------------------------- 1. Paket Dasar
-c_info "Memasang paket dasar sistem, PostgreSQL, Redis, UFW, dan Fail2Ban..."
+# ---------------------------------------------------------------- 1. Paket Dasar (TANPA ufw & TANPA fail2ban)
+c_info "Memasang paket dasar sistem, PostgreSQL, dan Redis (tanpa UFW & tanpa Fail2Ban)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg openssl rsync ufw fail2ban postgresql postgresql-contrib redis-server
-c_ok "Paket dasar terpasang"
+apt-get install -y ca-certificates curl gnupg openssl rsync postgresql postgresql-contrib redis-server
+c_ok "Paket dasar terpasang (UFW & Fail2Ban tidak digunakan)"
 
 # ---------------------------------------------------------------- 2. Node.js 22 LTS
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
@@ -83,13 +82,7 @@ if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 2
 fi
 c_ok "Node $(node -v), npm $(npm -v)"
 
-# ---------------------------------------------------------------- 3. Firewall & Fail2Ban
-ufw allow OpenSSH >/dev/null || true
-ufw --force enable >/dev/null || true
-systemctl enable --now fail2ban >/dev/null || true
-c_ok "Firewall UFW & Fail2Ban aktif (health port hanya bind 127.0.0.1)"
-
-# ---------------------------------------------------------------- 4. PostgreSQL & Redis (Always-On)
+# ---------------------------------------------------------------- 3. PostgreSQL & Redis (Always-On)
 sed -i 's/^#\?\s*bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf || true
 sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf || true
 mkdir -p /etc/systemd/system/postgresql.service.d /etc/systemd/system/redis-server.service.d
@@ -108,7 +101,7 @@ systemctl enable --now redis-server postgresql
 systemctl restart redis-server
 redis-cli ping | grep -q PONG && c_ok "Redis & PostgreSQL aktif (auto-restart enabled)"
 
-# ---------------------------------------------------------------- 5. User & Direktori
+# ---------------------------------------------------------------- 4. User & Direktori
 id "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
 install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_DIR" "$DATA_DIR" "$DATA_DIR/whatsapp-auth" "$DATA_DIR/storage" "$BACKUP_DIR"
 chmod 0700 "$DATA_DIR/whatsapp-auth" "$BACKUP_DIR"
@@ -121,7 +114,7 @@ rsync -a --delete \
 chmod +x "$APP_DIR/scripts/"*.sh 2>/dev/null || true
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
-# ---------------------------------------------------------------- 6. File .env & Database
+# ---------------------------------------------------------------- 5. File .env & Database
 ENV_FILE="$APP_DIR/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   DB_PASS="$(randhex 24)"
@@ -137,7 +130,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo "STORAGE_DIR=${DATA_DIR}/storage"
     echo "BACKUP_DIR=${BACKUP_DIR}"
     echo "BACKUP_ENCRYPTION_KEY=${BACKUP_KEY}"
-    echo "HEALTH_HOST=127.0.0.1"
   } >> "$ENV_FILE"
   c_ok ".env dibuat dengan kredensial lokal acak (permission 0600)"
 else
@@ -154,7 +146,7 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'
   || sudo -u postgres createdb -O "$DB_USER" "$DB_NAME"
 c_ok "PostgreSQL database '${DB_NAME}' siap"
 
-# ---------------------------------------------------------------- 7. Install, Migrate, Seed, Test, Build
+# ---------------------------------------------------------------- 6. Install, Migrate, Seed, Test, Build
 as_app() { sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && $*"; }
 c_info "Menjalankan npm install & prisma generate..."
 if [[ -f "$APP_DIR/package-lock.json" ]]; then
@@ -173,10 +165,14 @@ as_app "npm test"
 as_app "npm run build"
 c_ok "Seluruh test, typecheck, migrasi, seed, dan build LULUS"
 
-# ---------------------------------------------------------------- 8. Systemd Daemon 24/7 + Watchdog + Backup Timer
+# ---------------------------------------------------------------- 7. Systemd Daemon 24/7 + Backup Timer
+# Bersihkan watchdog HTTP lama bila pernah ada
+systemctl disable --now hdybot-watchdog.timer hdybot-watchdog.service 2>/dev/null || true
+rm -f /etc/systemd/system/hdybot-watchdog.timer /etc/systemd/system/hdybot-watchdog.service
+
 cat > /etc/systemd/system/hdybot.service <<EOF
 [Unit]
-Description=HdyBot — Nursing Class A Assistant (24/7 Daemon)
+Description=HdyBot — Nursing Class A Assistant (24/7 WhatsApp Admin Control)
 After=network-online.target postgresql.service redis-server.service
 Wants=network-online.target
 Requires=postgresql.service redis-server.service
@@ -207,27 +203,6 @@ SyslogIdentifier=hdybot
 WantedBy=multi-user.target
 EOF
 
-# Watchdog: cek /health/ready setiap 2 menit; bila tidak merespons, restart hdybot.service
-cat > /etc/systemd/system/hdybot-watchdog.service <<EOF
-[Unit]
-Description=HdyBot Health Watchdog Check
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'curl -fsS --max-time 10 http://127.0.0.1:3000/health/ready >/dev/null || systemctl restart hdybot.service'
-EOF
-
-cat > /etc/systemd/system/hdybot-watchdog.timer <<EOF
-[Unit]
-Description=Run HdyBot Health Watchdog every 2 minutes
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=2min
-AccuracySec=15s
-Persistent=true
-[Install]
-WantedBy=timers.target
-EOF
-
 # Backup harian terenkripsi pukul 02:30 WIB
 cat > /etc/systemd/system/hdybot-backup.service <<EOF
 [Unit]
@@ -251,11 +226,11 @@ WantedBy=timers.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now hdybot.service hdybot-watchdog.timer hdybot-backup.timer
+systemctl enable --now hdybot.service hdybot-backup.timer
 sleep 3
 
 if systemctl is-active --quiet hdybot; then
-  c_ok "Service hdybot AKTIF dan berjalan terus-menerus (Restart=always + Watchdog 2m)"
+  c_ok "Service hdybot AKTIF dan berjalan terus-menerus (Restart=always)"
 else
   journalctl -u hdybot -n 40 --no-pager
   die "Service hdybot gagal menyala"
@@ -265,12 +240,13 @@ echo
 echo "==================================================================="
 echo " HDYBOT — INSTALASI UBUNTU SERVER SELESAI (24/7 MODE)"
 echo "  Lokasi App  : ${APP_DIR}"
-echo "  Status      : sudo bash install.sh --status"
-echo "  Live Log    : sudo bash install.sh --logs"
-echo "  Restart     : sudo bash install.sh --restart"
-echo "  Health URL  : http://127.0.0.1:3000/health/ready"
+echo "  Firewall    : UFW & Fail2Ban TIDAK digunakan (IP VPS aman)"
+echo "  Health/Ready: Dipantau langsung via chat WA pribadi Hedy (.status / .health / .dashboard)"
+echo "  Status      : sudo ./install.sh --status"
+echo "  Live Log    : sudo ./install.sh --logs"
+echo "  Restart     : sudo ./install.sh --restart"
 echo ""
-echo " Konfigurasi NVIDIA API Key (opsional, untuk fitur AI penuh):"
+echo " Konfigurasi NVIDIA API Key:"
 echo "  1. sudo nano ${ENV_FILE}   # isi NVIDIA_API_KEY=<key_baru_anda>"
-echo "  2. sudo systemctl restart hdybot"
+echo "  2. sudo ./install.sh --restart"
 echo "==================================================================="
