@@ -12,14 +12,14 @@
 #   sudo ./install.sh --restart           # restart service HdyBot
 #   sudo ./install.sh --uninstall-service # hapus unit systemd (data & DB aman)
 #
-# Catatan sesuai instruksi Owner (Hedy):
+# Catatan penting:
 #   - TIDAK memasang dan TIDAK mengaktifkan UFW maupun Fail2Ban agar IP VPS
 #     owner tidak pernah terblokir.
-#   - TIDAK membuka port HTTP health; seluruh pemantauan health/ready/status
-#     dilakukan langsung melalui chat WhatsApp pribadi admin (.status, .health,
-#     .dashboard, .ping, .runtime).
-#   - Berjalan 24/7 tanpa henti melalui systemd `Restart=always`, `RestartSec=5`,
-#     `StartLimitIntervalSec=0`.
+#   - TIDAK membuka port TCP/HTTP sama sekali (bebas bentrok EADDRINUSE port 3000);
+#     seluruh pemantauan health/ready/status dilakukan lewat chat WhatsApp
+#     pribadi Hedy (.status, .health, .dashboard, .ping, .runtime).
+#   - Membersihkan override systemd postgresql.service yang tidak kompatibel
+#     dengan Type=oneshot di Ubuntu.
 # =============================================================================
 set -euo pipefail
 
@@ -72,7 +72,7 @@ apt-get update -y
 apt-get install -y ca-certificates curl gnupg openssl rsync postgresql postgresql-contrib redis-server
 c_ok "Paket dasar terpasang (UFW & Fail2Ban tidak digunakan)"
 
-# ---------------------------------------------------------------- 2. Node.js 22 LTS
+# ---------------------------------------------------------------- 2. Node.js LTS (>= 20)
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]]; then
   c_info "Memasang Node.js ${NODE_MAJOR} LTS..."
   install -d -m 0755 /etc/apt/keyrings
@@ -82,29 +82,25 @@ if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 2
 fi
 c_ok "Node $(node -v), npm $(npm -v)"
 
-# ---------------------------------------------------------------- 3. PostgreSQL & Redis (Always-On)
+# ---------------------------------------------------------------- 3. Perbaiki & Nyalakan PostgreSQL + Redis
+# PENTING: Di Ubuntu, postgresql.service adalah wrapper Type=oneshot sehingga
+# TIDAK BOLEH diberi Restart=always di override.conf (menyebabkan "bad unit file setting").
+rm -rf /etc/systemd/system/postgresql.service.d /etc/systemd/system/redis-server.service.d
 sed -i 's/^#\?\s*bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf || true
 sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf || true
-mkdir -p /etc/systemd/system/postgresql.service.d /etc/systemd/system/redis-server.service.d
-cat > /etc/systemd/system/postgresql.service.d/override.conf <<EOF
-[Service]
-Restart=always
-RestartSec=5
-EOF
-cat > /etc/systemd/system/redis-server.service.d/override.conf <<EOF
-[Service]
-Restart=always
-RestartSec=5
-EOF
 systemctl daemon-reload
-systemctl enable --now redis-server postgresql
-systemctl restart redis-server
-redis-cli ping | grep -q PONG && c_ok "Redis & PostgreSQL aktif (auto-restart enabled)"
+systemctl enable --now postgresql redis-server
+systemctl restart postgresql redis-server
+redis-cli ping | grep -q PONG && c_ok "PostgreSQL & Redis aktif normal"
 
 # ---------------------------------------------------------------- 4. User & Direktori
 id "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
 install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_DIR" "$DATA_DIR" "$DATA_DIR/whatsapp-auth" "$DATA_DIR/storage" "$BACKUP_DIR"
 chmod 0700 "$DATA_DIR/whatsapp-auth" "$BACKUP_DIR"
+
+# Hentikan service lama sebelum menyalin agar file tidak terkunci
+systemctl stop hdybot.service 2>/dev/null || true
+rm -rf "$APP_DIR/dist" "$APP_DIR/src/app/http.ts"
 
 c_info "Menyalin source code proyek ke $APP_DIR ..."
 rsync -a --delete \
@@ -166,7 +162,7 @@ as_app "npm run build"
 c_ok "Seluruh test, typecheck, migrasi, seed, dan build LULUS"
 
 # ---------------------------------------------------------------- 7. Systemd Daemon 24/7 + Backup Timer
-# Bersihkan watchdog HTTP lama bila pernah ada
+# Bersihkan unit watchdog lama bila pernah dibuat
 systemctl disable --now hdybot-watchdog.timer hdybot-watchdog.service 2>/dev/null || true
 rm -f /etc/systemd/system/hdybot-watchdog.timer /etc/systemd/system/hdybot-watchdog.service
 
@@ -174,8 +170,7 @@ cat > /etc/systemd/system/hdybot.service <<EOF
 [Unit]
 Description=HdyBot — Nursing Class A Assistant (24/7 WhatsApp Admin Control)
 After=network-online.target postgresql.service redis-server.service
-Wants=network-online.target
-Requires=postgresql.service redis-server.service
+Wants=network-online.target postgresql.service redis-server.service
 StartLimitIntervalSec=0
 
 [Service]
@@ -226,11 +221,12 @@ WantedBy=timers.target
 EOF
 
 systemctl daemon-reload
+systemctl reset-failed hdybot.service postgresql.service redis-server.service 2>/dev/null || true
 systemctl enable --now hdybot.service hdybot-backup.timer
 sleep 3
 
 if systemctl is-active --quiet hdybot; then
-  c_ok "Service hdybot AKTIF dan berjalan terus-menerus (Restart=always)"
+  c_ok "Service hdybot AKTIF dan berjalan terus-menerus tanpa membuka port HTTP (Restart=always)"
 else
   journalctl -u hdybot -n 40 --no-pager
   die "Service hdybot gagal menyala"
@@ -241,12 +237,9 @@ echo "==================================================================="
 echo " HDYBOT — INSTALASI UBUNTU SERVER SELESAI (24/7 MODE)"
 echo "  Lokasi App  : ${APP_DIR}"
 echo "  Firewall    : UFW & Fail2Ban TIDAK digunakan (IP VPS aman)"
-echo "  Health/Ready: Dipantau langsung via chat WA pribadi Hedy (.status / .health / .dashboard)"
+echo "  Port HTTP   : TIDAK membuka port (bebas EADDRINUSE 3000)"
+echo "  Health/Ready: Dipantau via chat WA pribadi Hedy (.status / .health / .dashboard)"
 echo "  Status      : sudo ./install.sh --status"
 echo "  Live Log    : sudo ./install.sh --logs"
 echo "  Restart     : sudo ./install.sh --restart"
-echo ""
-echo " Konfigurasi NVIDIA API Key:"
-echo "  1. sudo nano ${ENV_FILE}   # isi NVIDIA_API_KEY=<key_baru_anda>"
-echo "  2. sudo ./install.sh --restart"
 echo "==================================================================="

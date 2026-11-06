@@ -54,6 +54,18 @@ export type CanonicalCommand =
   | 'tasks'
   | 'reminders'
   | 'reminders.pause'
+  | 'materials'
+  | 'materials.search'
+  | 'ask'
+  | 'groupgen'
+  | 'calendar'
+  | 'countdown'
+  | 'doc.permission'
+  | 'doc.minutes'
+  | 'gamification.privacy'
+  | 'gamification.leaderboard'
+  | 'util.gpa'
+  | 'util.bmi'
   | 'backup'
   | 'audit'
   | 'emergency.stop'
@@ -137,7 +149,24 @@ export function parseCommand(textInput: string): ParsedCommand {
       case 'reject': return build('dot', 'reject', rest, rawRest);
       case 'send': return build('dot', 'send', rest, rawRest);
       case 'tasks':
-      case 'tugas': return build('dot', 'tasks', rest, rawRest);
+      case 'tugas':
+      case 'deadline': return build('dot', 'tasks', rest, rawRest);
+      case 'materi': return build('dot', 'materials', rest, rawRest);
+      case 'carimateri': return build('dot', 'materials.search', rest, rawRest);
+      case 'ask': return build('dot', 'ask', rest, rawRest);
+      case 'kelompok':
+      case 'buatkelompok': return build('dot', 'groupgen', rest, rawRest);
+      case 'kalender': return build('dot', 'calendar', rest, rawRest);
+      case 'countdown': return build('dot', 'countdown', rest, rawRest);
+      case 'suratizin': return build('dot', 'doc.permission', rest, rawRest);
+      case 'notulensi': return build('dot', 'doc.minutes', rest, rawRest);
+      case 'leaderboard': return build('dot', 'gamification.leaderboard', rest, rawRest);
+      case 'privacy':
+        if (sub === 'gamification') return build('dot', 'gamification.privacy', rest2, rawRest2);
+        return build('dot', 'gamification.privacy', rest, rawRest);
+      case 'ipk':
+      case 'gpa': return build('dot', 'util.gpa', rest, rawRest);
+      case 'bmi': return build('dot', 'util.bmi', rest, rawRest);
       case 'backup': return build('dot', 'backup');
       case 'audit': return build('dot', 'audit');
       case 'confirm': return build('dot', 'confirm', rest, rawRest);
@@ -191,6 +220,7 @@ export function parseCommand(textInput: string): ParsedCommand {
         if (DAY_NAMES.has(sub)) return build('dot', 'schedule.day', [sub], sub);
         return build('dot', 'schedule');
       case 'reminders':
+      case 'reminder':
         if (sub === 'pause') return build('dot', 'reminders.pause', rest2, rawRest2);
         return build('dot', 'reminders');
       case 'admin':

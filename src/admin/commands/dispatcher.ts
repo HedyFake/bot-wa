@@ -2,6 +2,14 @@ import { runHealth } from '../../app/health.js';
 import type { GroupIntelligenceService } from '../../ai/classification/group-intelligence.js';
 import type { ModelRouter } from '../../ai/model-router/router.js';
 import type { AppConfig } from '../../config/env.js';
+import {
+  AcademicCalendarService,
+  DocumentGeneratorService,
+  GamificationService,
+  GroupGeneratorService,
+  UtilityService,
+} from '../../modules/academic/extended-modules.js';
+import { KnowledgeBaseService, SHJ_OFFICIAL_REFERENCES } from '../../modules/materials/knowledge-base.js';
 import { ScheduleService } from '../../modules/schedule/service.js';
 import type { InboundMessage, WhatsAppProvider } from '../../whatsapp/adapters/types.js';
 import { InboundDeduper, type OutboundGate } from '../../whatsapp/outbound/gate.js';
@@ -26,6 +34,11 @@ export interface DispatcherDeps {
   router: ModelRouter;
   schedule: ScheduleService;
   intelligence: GroupIntelligenceService;
+  knowledgeBase?: KnowledgeBaseService;
+  groupGenerator?: GroupGeneratorService;
+  calendar?: AcademicCalendarService;
+  documents?: DocumentGeneratorService;
+  gamification?: GamificationService;
   startedAt: Date;
   now?: () => Date;
 }
@@ -34,16 +47,25 @@ export interface DispatcherDeps {
  * Dispatcher utama HdyBot:
  * - Memisahkan pesan grup sumber vs private DM.
  * - Menegakkan allowlist owner Hedy untuk semua command sensitif/admin.
- * - Menyediakan seluruh command kontrol `.dashboard`, `.status`, `.ping`, `.runtime`, `.help`,
- *   `.ai ...`, `.jadwal ...`, `.pending`, `.approve`, `.reject`, `.send`, `.confirm`, `.cancel`, dll.
+ * - Menyediakan seluruh command kontrol & pemantauan health via WhatsApp pribadi Hedy.
  */
 export class CommandDispatcher {
   private readonly deduper = new InboundDeduper();
   readonly auditLogs: AuditEntry[] = [];
   private readonly now: () => Date;
+  readonly kb: KnowledgeBaseService;
+  readonly groupGen: GroupGeneratorService;
+  readonly calendar: AcademicCalendarService;
+  readonly documents: DocumentGeneratorService;
+  readonly gamification: GamificationService;
 
   constructor(private readonly deps: DispatcherDeps) {
     this.now = deps.now ?? (() => new Date());
+    this.kb = deps.knowledgeBase ?? new KnowledgeBaseService();
+    this.groupGen = deps.groupGenerator ?? new GroupGeneratorService();
+    this.calendar = deps.calendar ?? new AcademicCalendarService();
+    this.documents = deps.documents ?? new DocumentGeneratorService();
+    this.gamification = deps.gamification ?? new GamificationService();
   }
 
   private recordAudit(actor: string, action: string, result: string, target?: string): void {
@@ -55,8 +77,6 @@ export class CommandDispatcher {
       return null; // Duplikat diabaikan secara idempoten.
     }
 
-    // Jika pesan berasal dari grup, masukkan ke Group Intelligence bila terdaftar,
-    // dan JANGAN PERNAH jalankan perintah admin dari grup.
     if (msg.chatType === 'group') {
       this.deps.intelligence.ingest(msg);
       const parsedGroup = parseCommand(msg.text);
@@ -65,9 +85,7 @@ export class CommandDispatcher {
         this.recordAudit(msg.senderJid, parsedGroup.command, 'denied_group_context', msg.chatJid);
         return null;
       }
-      // Command publik anggota (jadwal/matkul/dosen)
-      const reply = await this.executePublicOrAdmin(parsedGroup, msg);
-      return reply;
+      return this.executePublicOrAdmin(parsedGroup, msg);
     }
 
     // Private chat
@@ -140,15 +158,15 @@ export class CommandDispatcher {
         return (
           `🤖 *${config.BOT_DISPLAY_NAME} — Control Center*\n` +
           `Halo ${config.OWNER_NAME}! Perintah utama:\n` +
-          `• \`.dashboard\` — ringkasan lengkap hari ini\n` +
-          `• \`.status\` / \`.health\` / \`.runtime\` / \`.ping\`\n` +
-          `• \`.ai status\` | \`.ai models\` | \`.ai model <lightning|super-vl|ultra>\` | \`.ai auto on\`\n` +
+          `• \`.dashboard\` | \`.status\` | \`.health\` | \`.runtime\` | \`.ping\`\n` +
+          `• \`.ai status\` | \`.ai models\` | \`.ai model <lightning|super-vl|ultra>\` | \`.ai auto on\` | \`.ai test <prompt>\`\n` +
           `• \`.jadwal\` | \`.jadwal senin..jumat\` | \`.besok\` | \`.mingguini\` | \`.kuliahberikutnya\`\n` +
-          `• \`.matkul\` | \`.dosen [matkul]\`\n` +
+          `• \`.matkul\` | \`.dosen [matkul]\` | \`.materi\` | \`.ask <pertanyaan>\`\n` +
+          `• \`.buatkelompok <jumlah> <nama1,nama2,...>\` | \`.kalender\` | \`.countdown <YYYY-MM-DD>\`\n` +
+          `• \`.suratizin <nama>|<matkul>|<YYYY-MM-DD>|<alasan>\` | \`.bmi <kg> <cm>\`\n` +
           `• \`.groups\` | \`.groups add <jid> <nama>\` | \`.groups pause <jid>\` | \`.groups resume <jid>\`\n` +
           `• \`.pending\` | \`.approve <id>\` | \`.reject <id>\` | \`.send <id>\`\n` +
-          `• \`.admin pause\` (emergency stop) | \`.admin resume\`\n` +
-          `• \`.audit\` — jejak audit terbaru`
+          `• \`.admin pause\` (emergency stop) | \`.admin resume\` | \`.audit\``
         );
 
       case 'status':
@@ -157,9 +175,9 @@ export class CommandDispatcher {
         const h = await runHealth({ config, whatsapp: this.deps.whatsapp, startedAt: this.deps.startedAt, now: () => now });
         const ai = router.status();
         return (
-          `🩺 *Status Sistem ${config.BOT_NAME}*\n` +
-          `• Kesehatan: ${h.status.toUpperCase()} (uptime ${h.uptimeSec}s)\n` +
-          `• WhatsApp (${this.deps.whatsapp.name}): ${this.deps.whatsapp.state()}\n` +
+          `🩺 *Health & Ready Check ${config.BOT_NAME} (via WA Admin)*\n` +
+          `• Kesehatan: *${h.status.toUpperCase()}* (uptime ${h.uptimeSec}s)\n` +
+          `• WhatsApp (${this.deps.whatsapp.name}): *${this.deps.whatsapp.state()}*\n` +
           `• NVIDIA AI: mode=${ai.mode} | calls=${ai.totalCalls}${ai.lastError ? ` | err=${ai.lastError}` : ''}\n` +
           `• Outbound: ${config.OUTBOUND_ENABLED ? 'ENABLED' : 'DISABLED'} | Dry-Run: ${config.DRY_RUN ? 'ON' : 'OFF'} | EmergencyStop: ${outbound.isEmergencyStopped() ? 'ON' : 'OFF'}`
         );
@@ -215,6 +233,23 @@ export class CommandDispatcher {
         router.setMode(arg === 'off' ? 'off' : 'auto');
         this.recordAudit(actorJid, 'ai.auto', 'ok', arg);
         return `✅ Mode router AI diatur ke *${router.status().mode}*.`;
+      }
+
+      case 'ai.test': {
+        const prompt = parsed.rawArgs || 'Halo, sebutkan peranmu secara singkat dalam Bahasa Indonesia.';
+        try {
+          const out = await router.invoke({
+            task: 'faq',
+            modality: 'text',
+            messages: [
+              { role: 'system', content: 'Kamu adalah HdyBot, asisten Nursing Class A Semester 5A. Jawab singkat dalam Bahasa Indonesia.' },
+              { role: 'user', content: prompt },
+            ],
+          });
+          return `🧪 *Hasil Uji NVIDIA (${out.alias} — ${out.modelId}):*\n${out.text}`;
+        } catch (e) {
+          return `⚠️ Uji NVIDIA gagal: ${e instanceof Error ? e.message : 'unknown'}`;
+        }
       }
 
       case 'schedule': {
@@ -279,6 +314,118 @@ export class CommandDispatcher {
           lines.join('\n') +
           `\n_Catatan: Daftar ini adalah tim dosen per mata kuliah dari data awal, bukan penugasan dosen per sesi._`
         );
+      }
+
+      case 'materials':
+      case 'materials.search': {
+        const mats = this.kb.listMaterials(parsed.rawArgs || undefined);
+        const refs = SHJ_OFFICIAL_REFERENCES.map((r) => `• ${r.label}: ${r.url} (${r.status})`).join('\n');
+        if (!mats.length) {
+          return (
+            `📂 *Katalog Materi Nursing Class A*\n` +
+            `Belum ada file materi lokal yang diunggah untuk filter tersebut.\n\n` +
+            `🔗 *Referensi Resmi Kampus (SHJ):*\n${refs}`
+          );
+        }
+        return (
+          `📂 *Katalog Materi Nursing Class A (${mats.length})*\n` +
+          mats.map((m, i) => `${i + 1}. *${m.title}* [${m.courseCode ?? 'UMUM'}] (${m.kind.toUpperCase()} | ${m.verification})`).join('\n')
+        );
+      }
+
+      case 'ask': {
+        if (!parsed.rawArgs) return '⚠️ Format: `.ask <pertanyaan materi keperawatan>`';
+        return this.kb.answerGroundedQuestion(parsed.rawArgs).formattedAnswer;
+      }
+
+      case 'groupgen': {
+        const count = Number(parsed.args[0] ?? '0');
+        const namesRaw = parsed.args.slice(1).join(' ');
+        const names = namesRaw.split(',').map((s) => s.trim()).filter(Boolean);
+        if (!count || names.length < count) {
+          return '⚠️ Format: `.buatkelompok <jumlah_kelompok> <nama1, nama2, nama3, ...>`';
+        }
+        const groups = this.groupGen.generateFairGroups(names, count);
+        return (
+          `👥 *Hasil Pembagian Kelompok Adil (${groups.length} Kelompok)*\n` +
+          groups
+            .map(
+              (g) =>
+                `*Kelompok ${g.groupNumber}* (Ketua: ${g.roles.leader}):\n` +
+                `Anggota: ${g.members.join(', ')}`,
+            )
+            .join('\n\n')
+        );
+      }
+
+      case 'calendar': {
+        const events = this.calendar.listEvents();
+        if (!events.length) {
+          return '🗓️ Belum ada tanggal kalender akademik resmi yang dikonfirmasi di database.';
+        }
+        return (
+          `🗓️ *Kalender Akademik Nursing Class A*\n` +
+          events.map((e, i) => `${i + 1}. *${e.dateIso}* — [${e.category}] ${e.title} (${e.verification})`).join('\n')
+        );
+      }
+
+      case 'countdown': {
+        const target = parsed.args[0] ?? '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return '⚠️ Format: `.countdown YYYY-MM-DD`';
+        const days = this.calendar.countdownDays(target, now);
+        return `⏳ Hitung mundur menuju *${target}*: *${days} hari*.`;
+      }
+
+      case 'doc.permission': {
+        const parts = parsed.rawArgs.split('|').map((s) => s.trim());
+        if (parts.length < 4) {
+          return '⚠️ Format: `.suratizin <Nama Mahasiswa>|<Mata Kuliah>|<YYYY-MM-DD>|<Alasan>`';
+        }
+        return this.documents.generatePermissionLetterDraft({
+          studentName: parts[0]!,
+          courseName: parts[1]!,
+          dateIso: parts[2]!,
+          reason: parts[3]!,
+        });
+      }
+
+      case 'doc.minutes': {
+        const parts = parsed.rawArgs.split('|').map((s) => s.trim());
+        if (parts.length < 3) {
+          return '⚠️ Format: `.notulensi <Judul Rapat>|<YYYY-MM-DD>|<Keputusan 1; Keputusan 2>`';
+        }
+        return this.documents.generateMinutesDraft({
+          title: parts[0]!,
+          dateIso: parts[1]!,
+          attendeesCount: 30,
+          decisions: parts[2]!.split(';').map((d) => d.trim()).filter(Boolean),
+        });
+      }
+
+      case 'gamification.privacy': {
+        const toggle = (parsed.args[0] ?? '').toLowerCase();
+        const enable = toggle === 'on' || toggle === 'true';
+        this.gamification.setOptIn(msg.senderJid, enable);
+        return enable
+          ? '✅ Anda telah *opt-in* ke fitur XP & Gamification akademik.'
+          : '🔒 Fitur Gamification Anda telah *dinonaktifkan (opt-out)* dan data XP Anda dihapus.';
+      }
+
+      case 'gamification.leaderboard': {
+        const board = this.gamification.leaderboard();
+        if (!board.length) return '🏆 Belum ada peserta opt-in pada papan peringkat akademik.';
+        return (
+          `🏆 *Leaderboard Akademik (Opt-In)*\n` +
+          board.map((b, i) => `${i + 1}. ${b.userJid} — ${b.xp} XP (Level ${b.level})`).join('\n')
+        );
+      }
+
+      case 'util.bmi': {
+        const w = Number(parsed.args[0]);
+        const h = Number(parsed.args[1]);
+        if (!w || !h) return '⚠️ Format: `.bmi <berat_kg> <tinggi_cm>`';
+        const res = UtilityService.calculateBmi(w, h);
+        return `⚖️ *Kalkulator BMI Edukatif*: BMI = *${res.bmi}* (Kategori: *${res.category}*).`;
       }
 
       case 'groups':
@@ -429,7 +576,7 @@ export class CommandDispatcher {
       }
 
       default:
-        return `ℹ️ Perintah belum dikenali atau sedang dalam pengembangan. Ketik \`.help\` untuk daftar perintah.`;
+        return `ℹ️ Perintah belum dikenali. Ketik \`.help\` untuk daftar lengkap perintah HdyBot.`;
     }
   }
 }
