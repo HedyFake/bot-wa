@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+# WhatsApp session / auth material — never commit
+whatsapp-auth/
+.wa-session/
+auth_info*/
+*.qr.png
+# Local data
+storage/
+backups/
+*.sqlite
+
+.pg-*.local

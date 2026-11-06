@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+logs/
+.tmp/
+storage/
+whatsapp-auth/
+.auth/
+*.session
+*.sqlite

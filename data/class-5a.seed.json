@@ -1,0 +1,471 @@
+{
+  "class": {
+    "name": "Nursing Class A",
+    "semester": "5A",
+    "academic_year": null,
+    "timezone": "Asia/Jakarta",
+    "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+  },
+  "breaks": [
+    {
+      "start_time": "11:20",
+      "end_time": "12:30",
+      "label": "Istirahat"
+    }
+  ],
+  "courses": [
+    {
+      "code": "METPEN",
+      "name": "Metodologi Penelitian",
+      "credits_sks": 4,
+      "aliases": [
+        "metodologi",
+        "metpen"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "code": "KAST",
+      "name": "Keperawatan Anak Sakit dan Kronis dan Terminal",
+      "credits_sks": 2,
+      "aliases": [
+        "keperawatan anak",
+        "anak sakit",
+        "kronis terminal"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "code": "KMA",
+      "name": "Keperawatan Menjelang Ajal",
+      "credits_sks": 3,
+      "aliases": [
+        "menjelang ajal"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "code": "KAK",
+      "name": "Konsep Keperawatan Agregat Komunitas",
+      "credits_sks": 2,
+      "aliases": [
+        "agregat komunitas",
+        "keperawatan komunitas"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "code": "ENT2",
+      "name": "Entrepreneurship 2",
+      "credits_sks": 4,
+      "aliases": [
+        "entrepreneurship",
+        "kewirausahaan 2"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "code": "GERO",
+      "name": "Keperawatan Gerontik",
+      "credits_sks": 4,
+      "aliases": [
+        "gerontik",
+        "keperawatan lansia"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "code": "KDW",
+      "name": "Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsisensori dan Persyarafan",
+      "credits_sks": 3,
+      "aliases": [
+        "keperawatan dewasa",
+        "muskuloskeletal",
+        "integumen",
+        "persepsi sensori",
+        "persyarafan"
+      ],
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    }
+  ],
+  "schedule_entries": [
+    {
+      "weekday": "MONDAY",
+      "start_time": "08:00",
+      "end_time": "09:40",
+      "course_code": "METPEN",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "MONDAY",
+      "start_time": "09:40",
+      "end_time": "11:20",
+      "course_code": "KAST",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "MONDAY",
+      "start_time": "12:30",
+      "end_time": "14:10",
+      "course_code": "KMA",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "TUESDAY",
+      "start_time": "08:00",
+      "end_time": "09:40",
+      "course_code": "KAK",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "TUESDAY",
+      "start_time": "09:40",
+      "end_time": "11:20",
+      "course_code": "ENT2",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "TUESDAY",
+      "start_time": "12:30",
+      "end_time": "14:10",
+      "course_code": "METPEN",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "WEDNESDAY",
+      "start_time": "08:00",
+      "end_time": "09:40",
+      "course_code": "GERO",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "WEDNESDAY",
+      "start_time": "09:40",
+      "end_time": "11:20",
+      "course_code": "KDW",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "WEDNESDAY",
+      "start_time": "12:30",
+      "end_time": "14:10",
+      "course_code": "KMA",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "THURSDAY",
+      "start_time": "08:00",
+      "end_time": "09:40",
+      "course_code": "ENT2",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "THURSDAY",
+      "start_time": "09:40",
+      "end_time": "11:20",
+      "course_code": "METPEN",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "THURSDAY",
+      "start_time": "12:30",
+      "end_time": "14:10",
+      "course_code": "GERO",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "FRIDAY",
+      "start_time": "08:00",
+      "end_time": "09:40",
+      "course_code": "GERO",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "FRIDAY",
+      "start_time": "09:40",
+      "end_time": "11:20",
+      "course_code": "KDW",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    },
+    {
+      "weekday": "FRIDAY",
+      "start_time": "12:30",
+      "end_time": "14:10",
+      "course_code": "ENT2",
+      "room": null,
+      "lecturer_assignment": null,
+      "source_status": "USER_PROVIDED_PENDING_CONFIRMATION"
+    }
+  ],
+  "lecturer_associations": [
+    {
+      "course_code": "METPEN",
+      "raw_name": "Facrur Rozi, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "METPEN",
+      "raw_name": "Eliza Zihni, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "METPEN",
+      "raw_name": "Prawito, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "METPEN",
+      "raw_name": "Karisma Dwi Ana, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAST",
+      "raw_name": "Asri Kusyani, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAST",
+      "raw_name": "dr. Alia Astutik, M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAST",
+      "raw_name": "Yusina Vidhiastutik, Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAST",
+      "raw_name": "Eli Rahmawati, M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KMA",
+      "raw_name": "Aditya Nurdin A, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KMA",
+      "raw_name": "Dr. Darsini, S.Kep., Ns., M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KMA",
+      "raw_name": "Dwi Uswatun, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KMA",
+      "raw_name": "Eliza Zihni Z, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAK",
+      "raw_name": "Vendi Kurniawan, S.Kep., Ns., M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAK",
+      "raw_name": "Kusuma Wijaya Ridi P, S.Kep., Ns., MNS",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAK",
+      "raw_name": "Yusiana Vidhiastutik, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KAK",
+      "raw_name": "Roni Setyawan, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "ENT2",
+      "raw_name": "Karisma Dwi Ana, Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "ENT2",
+      "raw_name": "Ardiyanti Hidayah, M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "ENT2",
+      "raw_name": "Masrulloh, S.Kep., Ns., M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "ENT2",
+      "raw_name": "Elis Fatmawati, S.ST., M.Keb",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "ENT2",
+      "raw_name": "Aris Setyawan",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "GERO",
+      "raw_name": "Kusuma Wijaya Ridi P, S.Kep., Ns., MNS",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "GERO",
+      "raw_name": "Yusina Vidhiastutik, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "GERO",
+      "raw_name": "Vendi Eko Kurniawan, S.Kep., Ns., M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "GERO",
+      "raw_name": "Fachrun Nisa, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Dr. Darsini, S.Kep., Ns., M.Kes",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Nanang Bagus Sasmito, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Gevi Mellya Sari, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Prawito, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Facrur Rozi, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Dwi Uswatun, S.Kep., Ns., M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    },
+    {
+      "course_code": "KDW",
+      "raw_name": "Siti Hidayati, M.Kep",
+      "verification_status": "USER_PROVIDED_PENDING_CONFIRMATION",
+      "assigns_to_every_session": false
+    }
+  ],
+  "class_officers": {
+    "ketua": null,
+    "sekretaris": null,
+    "bendahara": null,
+    "wali_kelas": null,
+    "admins": []
+  },
+  "official_references": [
+    {
+      "label": "Website SHJ",
+      "url": "https://shj.ac.id/",
+      "status": "REFERENCE_TO_CHECK"
+    },
+    {
+      "label": "Prodi Profesi Ners",
+      "url": "https://shj.ac.id/prodi-profesi-ners/",
+      "status": "REFERENCE_TO_CHECK"
+    },
+    {
+      "label": "Materi pembelajaran",
+      "url": "https://shj.ac.id/materi-pembelajaran/",
+      "status": "REFERENCE_TO_CHECK"
+    },
+    {
+      "label": "Halaman download",
+      "url": "https://shj.ac.id/halaman-download-file/",
+      "status": "REFERENCE_TO_CHECK"
+    },
+    {
+      "label": "SIAKAD",
+      "url": "https://siakad.shj.ac.id/",
+      "status": "REFERENCE_TO_CHECK"
+    },
+    {
+      "label": "LMS",
+      "url": "https://lms.shj.ac.id/",
+      "status": "REFERENCE_TO_CHECK"
+    },
+    {
+      "label": "E-Journal",
+      "url": "https://e-journal.shj.ac.id/",
+      "status": "REFERENCE_TO_CHECK"
+    }
+  ],
+  "notes": [
+    "SKS adalah atribut mata kuliah, jangan dijumlahkan berulang karena sesi berulang dalam jadwal mingguan.",
+    "Tidak ada tahun ajaran, ruang, kalender akademik, atau penugasan dosen per sesi yang terkonfirmasi.",
+    "Variasi penulisan nama dosen harus dikonfirmasi dan tidak boleh digabung otomatis."
+  ]
+}
