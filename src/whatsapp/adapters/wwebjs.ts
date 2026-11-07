@@ -65,8 +65,18 @@ interface WWebMessageLike {
   hasQuotedMsg?: boolean;
   isForwarded?: boolean;
   timestamp?: number;
-  _data?: { notifyName?: string };
+  mentionedIds?: string[];
+  _data?: { notifyName?: string; mentionedJidList?: string[] };
   getContact?: () => Promise<{ number?: string; id?: { user?: string; _serialized?: string } }>;
+  getChat?: () => Promise<{
+    name?: string;
+    isGroup?: boolean;
+    participants?: Array<{
+      id?: { user?: string; _serialized?: string };
+      isAdmin?: boolean;
+      isSuperAdmin?: boolean;
+    }>;
+  }>;
   downloadMedia?: () => Promise<WWebDownloadedMedia | undefined>;
   getQuotedMessage?: () => Promise<WWebMessageLike | undefined>;
 }
@@ -302,10 +312,12 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
       const media = await extractMedia(m);
       let quoted: InboundMessage['quoted'];
+      let quotedFromBot = false;
       if (m.hasQuotedMsg && typeof m.getQuotedMessage === 'function') {
         try {
           const q = await m.getQuotedMessage();
           if (q) {
+            quotedFromBot = Boolean(q.fromMe);
             const qMedia = await extractMedia(q);
             quoted = {
               providerMessageId: String(q.id?._serialized ?? ''),
@@ -319,12 +331,61 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         }
       }
 
+      let chatName: string | undefined;
+      let isGroupAdmin = false;
+      if (isGroup && typeof m.getChat === 'function') {
+        try {
+          const chat = await m.getChat();
+          chatName = chat?.name;
+          const senderDigits = senderJid.replace(/\D/g, '');
+          const rawAuthor = String(m.author ?? '');
+          if (Array.isArray(chat?.participants)) {
+            for (const p of chat.participants) {
+              const pSerialized = String(p.id?._serialized ?? '');
+              const pDigits = String(p.id?.user ?? pSerialized).replace(/\D/g, '');
+              if (
+                (pSerialized && pSerialized === rawAuthor) ||
+                (senderDigits.length >= 8 && pDigits === senderDigits)
+              ) {
+                if (p.isAdmin || p.isSuperAdmin) {
+                  isGroupAdmin = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch {
+          // abaikan bila metadata chat grup gagal diambil
+        }
+      }
+
+      const rawMentions = [
+        ...(Array.isArray(m.mentionedIds) ? m.mentionedIds : []),
+        ...(Array.isArray(m._data?.mentionedJidList) ? m._data!.mentionedJidList! : []),
+      ].map((id) => String(id));
+      const mentionedJids = [...new Set(rawMentions)];
+      const botUserDigits = (client.info?.wid?.user ?? this._botPhoneNumber ?? '').replace(/\D/g, '');
+      const botWidSerialized = client.info?.wid?._serialized ?? '';
+      const mentionedBotById = mentionedJids.some((id) => {
+        const d = id.replace(/\D/g, '');
+        return (
+          (botWidSerialized && id === botWidSerialized) ||
+          (botUserDigits.length >= 8 && d === botUserDigits)
+        );
+      });
+      const mentionedBotByText = /(@hdybot|@bot\b|\bsenggol\s+bot\b|\bcolek\s+bot\b|\bpanggil\s+bot\b)/i.test(text);
+      const isBotMentioned = mentionedBotById || quotedFromBot || mentionedBotByText;
+
       const inbound: InboundMessage = {
         providerMessageId: msgId,
         chatJid: rawChatId,
         chatType: isGroup ? 'group' : 'private',
+        chatName,
         senderJid,
         pushName: m._data?.notifyName,
+        isGroupAdmin,
+        mentionedJids: mentionedJids.length ? mentionedJids : undefined,
+        isBotMentioned,
         text,
         quoted,
         media,

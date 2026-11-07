@@ -41,6 +41,10 @@ export type CanonicalCommand =
   | 'groups.add'
   | 'groups.pause'
   | 'groups.resume'
+  | 'group.nimbrung'
+  | 'group.setpjmk'
+  | 'group.setkelasa'
+  | 'group.classify'
   | 'filter.status'
   | 'filter.review'
   | 'priority'
@@ -455,6 +459,21 @@ export function parseCommand(textInput: string): ParsedCommand {
         if (sub === 'pause' || sub === 'remove') return build('dot', 'groups.pause', rest2, rawRest2);
         if (sub === 'resume') return build('dot', 'groups.resume', rest2, rawRest2);
         return build('dot', 'groups');
+      case 'nimbrung':
+      case 'nongkrong':
+        return build('dot', 'group.nimbrung', rest.length ? rest : ['on'], rawRest || 'on');
+      case 'diam':
+      case 'hening':
+      case 'berhentinimbrung':
+        return build('dot', 'group.nimbrung', ['off'], 'off');
+      case 'setpjmk':
+        return build('dot', 'group.setpjmk', rest, rawRest);
+      case 'setkelasa':
+      case 'setnursing':
+        return build('dot', 'group.setkelasa', rest, rawRest);
+      case 'cekpesan':
+      case 'klasifikasi':
+        return build('dot', 'group.classify', rest, rawRest);
       case 'filter':
       case 'monitor':
         if (sub === 'status') return build('dot', 'filter.status');

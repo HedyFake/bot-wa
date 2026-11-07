@@ -1,5 +1,9 @@
 import { runHealth } from '../../app/health.js';
-import type { GroupIntelligenceService } from '../../ai/classification/group-intelligence.js';
+import {
+  formatStructuredTableAnnouncement,
+  type GroupIntelligenceService,
+  type MessageEvaluationResult,
+} from '../../ai/classification/group-intelligence.js';
 import type { ModelRouter } from '../../ai/model-router/router.js';
 import type { AppConfig } from '../../config/env.js';
 import {
@@ -13,6 +17,7 @@ import { FunAndUtilityService } from '../../modules/fun/fun-utility-service.js';
 import { KnowledgeBaseService, SHJ_OFFICIAL_REFERENCES } from '../../modules/materials/knowledge-base.js';
 import { type ImageEffectKind, MediaService } from '../../modules/media/media-service.js';
 import { ScheduleService } from '../../modules/schedule/service.js';
+import { normalizeE164 } from '../../security/phone.js';
 import type { InboundMessage, OutboundMediaPayload, WhatsAppProvider } from '../../whatsapp/adapters/types.js';
 import { InboundDeduper, type OutboundGate } from '../../whatsapp/outbound/gate.js';
 import type { AdminAuthenticator } from '../authentication/authenticator.js';
@@ -56,6 +61,7 @@ export interface DispatcherDeps {
  */
 export class CommandDispatcher {
   private readonly deduper = new InboundDeduper();
+  private readonly nimbrungGroups = new Map<string, boolean>();
   readonly auditLogs: AuditEntry[] = [];
   private readonly now: () => Date;
   readonly kb: KnowledgeBaseService;
@@ -77,8 +83,244 @@ export class CommandDispatcher {
     this.fun = deps.funService ?? new FunAndUtilityService();
   }
 
+  isNimbrungActive(groupJid: string): boolean {
+    return this.nimbrungGroups.get(groupJid) === true;
+  }
+
   private recordAudit(actor: string, action: string, result: string, target?: string): void {
     this.auditLogs.push({ actor, action, target, result, at: this.now().toISOString() });
+  }
+
+  private isOwnerOrGroupAdmin(msg: InboundMessage): boolean {
+    if (msg.isGroupAdmin) return true;
+    const authEval = this.deps.auth.evaluate(msg);
+    if (authEval.isOwner || authEval.isAdmin) return true;
+    const senderE164 = normalizeE164(msg.senderJid);
+    if (!senderE164) return false;
+    const ownerE164 = normalizeE164(this.deps.config.OWNER_WHATSAPP);
+    if (ownerE164 && senderE164 === ownerE164) return true;
+    for (const adm of this.deps.config.ADMIN_WHATSAPP_ALLOWLIST) {
+      if (normalizeE164(adm) === senderE164) return true;
+    }
+    return false;
+  }
+
+  private async handleGroupInbound(msg: InboundMessage): Promise<string | null> {
+    const rawText = (msg.text ?? '').trim();
+    const { intelligence, outbound, router, config } = this.deps;
+
+    // 1. Auto-deteksi nama grup "Nursing Class A" & "PJMK Semester 5" jika tersedia dari metadata grup WA
+    if (msg.chatName && /nursing\s*class\s*a|kelas\s*5\s*a/i.test(msg.chatName)) {
+      if (!intelligence.getPrimaryGroupJid() || intelligence.getPrimaryGroupJid() === 'unconfigured@g.us') {
+        intelligence.setPrimaryGroupJid(msg.chatJid);
+      }
+      outbound.registerAllowedGroup(msg.chatJid);
+    }
+    if (msg.chatName && /pjmk/i.test(msg.chatName)) {
+      intelligence.registerPjmkGroup(msg.chatJid, msg.chatName);
+      outbound.registerAllowedGroup(msg.chatJid);
+    }
+
+    // 2. Ingest ke GroupIntelligenceService & evaluasi kualitas (baik/netral/buruk) + signifikansi (inti_penting/biasa/tidak_penting)
+    const analysis = intelligence.ingest(msg);
+    const evaluation = intelligence.evaluateMessage(rawText, msg.isForwarded);
+
+    // 3. Auto-Relay Cerdas menggunakan AI + Tabel jika pesan PENTING berasal dari grup "PJMK Semester 5"
+    let autoRelayedText: string | null = null;
+    if (
+      intelligence.isPjmkGroup(msg.chatJid, msg.chatName) &&
+      analysis &&
+      analysis.significance === 'inti_penting' &&
+      analysis.quality !== 'buruk' &&
+      !analysis.prompt_injection_detected
+    ) {
+      const targetGroupJid =
+        intelligence.getPrimaryGroupJid() ??
+        config.WHATSAPP_PRIMARY_GROUP_JID ??
+        'nursing-class-a@g.us';
+      outbound.registerAllowedGroup(targetGroupJid);
+      const sourceName =
+        intelligence.listSources().find((s) => s.jid === msg.chatJid)?.name ??
+        msg.chatName ??
+        'PJMK Semester 5';
+
+      autoRelayedText = await intelligence.synthesizeAiTableRelay(msg, analysis, router, sourceName);
+      const relayRes = await outbound.send({
+        chatJid: targetGroupJid,
+        text: autoRelayedText,
+        idempotencyKey: `pjmk-autorelay-${msg.providerMessageId}`,
+      });
+      this.recordAudit(
+        msg.senderJid,
+        'pjmk.auto_relay_to_nursing_class_a',
+        relayRes.ok ? 'relayed_with_ai_table' : `error:${relayRes.error}`,
+        targetGroupJid,
+      );
+      for (const pending of intelligence.listPendingReviews()) {
+        if (pending.analysis.source_message_id === msg.providerMessageId) {
+          intelligence.markSent(pending.id);
+        }
+      }
+    }
+
+    const isOwnerOrAdmin = this.isOwnerOrGroupAdmin(msg);
+
+    // 4. Cek instruksi BERHENTI NIMBRUNG ("bot berhenti", "berhenti nimbrung", "bot diam", dll.) dari Owner/Admin Grup
+    const stopNimbrungIntent =
+      /\b(bot\s+berhenti|hdybot\s+berhenti|berhenti\s+nimbrung|stop\s+nimbrung|udahan\s+nimbrung|jangan\s+nimbrung|bot\s+diam|hdybot\s+diam|mode\s+hening)\b/i.test(
+        rawText,
+      );
+    if (stopNimbrungIntent) {
+      if (!isOwnerOrAdmin) {
+        return autoRelayedText; // Anggota biasa tidak bisa mengubah mode nimbrung; bot tetap diam
+      }
+      this.nimbrungGroups.set(msg.chatJid, false);
+      outbound.registerAllowedGroup(msg.chatJid);
+      this.recordAudit(msg.senderJid, 'group.nimbrung.off', 'ok', msg.chatJid);
+      const stopReply =
+        `🫡 *Siap Bos! ${config.BOT_NAME} Berhenti Nimbrung (Mode Hening Aktif)*\n` +
+        `Saya sekarang diam untuk obrolan tidak penting di grup ini dan hanya menyimak pesan *inti/penting* atau menunggu disenggol/ditag kembali oleh Owner/Admin.`;
+      await outbound.send({
+        chatJid: msg.chatJid,
+        text: stopReply,
+        idempotencyKey: `grp-nimbrung-stop-${msg.providerMessageId}`,
+      });
+      return stopReply;
+    }
+
+    // 5. Cek ajakan IKUT NIMBRUNG / NGAJAK NONGKRONG atau SENGGOL / TAG BOT dari Owner/Admin Grup
+    const startNimbrungIntent =
+      /\b(bot\s+(ikut\s+)?nimbrung|hdybot\s+(ikut\s+)?nimbrung|ikut\s+nimbrung|ajak\s+nimbrung|ayo\s+nimbrung|(bot\s+|hdybot\s+)?(ayo\s+|ikut\s+)?nongkrong|ngajak\s+nongkrong|nimbrung\s+dong|nimbrung\s+sini)\b/i.test(
+        rawText,
+      );
+    const botTaggedOrNudged =
+      Boolean(msg.isBotMentioned) ||
+      /(@hdybot|@bot\b|\bsenggol\s+bot\b|\bcolek\s+bot\b|\bpanggil\s+bot\b|\bhalo\s+bot\b|\bhei\s+bot\b|\bwoi\s+bot\b)/i.test(
+        rawText,
+      );
+
+    if ((startNimbrungIntent || botTaggedOrNudged) && isOwnerOrAdmin && !rawText.startsWith('.')) {
+      this.nimbrungGroups.set(msg.chatJid, true);
+      outbound.registerAllowedGroup(msg.chatJid);
+      this.recordAudit(
+        msg.senderJid,
+        startNimbrungIntent ? 'group.nimbrung.on' : 'group.bot_tagged_by_owner',
+        'ok',
+        msg.chatJid,
+      );
+      const aiReply = await this.generateAiNimbrungReply(msg, evaluation, true);
+      await outbound.send({
+        chatJid: msg.chatJid,
+        text: aiReply,
+        idempotencyKey: `grp-nimbrung-join-${msg.providerMessageId}`,
+      });
+      return aiReply;
+    }
+
+    // 6. Evaluasi command titik eksplisit (diawali '.') di grup
+    const parsedGroup = parseCommand(rawText);
+    if (parsedGroup.kind === 'dot' && parsedGroup.command !== 'unknown') {
+      if (parsedGroup.adminOnly) {
+        this.recordAudit(msg.senderJid, parsedGroup.command, 'denied_group_context', msg.chatJid);
+        return autoRelayedText;
+      }
+      this.fun.recordCommandUsage(parsedGroup.command, msg.chatJid);
+      const out = await this.executePublicOrAdmin(parsedGroup, msg);
+      if (out) {
+        if (
+          parsedGroup.command === 'group.nimbrung' ||
+          parsedGroup.command === 'group.setpjmk' ||
+          parsedGroup.command === 'group.setkelasa'
+        ) {
+          outbound.registerAllowedGroup(msg.chatJid);
+        }
+        await outbound.send({
+          chatJid: msg.chatJid,
+          text: out.text,
+          media: out.media,
+          idempotencyKey: `grp-reply-${msg.providerMessageId}`,
+        });
+      }
+      return out?.text ?? autoRelayedText;
+    }
+
+    // 7. Jika Mode Nimbrung sedang AKTIF di grup ini, bot ikut nimbrung dengan AI cerdas & menilai kualitas pesan
+    if (this.isNimbrungActive(msg.chatJid)) {
+      outbound.registerAllowedGroup(msg.chatJid);
+      const aiReply = await this.generateAiNimbrungReply(msg, evaluation, false);
+      await outbound.send({
+        chatJid: msg.chatJid,
+        text: aiReply,
+        idempotencyKey: `grp-nimbrung-chat-${msg.providerMessageId}`,
+      });
+      return aiReply;
+    }
+
+    // 8. Default di Grup (Mode Hening): Diam total untuk pesan tidak penting / obrolan biasa!
+    return autoRelayedText;
+  }
+
+  private async generateAiNimbrungReply(
+    msg: InboundMessage,
+    evaluation: MessageEvaluationResult,
+    justJoined: boolean,
+  ): Promise<string> {
+    const rawText = (msg.text ?? '').trim();
+    const { router, config } = this.deps;
+
+    if (evaluation.quality === 'buruk') {
+      return (
+        `⚠️ *Filter Etika AI ${config.BOT_NAME}*\n` +
+        `• Kualitas Pesan: *BURUK* ❌ | Sifat: *${evaluation.significance.toUpperCase()}*\n` +
+        `• Catatan AI: ${evaluation.reason}\n` +
+        `_Mari tetap gunakan bahasa yang baik, sopan, dan kondusif di grup ${config.CLASS_NAME}._`
+      );
+    }
+
+    let aiResponseText = '';
+    try {
+      const res = await router.invoke({
+        task: 'short_summary',
+        modality: 'text',
+        messages: [
+          {
+            role: 'system',
+            content:
+              `Kamu adalah ${config.BOT_NAME}, asisten AI cerdas dan teman nongkrong akademik di grup WhatsApp "${config.CLASS_NAME}" (Semester 5A). ` +
+              `Owner utamamu adalah ${config.OWNER_NAME} (${config.OWNER_WHATSAPP}). ` +
+              `Jawab dengan gaya ramah, asik, sopan, cerdas, dan ringkas dalam Bahasa Indonesia. ` +
+              `Jika pesan membahas hal penting kuliah/tugas, bantu jelaskan poin intinya.`,
+          },
+          {
+            role: 'user',
+            content:
+              `Pengirim: ${msg.pushName ?? msg.senderJid}\n` +
+              `Kualitas Pesan: ${evaluation.quality.toUpperCase()} | Sifat Pesan: ${evaluation.significance.toUpperCase()}\n` +
+              `Pesan Grup: "${rawText}"\n` +
+              (justJoined
+                ? 'Owner/Admin baru saja menyenggol/mentag atau mengajakmu ikut nimbrung/nongkrong di grup. Sapa dengan antusias dan tanggapi pesannya!'
+                : 'Berikan tanggapan nimbrung yang relevan dan membantu:'),
+          },
+        ],
+      });
+      if (res.text && res.text.trim()) {
+        aiResponseText = res.text.trim();
+      }
+    } catch {
+      // Fallback bila transport eksternal offline
+    }
+
+    if (!aiResponseText) {
+      aiResponseText = justJoined
+        ? `Halo Bos *${msg.pushName ?? config.OWNER_NAME}* & teman-teman *${config.CLASS_NAME}*! 👋✨ Siap, *${config.BOT_NAME}* hadir ikut nimbrung dan nongkrong bareng di grup! Kalau ada bahasan kuliah Semester 5A, tugas, atau mau seru-seruan, langsung aja ngobrol. (Ketik *"bot berhenti"* kapan saja kalau mau saya kembali ke Mode Hening ya!)`
+        : `Siap! *${config.BOT_NAME}* menyimak: _"${rawText.slice(0, 120)}"_. Tetap semangat teman-teman Semester 5A! 💪`;
+    }
+
+    const badge =
+      `🏷️ _Filter AI: Kualitas=*${evaluation.quality.toUpperCase()}* | Sifat=*${evaluation.significance.toUpperCase()}*` +
+      (justJoined ? ' | Mode=*NIMBRUNG AKTIF* (ketik "bot berhenti" untuk diam)_' : '_');
+
+    return `🤖 *${config.BOT_NAME} Nimbrung*\n${aiResponseText}\n\n${badge}`;
   }
 
   async handleInbound(msg: InboundMessage): Promise<string | null> {
@@ -87,24 +329,7 @@ export class CommandDispatcher {
     }
 
     if (msg.chatType === 'group') {
-      this.deps.intelligence.ingest(msg);
-      const parsedGroup = parseCommand(msg.text);
-      if (parsedGroup.command === 'unknown' || parsedGroup.kind === 'none') return null;
-      if (parsedGroup.adminOnly) {
-        this.recordAudit(msg.senderJid, parsedGroup.command, 'denied_group_context', msg.chatJid);
-        return null;
-      }
-      this.fun.recordCommandUsage(parsedGroup.command, msg.chatJid);
-      const out = await this.executePublicOrAdmin(parsedGroup, msg);
-      if (out) {
-        await this.deps.outbound.send({
-          chatJid: msg.chatJid,
-          text: out.text,
-          media: out.media,
-          idempotencyKey: `grp-reply-${msg.providerMessageId}`,
-        });
-      }
-      return out?.text ?? null;
+      return this.handleGroupInbound(msg);
     }
 
     // ==================== PRIVATE CHAT ====================
@@ -286,6 +511,8 @@ export class CommandDispatcher {
             `• \`.status\` | \`.health\` | \`.runtime\` | \`.ping\` | \`.groupid\`\n` +
             `• \`.ai status\` | \`.ai models\` | \`.ai model <lightning|super-vl|ultra>\` | \`.ai auto on\` | \`.ai test <prompt>\`\n` +
             `• \`.groups\` | \`.groups add <jid> <nama>\` | \`.groups pause <jid>\` | \`.groups resume <jid>\`\n` +
+            `• \`.setpjmk [jid]\` (Set Grup PJMK Semester 5 Auto-Relay AI+Tabel) | \`.setkelasa [jid]\` (Set Grup Nursing Class A)\n` +
+            `• \`.nimbrung on|off|status\` | \`.nongkrong\` | \`.diam\` | \`.cekpesan <teks>\`\n` +
             `• \`.pending\` | \`.approve <id>\` | \`.reject <id>\` | \`.send <id>\` | \`.confirm <nonce>\`\n` +
             `• \`.admin pause\` (Emergency Stop) | \`.admin resume\` | \`.audit\` | \`.backup\`\n\n` +
             `📚 *2. Jadwal, Dosen, Tugas, & Akademik Kelas 5A*\n` +
@@ -1188,6 +1415,137 @@ export class CommandDispatcher {
         outbound.resumeGroup(jid);
         this.recordAudit(actorJid, 'groups.resume', ok ? 'ok' : 'not_found', jid);
         return textOnly(ok ? `▶️ Pemantauan & pengiriman grup \`${jid}\` dilanjutkan.` : `⚠️ Grup \`${jid}\` tidak ditemukan.`);
+      }
+
+      case 'group.nimbrung': {
+        if (!this.isOwnerOrGroupAdmin(msg)) {
+          return null; // Hanya Owner (082233038659) atau Admin Grup yang boleh menyuruh bot nimbrung/berhenti
+        }
+        const sub = (parsed.args[0] ?? 'on').toLowerCase();
+        const targetJid =
+          parsed.args[1] && parsed.args[1].endsWith('@g.us')
+            ? parsed.args[1]
+            : msg.chatType === 'group'
+              ? msg.chatJid
+              : (intelligence.getPrimaryGroupJid() ?? config.WHATSAPP_PRIMARY_GROUP_JID ?? 'unconfigured@g.us');
+
+        if (sub === 'status') {
+          const active = this.isNimbrungActive(targetJid);
+          return textOnly(
+            `💬 *Status Mode Grup (${targetJid})*\n` +
+              `• Mode Saat Ini: *${active ? 'NIMBRUNG / NONGKRONG AKTIF 🗣️' : 'MODE HENING (DIAM) 🤫'}*\n` +
+              `• Ketik *"bot ikut nimbrung"* / \`.nimbrung on\` untuk mengajak bot nongkrong, atau *"bot berhenti"* / \`.nimbrung off\` untuk membuat bot kembali diam.`,
+          );
+        }
+
+        if (sub === 'off' || sub === 'stop' || sub === 'berhenti' || sub === 'diam') {
+          this.nimbrungGroups.set(targetJid, false);
+          this.recordAudit(actorJid, 'group.nimbrung.off', 'ok', targetJid);
+          return textOnly(
+            `🫡 *Siap Bos! ${config.BOT_NAME} Berhenti Nimbrung (Mode Hening Aktif)*\n` +
+              `Bot sekarang diam terhadap chat tidak penting di \`${targetJid}\` dan hanya memantau pesan inti/penting atau menunggu disenggol/ditag kembali oleh Owner/Admin.`,
+          );
+        }
+
+        this.nimbrungGroups.set(targetJid, true);
+        outbound.registerAllowedGroup(targetJid);
+        this.recordAudit(actorJid, 'group.nimbrung.on', 'ok', targetJid);
+        return textOnly(
+          `🗣️ *Mode Nimbrung & Nongkrong ${config.BOT_NAME} AKTIF!*\n` +
+            `Halo teman-teman di \`${targetJid}\`! 👋 Bos *${config.OWNER_NAME}* / Admin sudah mengajak *${config.BOT_NAME}* ikut nimbrung. ` +
+            `Saya siap ngobrol dengan AI dan menyaring pesan baik/buruk serta inti/penting. Ketik *"bot berhenti"* kapan saja untuk kembali ke Mode Hening.`,
+        );
+      }
+
+      case 'group.setpjmk': {
+        if (!this.isOwnerOrGroupAdmin(msg)) {
+          return textOnly('⛔ Hanya Owner (082233038659) atau Admin Grup yang dapat mengatur Grup Sumber PJMK Semester 5.');
+        }
+        const jid =
+          parsed.args[0] && parsed.args[0].endsWith('@g.us')
+            ? parsed.args[0]
+            : msg.chatType === 'group'
+              ? msg.chatJid
+              : '';
+        if (!jid) {
+          return textOnly('⚠️ Jalankan `.setpjmk` langsung di dalam grup PJMK Semester 5, atau ketik `.setpjmk <id@g.us> [Nama Grup]`.');
+        }
+        const name =
+          parsed.args[0]?.endsWith('@g.us')
+            ? parsed.args.slice(1).join(' ') || 'PJMK Semester 5'
+            : parsed.rawArgs || msg.chatName || 'PJMK Semester 5';
+        intelligence.registerPjmkGroup(jid, name);
+        outbound.registerAllowedGroup(jid);
+        this.recordAudit(actorJid, 'group.setpjmk', 'ok', jid);
+        return textOnly(
+          `✅ *Grup Sumber PJMK Semester 5 Terdaftar!*\n` +
+            `• Nama Grup: *${name}*\n` +
+            `• JID: \`${jid}\`\n` +
+            `• Fitur Auto-Relay AI + Tabel: *AKTIF* (Setiap pesan *inti/penting* dan *baik* dari grup ini akan otomatis diringkas sejelas mungkin menggunakan AI lengkap dengan Tabel ke grup *${config.CLASS_NAME}*).`,
+        );
+      }
+
+      case 'group.setkelasa': {
+        if (!this.isOwnerOrGroupAdmin(msg)) {
+          return textOnly('⛔ Hanya Owner (082233038659) atau Admin Grup yang dapat mengatur Grup Tujuan Nursing Class A.');
+        }
+        const jid =
+          parsed.args[0] && parsed.args[0].endsWith('@g.us')
+            ? parsed.args[0]
+            : msg.chatType === 'group'
+              ? msg.chatJid
+              : '';
+        if (!jid) {
+          return textOnly('⚠️ Jalankan `.setkelasa` langsung di dalam grup Nursing Class A, atau ketik `.setkelasa <id@g.us>`.');
+        }
+        intelligence.setPrimaryGroupJid(jid);
+        outbound.registerAllowedGroup(jid);
+        this.recordAudit(actorJid, 'group.setkelasa', 'ok', jid);
+        return textOnly(
+          `✅ *Grup Utama ${config.CLASS_NAME} Terdaftar!*\n` +
+            `• JID Tujuan Relay: \`${jid}\`\n` +
+            `• Seluruh informasi penting dari *PJMK Semester 5* akan otomatis diringkas oleh AI beserta tabel ke grup ini.`,
+        );
+      }
+
+      case 'group.classify': {
+        const sample = parsed.rawArgs || msg.quoted?.text || '';
+        if (!sample) {
+          return textOnly('⚠️ Format: `.cekpesan <teks pesan>` atau balas pesan dengan `.cekpesan` untuk melihat penilaian AI (baik/buruk & inti_penting/tidak_penting + tabel).');
+        }
+        const ev = intelligence.evaluateMessage(sample, false);
+        const previewTable = formatStructuredTableAnnouncement({
+          sourceGroupName: msg.chatName ?? 'PJMK Semester 5 (Simulasi)',
+          rawText: sample,
+          analysis: {
+            source_group_id: msg.chatJid,
+            source_message_id: msg.providerMessageId,
+            sender_id: msg.senderJid,
+            received_at: now.toISOString(),
+            category: ev.category,
+            quality: ev.quality,
+            significance: ev.significance,
+            confidence: 0.9,
+            topic: ev.fields.agendaTopik,
+            summary: sample.slice(0, 180),
+            extracted_facts: [sample.slice(0, 120)],
+            requires_confirmation: false,
+            recommended_action: ev.significance === 'inti_penting' ? 'propose_announcement' : 'ignore',
+            status: 'pending_review',
+            prompt_injection_detected: false,
+          },
+          fields: ev.fields,
+        });
+        return textOnly(
+          `🔍 *Hasil Analisis Kualitas & Kepentingan Pesan AI*\n` +
+            `• Kualitas Pesan: *${ev.quality.toUpperCase()}*\n` +
+            `• Sifat Kepentingan: *${ev.significance.toUpperCase()}*\n` +
+            `• Kategori Prioritas: *${ev.category}*\n` +
+            `• Alasan AI: ${ev.reason}\n\n` +
+            (ev.significance === 'inti_penting'
+              ? `📊 *Preview Ringkasan Tabel AI untuk Nursing Class A:*\n${previewTable}`
+              : `ℹ️ _Karena pesan ini bersifat *${ev.significance}*, bot akan tetap diam di grup dan tidak meneruskannya ke Nursing Class A._`),
+        );
       }
 
       case 'filter.status':

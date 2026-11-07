@@ -163,4 +163,173 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     expect(fun.giveUpQuiz('chat-1')).toContain('Jawaban yang benar');
     expect(fun.transformText('hilih', 'Selamat Pagi Kelas')).toBe('Silimit Pigi Kilis');
   });
+
+  it('diam di grup untuk chat tidak penting, ikut nimbrung saat disenggol/diajak Owner/Admin, berhenti saat "bot berhenti", dan auto-relay AI + Tabel dari PJMK Semester 5 ke Nursing Class A', async () => {
+    const config = loadConfig({
+      OWNER_WHATSAPP: '082233038659',
+      ADMIN_PASSWORD: 'hedyfake',
+      ADMIN_REQUIRE_PASSWORD: 'true',
+      WHATSAPP_PRIMARY_GROUP_JID: 'nursing-class-a@g.us',
+      OUTBOUND_ENABLED: 'true',
+      DRY_RUN: 'false',
+    });
+    const wa = new MockWhatsAppProvider();
+    await wa.connect();
+    const outbound = new OutboundGate({
+      provider: wa,
+      outboundEnabled: true,
+      dryRun: false,
+      allowedGroupJids: ['nursing-class-a@g.us'],
+    });
+    const auth = new AdminAuthenticator({
+      ownerE164: config.OWNER_WHATSAPP,
+      adminAllowlistE164: config.ADMIN_WHATSAPP_ALLOWLIST,
+      adminPassword: config.ADMIN_PASSWORD,
+      requirePassword: true,
+    });
+    const confirmations = new ConfirmationManager();
+    const router = new ModelRouter({
+      transport: {
+        complete: async (req) => {
+          const last = req.messages[req.messages.length - 1]?.content;
+          const userMsg = typeof last === 'string' ? last : '';
+          if (userMsg.includes('PJMK')) {
+            return {
+              content:
+                'Kuliah Metodologi Penelitian (Ns. Rina, M.Kep) dipindahkan ke hari Rabu pukul 13.00 WIB di Ruang Lab 2 dan tugas dikumpulkan sebelum kelas dimulai.',
+            };
+          }
+          return {
+            content: 'Halo Bos Hedy & teman-teman Nursing Class A! Siap nimbrung dan bantu diskusi kuliah Semester 5A!',
+          };
+        },
+      },
+    });
+    const schedule = new ScheduleService();
+    const intelligence = new GroupIntelligenceService({ primaryGroupJid: 'nursing-class-a@g.us' });
+
+    const dispatcher = new CommandDispatcher({
+      config,
+      whatsapp: wa,
+      outbound,
+      auth,
+      confirmations,
+      router,
+      schedule,
+      intelligence,
+      startedAt: new Date('2026-11-06T00:00:00Z'),
+    });
+
+    // 1. Pesan tidak penting di grup dari anggota biasa -> Bot WAJIB DIAM (null)
+    const casual1 = await dispatcher.handleInbound({
+      providerMessageId: 'grp-casual-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: 'wkwk lapar nih kantin yuk habis ini',
+      receivedAt: new Date(),
+    });
+    expect(casual1).toBeNull();
+
+    // Anggota biasa menyuruh bot nimbrung -> Bot TETAP DIAM karena bukan Owner/Admin
+    const nonAdminOrder = await dispatcher.handleInbound({
+      providerMessageId: 'grp-nonadmin-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      isGroupAdmin: false,
+      text: 'bot ikut nimbrung dong',
+      receivedAt: new Date(),
+    });
+    expect(nonAdminOrder).toBeNull();
+
+    // 2. Owner (082233038659) menyenggol / mentag bot atau mengajak nongkrong -> Bot IKUT NIMBRUNG dengan AI
+    const ownerTag = await dispatcher.handleInbound({
+      providerMessageId: 'grp-owner-tag-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '6282233038659@s.whatsapp.net',
+      pushName: 'Hedy',
+      isBotMentioned: true,
+      text: '@hdybot bot ikut nimbrung dan ngajak nongkrong sini di grup',
+      receivedAt: new Date(),
+    });
+    expect(ownerTag).toContain('HdyBot Nimbrung');
+    expect(ownerTag).toContain('NIMBRUNG AKTIF');
+    expect(dispatcher.isNimbrungActive('nursing-class-a@g.us')).toBe(true);
+
+    // 3. Saat mode nimbrung aktif, bot merespons obrolan anggota dan memfilter pesan buruk vs baik
+    const badChat = await dispatcher.handleInbound({
+      providerMessageId: 'grp-bad-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: 'dasar goblok tolol',
+      receivedAt: new Date(),
+    });
+    expect(badChat).toContain('Kualitas Pesan: *BURUK*');
+
+    const goodChat = await dispatcher.handleInbound({
+      providerMessageId: 'grp-good-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: 'Teman-teman, semangat belajar untuk persiapan praktikum besok ya',
+      receivedAt: new Date(),
+    });
+    expect(goodChat).toContain('HdyBot Nimbrung');
+    expect(goodChat).toContain('Kualitas=*BAIK*');
+
+    // 4. Owner bilang "bot berhenti" -> Bot berhenti nimbrung dan kembali diam
+    const stopMsg = await dispatcher.handleInbound({
+      providerMessageId: 'grp-owner-stop-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '6282233038659@s.whatsapp.net',
+      text: 'bot berhenti',
+      receivedAt: new Date(),
+    });
+    expect(stopMsg).toContain('Berhenti Nimbrung');
+    expect(dispatcher.isNimbrungActive('nursing-class-a@g.us')).toBe(false);
+
+    // Setelah berhenti, chat santai kembali diabaikan (diam)
+    const casualAfterStop = await dispatcher.handleInbound({
+      providerMessageId: 'grp-casual-2',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: 'hehe siap makasih infonya',
+      receivedAt: new Date(),
+    });
+    expect(casualAfterStop).toBeNull();
+
+    // 5. Pesan penting dari grup "PJMK Semester 5" otomatis diringkas oleh AI + Tabel dan dikirim ke "Nursing Class A"
+    const pjmkImportant = await dispatcher.handleInbound({
+      providerMessageId: 'pjmk-msg-1',
+      chatJid: 'pjmk-sem5@g.us',
+      chatType: 'group',
+      chatName: 'PJMK Semester 5',
+      senderJid: '628999888777@s.whatsapp.net',
+      text: 'Info penting dari Dosen Ns. Rina: perubahan jadwal kuliah Metodologi Penelitian pindah jam ke hari Rabu pukul 13:00 WIB di Ruang Lab 2, dan tugas baru dikumpulkan sebelum kuliah.',
+      receivedAt: new Date(),
+    });
+    expect(pjmkImportant).toContain('INFORMASI PENTING AKADEMIK — NURSING CLASS A');
+    expect(pjmkImportant).toContain('PJMK Semester 5');
+    expect(pjmkImportant).toContain('Metodologi Penelitian');
+    expect(pjmkImportant).toContain('| **Mata Kuliah** |');
+    expect(pjmkImportant).toContain('+------------------+------------------------------------------+');
+
+    // Pastikan pesan terkirim ke grup Nursing Class A
+    const sentToClassA = wa.sent.find(
+      (s) => s.chatJid === 'nursing-class-a@g.us' && s.text.includes('INFORMASI PENTING AKADEMIK — NURSING CLASS A'),
+    );
+    expect(sentToClassA).toBeDefined();
+  });
 });

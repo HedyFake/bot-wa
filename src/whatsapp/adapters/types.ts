@@ -27,10 +27,18 @@ export interface InboundMessage {
   /** JID chat (private: nomor@s.whatsapp.net, grup: id@g.us). */
   chatJid: string;
   chatType: ChatType;
+  /** Nama grup WhatsApp jika berasal dari grup (mis. "PJMK Semester 5" atau "Nursing Class A"). */
+  chatName?: string;
   /** JID pengirim dari metadata provider yang terverifikasi — BUKAN push name. */
   senderJid: string;
   /** Push name hanya untuk tampilan, tidak untuk otorisasi. */
   pushName?: string;
+  /** Apakah pengirim merupakan admin di grup WhatsApp tersebut. */
+  isGroupAdmin?: boolean;
+  /** Daftar JID yang di-mention/di-tag di dalam pesan. */
+  mentionedJids?: string[];
+  /** Apakah bot di-tag / disenggol secara langsung di pesan ini (mention atau reply ke pesan bot). */
+  isBotMentioned?: boolean;
   text: string;
   quoted?: {
     providerMessageId: string;
