@@ -1,34 +1,43 @@
 # HdyBot — Nursing Class A Assistant
 
-Asisten AI WhatsApp untuk **Nursing Class A (Semester 5A)** yang dikendalikan penuh melalui chat pribadi WhatsApp **Hedy** (`+6282233038659`), menggunakan **NVIDIA Nemotron Auto Router** (`lightning`, `super-vl`, `ultra`), timezone `Asia/Jakarta`, dan Bahasa Indonesia.
+Asisten AI WhatsApp untuk **Nursing Class A (Semester 5A)** yang dikendalikan penuh melalui chat pribadi WhatsApp **Hedy** (`082233038659` / `+6282233038659`) dengan verifikasi password interaktif (**`hedyfake`**), menggunakan **NVIDIA Nemotron Auto Router** (`lightning`, `super-vl`, `ultra`), timezone `Asia/Jakarta`, dan Bahasa Indonesia.
+
+- **Nomor Admin Utama:** `082233038659` (`+6282233038659`)
+- **Password Admin di Chat WA:** `hedyfake` _(ketika admin pertama kali chat ke bot, bot akan menanyakan password; cukup balas `hedyfake`)_
+- **Nomor WhatsApp Bot:** **Bebas / Random** _(bisa diganti-ganti kapan saja dengan scan QR Code baru)_
 
 ---
 
-## 1. Instalasi & Menjalankan 24/7 Sekali Klik di Ubuntu Server
+## 1. Cara Menjalankan 24/7 (Tetap Jalan Saat Keluar dari Server / Tutup SSH)
 
-Di Ubuntu Server (22.04 / 24.04 LTS), cukup salin folder proyek ini ke server lalu jalankan satu perintah:
+### Opsi A: Menggunakan PM2 (`pm2 start start.js`)
+```bash
+# 1. Pasang dependensi & build
+npm install
+npm run build
 
+# 2. Jalankan terus-menerus di background dengan PM2
+pm2 start start.js --name hdybot
+# atau menggunakan file konfigurasi PM2:
+pm2 start ecosystem.config.cjs
+
+# 3. Simpan agar otomatis menyala kembali saat server reboot
+pm2 save
+pm2 startup
+
+# 4. Tampilkan QR Code WhatsApp & log live
+pm2 logs hdybot --lines 100
+```
+
+### Opsi B: Installer & Daemon 24/7 Sekali Klik untuk Ubuntu Server (`install.sh`)
 ```bash
 chmod +x install.sh
 sudo ./install.sh
 ```
-
-Apa yang otomatis dikerjakan [`install.sh`](file:///c:/Users/HEDY/Documents/botwa/install.sh):
-1. Memasang paket dasar, **Node.js 22 LTS**, **PostgreSQL**, dan **Redis** (bind `127.0.0.1`).
-   - **Tanpa `ufw` dan tanpa `fail2ban`** agar IP VPS Hedy tidak pernah terblokir.
-   - **Tanpa port HTTP terbuka**: seluruh pemantauan `health`/`ready`/`status` dilakukan langsung melalui chat WhatsApp pribadi Hedy (`.status`, `.health`, `.dashboard`, `.ping`, `.runtime`).
-2. Membuat user sistem non-root `hdybot`, folder aplikasi `/opt/hdybot`, data `/var/lib/hdybot`, dan backup `/var/backups/hdybot`.
-3. Membuat database PostgreSQL `hdybot` + file `/opt/hdybot/.env` (`chmod 0600`) dengan password database & kunci enkripsi backup acak.
-4. Menjalankan `npm install`, `prisma generate`, `prisma migrate deploy`, `npm run db:seed` (seed jadwal & dosen Semester 5A), `npm run typecheck`, `npm test`, dan `npm run build`.
-5. Mengaktifkan daemon **`hdybot.service`** dengan:
-   - `Restart=always`, `RestartSec=5`, `StartLimitIntervalSec=0` (otomatis hidup kembali tanpa batas jika mati atau setelah server reboot).
-   - **`hdybot-backup.timer`**: backup PostgreSQL terenkripsi AES-256 setiap pukul `02:30 WIB`.
-
-### Perintah Operasional Ubuntu Server
-
+Perintah operasional `install.sh`:
 ```bash
 sudo ./install.sh --qr                  # Tampilkan QR Code WhatsApp & log live
-sudo ./install.sh --reset-wa            # Reset sesi WA & tampilkan QR Code baru
+sudo ./install.sh --reset-wa            # Reset sesi WA & munculkan QR baru (untuk ganti nomor bot)
 sudo ./install.sh --status              # Cek status service systemd
 sudo ./install.sh --logs                # Lihat log live (journalctl -u hdybot -f)
 sudo ./install.sh --cli                 # Simulasi chat admin dari terminal
@@ -38,42 +47,42 @@ sudo ./install.sh --uninstall-service   # Hapus unit systemd (database & data te
 
 ---
 
-## 2. Konfigurasi `.env` & Keamanan Secret
+## 2. Alur Login Admin (`082233038659`) & Pergantian Nomor Bot
 
-Salin [`.env.example`](file:///c:/Users/HEDY/Documents/botwa/.env.example) ke `.env` (di Ubuntu Server otomatis dibuat di `/opt/hdybot/.env`):
-
-```bash
-sudo nano /opt/hdybot/.env
-sudo ./install.sh --restart
-```
-
-> **Penting:** Jangan pernah menyimpan `NVIDIA_API_KEY`, session WhatsApp, atau password di Git. Semua kredensial lama yang pernah ditempel di percakapan harus di-revoke dan diganti key baru.
-
----
-
-## 3. Skrip NPM yang Tersedia
-
-```bash
-npm install          # Pasang dependensi
-npm run db:generate  # Generate Prisma Client
-npm run db:migrate   # Buat/jalankan migrasi (dev)
-npm run db:deploy    # Terapkan migrasi (production)
-npm run db:seed      # Seed data Semester 5A (idempoten)
-npm run dev          # Jalankan mode development
-npm run test         # Jalankan seluruh unit & integration test (Vitest)
-npm run typecheck    # Pemeriksaan tipe TypeScript strict
-npm run build        # Kompilasi ke dist/
-npm start            # Jalankan hasil build (node dist/index.js)
-npm run health       # Cek kesehatan sistem via CLI lokal
-```
+1. **Tautkan Nomor Bot (Bebas/Random):** Scan QR Code yang tampil di terminal menggunakan aplikasi WhatsApp pada HP nomor bot Anda (**Perangkat Tertaut -> Tautkan Perangkat**).
+2. **Chat dari Nomor Admin (`082233038659`):**
+   - Kirim pesan apa saja (mis. `.dashboard` atau `Halo`) dari nomor admin `082233038659` ke nomor bot.
+   - Bot akan membalas:
+     > 🔐 *Verifikasi Password Admin HdyBot*
+     > Halo Hedy! Untuk membuka akses kontrol bot, silakan balas pesan ini dengan *password admin* Anda:
+   - Balas langsung dengan: **`hedyfake`**
+   - Bot akan mengonfirmasi `✅ Password Admin Terverifikasi!` dan langsung menjalankan perintah Anda.
+   - Ketik `.logout` kapan saja jika ingin mengunci kembali sesi admin.
 
 ---
 
-## 4. Perintah Kontrol & Pemantauan Health via WhatsApp Pribadi Hedy
+## 3. Ringkasan Fitur & Mega Command Menu (`.menu`)
 
-Kirim ke chat pribadi HdyBot (atau tulis dengan bahasa alami):
-- **Health & Monitoring (WA Admin DM)**: `.dashboard`, `.status`, `.health`, `.ping`, `.runtime`, `.owner`, `.help`
-- **NVIDIA AI Router**: `.ai status`, `.ai models`, `.ai model <lightning|super-vl|ultra>`, `.ai auto on|off`
-- **Jadwal & Akademik 5A**: `.jadwal`, `.jadwal senin..jumat`, `.besok`, `.mingguini`, `.kuliahberikutnya`, `.matkul`, `.dosen [matkul]`
-- **Group Intelligence & Approval**: `.groups`, `.groups add <id@g.us> <nama>`, `.groups pause <id@g.us>`, `.groups resume <id@g.us>`, `.pending`, `.approve <id>`, `.reject <id> <alasan>`, `.send <id>`, `.confirm <nonce>`, `.cancel <nonce>`
-- **Keamanan & Audit**: `.admin pause` (Emergency Stop seluruh outbound grup), `.admin resume`, `.audit`
+- **Kontrol Admin & Health (WA Admin DM)**: `.login hedyfake`, `.logout`, `.dashboard`, `.status`, `.health`, `.ping`, `.runtime`, `.owner`, `.groups`, `.pending`, `.approve <id>`, `.reject <id>`, `.send <id>`, `.confirm <nonce>`, `.admin pause`, `.admin resume`, `.audit`, `.backup`
+- **NVIDIA AI Router & Study Assistant**: `.ai status`, `.ai models`, `.ai model <lightning|super-vl|ultra>`, `.ai auto on|off`, `.ai test <prompt>`, `.ask <pertanyaan>`, `.summarize <teks>`, `.flashcard <topik>`, `.quiz <topik>`, `.translate <bhs> <teks>`
+- **Jadwal, Dosen, Tugas, & Akademik Kelas 5A**: `.jadwal`, `.jadwal senin..jumat`, `.besok`, `.mingguini`, `.kuliahberikutnya`, `.jadwal export csv|json`, `.matkul`, `.dosen [matkul]`, `.tugas add|list|done|del`, `.reminder add|list|snooze|delete`, `.announce draft`, `.note add|list|del`, `.materi`, `.carimateri`, `.buatkelompok`, `.kalender`, `.countdown`, `.kelas`, `.pengurus`, `.rules`, `.faq`
+- **Media, Stiker, Gambar, QR Code, & PDF (`sharp`, `qrcode`, `pdf-lib`)**: `.sticker` / `.s`, `.ttp <teks>`, `.toimg`, `.blur`, `.invert`, `.grayscale`, `.flip`, `.flop`, `.resize <w> <h>`, `.compress`, `.quotemaker <kutipan>|<penulis>`, `.kartujadwal [hari]`, `.qr <teks/url>`, `.doc pdf <judul>|<isi>`, `.suratizin`, `.notulensi`, `.ocr`, `.tts <teks>`
+- **Utilitas & Hiburan Aman (Porting Akira)**: `.cuaca <kota>`, `.wiki <topik>`, `.calc <rumus>`, `.convert <nilai> <dari> <ke>`, `.jam`, `.bmi <kg> <cm>`, `.ipk`, `.urlcheck <url>`, `.quotes`, `.quotesislami`, `.quotesmotivasi`, `.faktaunik`, `.pantun`, `.doaharian`, `.listsurah`, `.jadwalsholat`, `.tebakkata`, `.caklontong`, `.family100`, `.mathquiz`, `.jawab <teks>`, `.nyerah`, `.truth`, `.dare`, `.dadu`, `.koin`, `.suit`, `.kerangajaib`, `.hilih`, `.alay`, `.besarkecil`, `.balikhuruf`, `.namaninja`, `.stats`, `.leaderboard`, `.afk`
+
+---
+
+## 4. Dokumentasi Lengkap (`docs/`)
+
+- [Katalog Perintah (`docs/COMMANDS.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/COMMANDS.md)
+- [Status Fitur (`docs/FEATURE_STATUS.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/FEATURE_STATUS.md)
+- [Inventaris Fitur Akira (`docs/AKIRA_FEATURE_INVENTORY.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/AKIRA_FEATURE_INVENTORY.md)
+- [Audit Legacy Akira (`docs/LEGACY_FEATURE_AUDIT.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/LEGACY_FEATURE_AUDIT.md)
+- [Matriks Provider WhatsApp (`docs/WHATSAPP_PROVIDER_MATRIX.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/WHATSAPP_PROVIDER_MATRIX.md)
+- [Keputusan Arsitektur (`docs/DECISIONS.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/DECISIONS.md)
+- [Arsitektur Sistem (`docs/ARCHITECTURE.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/ARCHITECTURE.md)
+- [Skema Database (`docs/DATABASE.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/DATABASE.md)
+- [Panduan Instalasi (`docs/INSTALLATION.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/INSTALLATION.md)
+- [Panduan Deployment PM2 & Systemd (`docs/DEPLOYMENT.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/DEPLOYMENT.md)
+- [Keamanan & Privasi (`docs/SECURITY.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/SECURITY.md)
+- [Pengujian (`docs/TESTING.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/TESTING.md)
+- [Troubleshooting & Runbook (`docs/TROUBLESHOOTING.md`)](file:///c:/Users/HEDY/Documents/botwa/docs/TROUBLESHOOTING.md)

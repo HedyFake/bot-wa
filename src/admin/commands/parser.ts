@@ -5,6 +5,8 @@
  */
 
 export type CanonicalCommand =
+  | 'auth.login'
+  | 'auth.logout'
   | 'owner'
   | 'groupid'
   | 'dashboard'
@@ -13,15 +15,27 @@ export type CanonicalCommand =
   | 'health'
   | 'ping'
   | 'runtime'
+  | 'about'
+  | 'info'
   | 'logs'
   | 'errors'
   | 'help'
   | 'menu'
+  | 'class.info'
+  | 'class.members'
+  | 'class.officers'
+  | 'class.rules'
+  | 'class.faq'
+  | 'user.profile'
   | 'ai.status'
   | 'ai.models'
   | 'ai.model'
   | 'ai.auto'
   | 'ai.test'
+  | 'ai.summarize'
+  | 'ai.flashcard'
+  | 'ai.quiz'
+  | 'ai.translate'
   | 'groups'
   | 'groups.sources'
   | 'groups.add'
@@ -50,11 +64,14 @@ export type CanonicalCommand =
   | 'schedule.edit'
   | 'schedule.delete'
   | 'schedule.reset'
+  | 'schedule.export'
   | 'courses'
   | 'lecturers'
   | 'tasks'
   | 'reminders'
   | 'reminders.pause'
+  | 'announce'
+  | 'notes'
   | 'materials'
   | 'materials.search'
   | 'ask'
@@ -63,10 +80,45 @@ export type CanonicalCommand =
   | 'countdown'
   | 'doc.permission'
   | 'doc.minutes'
-  | 'gamification.privacy'
-  | 'gamification.leaderboard'
+  | 'doc.pdf'
+  | 'media.sticker'
+  | 'media.ttp'
+  | 'media.toimg'
+  | 'media.effect'
+  | 'media.quotemaker'
+  | 'media.schedulecard'
+  | 'media.qr'
+  | 'media.ocr'
+  | 'media.tts'
   | 'util.gpa'
   | 'util.bmi'
+  | 'util.calc'
+  | 'util.convert'
+  | 'util.clock'
+  | 'util.weather'
+  | 'util.wiki'
+  | 'util.urlcheck'
+  | 'fun.quote'
+  | 'fun.fact'
+  | 'fun.pantun'
+  | 'fun.doa'
+  | 'fun.surah'
+  | 'fun.sholat'
+  | 'fun.truth'
+  | 'fun.dare'
+  | 'fun.dice'
+  | 'fun.coin'
+  | 'fun.suit'
+  | 'fun.shell'
+  | 'fun.quiz_start'
+  | 'fun.quiz_answer'
+  | 'fun.quiz_giveup'
+  | 'fun.text'
+  | 'fun.afk'
+  | 'fun.unafk'
+  | 'analytics.stats'
+  | 'gamification.privacy'
+  | 'gamification.leaderboard'
   | 'backup'
   | 'audit'
   | 'emergency.stop'
@@ -133,6 +185,14 @@ export function parseCommand(textInput: string): ParsedCommand {
     const rawRest2 = rawRest.slice(sub.length).trim();
 
     switch (head) {
+      case 'login':
+      case 'password':
+      case 'pass':
+      case 'auth':
+        return build('dot', 'auth.login', rest, rawRest);
+      case 'logout':
+      case 'lock':
+        return build('dot', 'auth.logout');
       case 'owner': return build('dot', 'owner');
       case 'groupid':
       case 'id': return build('dot', 'groupid');
@@ -142,34 +202,224 @@ export function parseCommand(textInput: string): ParsedCommand {
       case 'health': return build('dot', 'health');
       case 'ping': return build('dot', 'ping');
       case 'runtime': return build('dot', 'runtime');
+      case 'about': return build('dot', 'about');
+      case 'info':
+      case 'ingfo': return build('dot', 'info');
       case 'logs': return build('dot', 'logs');
       case 'errors': return build('dot', 'errors');
-      case 'help': return build('dot', 'help');
-      case 'menu': return build('dot', 'menu');
+      case 'help': return build('dot', 'help', rest, rawRest);
+      case 'menu':
+      case 'allmenu': return build('dot', 'menu', rest, rawRest);
+
+      // Profil Kelas & Anggota
+      case 'kelas':
+      case 'semester':
+      case 'tahunajaran':
+        return build('dot', 'class.info', [head, ...rest], rawRest);
+      case 'anggota':
+        return build('dot', 'class.members', rest, rawRest);
+      case 'ketuakelas':
+      case 'sekretaris':
+      case 'bendahara':
+      case 'wali':
+      case 'pengurus':
+        return build('dot', 'class.officers', [head], head);
+      case 'rules':
+      case 'aturan':
+        return build('dot', 'class.rules');
+      case 'faq':
+        return build('dot', 'class.faq');
+      case 'profile':
+      case 'me':
+        return build('dot', 'user.profile');
+
       case 'priority': return build('dot', 'priority');
       case 'pending': return build('dot', 'pending');
       case 'approve': return build('dot', 'approve', rest, rawRest);
       case 'reject': return build('dot', 'reject', rest, rawRest);
       case 'send': return build('dot', 'send', rest, rawRest);
+
+      // Tugas, Reminder, Pengumuman, Catatan
       case 'tasks':
       case 'tugas':
-      case 'deadline': return build('dot', 'tasks', rest, rawRest);
+      case 'deadline':
+      case 'mytask':
+      case 'progress':
+        return build('dot', 'tasks', rest, rawRest);
+      case 'announce':
+      case 'pengumuman':
+        return build('dot', 'announce', rest, rawRest);
+      case 'note':
+      case 'catatan':
+        return build('dot', 'notes', rest, rawRest);
+
       case 'materi': return build('dot', 'materials', rest, rawRest);
       case 'carimateri': return build('dot', 'materials.search', rest, rawRest);
-      case 'ask': return build('dot', 'ask', rest, rawRest);
+      case 'ask':
+      case 'tanya':
+      case 'brainly':
+        return build('dot', 'ask', rest, rawRest);
+      case 'summarize':
+      case 'ringkas':
+        return build('dot', 'ai.summarize', rest, rawRest);
+      case 'flashcard':
+        return build('dot', 'ai.flashcard', rest, rawRest);
+      case 'quiz':
+      case 'kuis':
+        return build('dot', 'ai.quiz', rest, rawRest);
+      case 'translate':
+      case 'tr':
+        return build('dot', 'ai.translate', rest, rawRest);
+
       case 'kelompok':
       case 'buatkelompok': return build('dot', 'groupgen', rest, rawRest);
-      case 'kalender': return build('dot', 'calendar', rest, rawRest);
+      case 'kalender':
+      case 'agenda': return build('dot', 'calendar', rest, rawRest);
       case 'countdown': return build('dot', 'countdown', rest, rawRest);
       case 'suratizin': return build('dot', 'doc.permission', rest, rawRest);
       case 'notulensi': return build('dot', 'doc.minutes', rest, rawRest);
-      case 'leaderboard': return build('dot', 'gamification.leaderboard', rest, rawRest);
-      case 'privacy':
-        if (sub === 'gamification') return build('dot', 'gamification.privacy', rest2, rawRest2);
-        return build('dot', 'gamification.privacy', rest, rawRest);
+      case 'doc':
+      case 'pdf':
+        if (sub === 'create' || sub === 'permission') return build('dot', 'doc.permission', rest2, rawRest2);
+        if (sub === 'minutes') return build('dot', 'doc.minutes', rest2, rawRest2);
+        return build('dot', 'doc.pdf', sub === 'pdf' ? rest2 : rest, sub === 'pdf' ? rawRest2 : rawRest);
+
+      // Media, Stiker, Efek Gambar, QR, OCR, TTS
+      case 'sticker':
+      case 'stiker':
+      case 's':
+      case 'stickerwm':
+        return build('dot', 'media.sticker', rest, rawRest);
+      case 'ttp':
+      case 'attp':
+        return build('dot', 'media.ttp', rest, rawRest);
+      case 'toimg':
+        return build('dot', 'media.toimg');
+      case 'blur':
+      case 'invert':
+      case 'grayscale':
+      case 'hitamputih':
+      case 'flip':
+      case 'flop':
+      case 'resize':
+      case 'compress':
+        return build('dot', 'media.effect', [head === 'hitamputih' ? 'grayscale' : head, ...rest], rawRest);
+      case 'quotemaker':
+      case 'makequote':
+      case 'quotesmaker':
+        return build('dot', 'media.quotemaker', rest, rawRest);
+      case 'kartujadwal':
+      case 'kartuucapan':
+        return build('dot', 'media.schedulecard', [head, ...rest], rawRest);
+      case 'qr':
+      case 'qrcode':
+        return build('dot', 'media.qr', rest, rawRest);
+      case 'ocr':
+        return build('dot', 'media.ocr', rest, rawRest);
+      case 'tts':
+      case 'say':
+        return build('dot', 'media.tts', rest, rawRest);
+
+      // Utilitas
       case 'ipk':
       case 'gpa': return build('dot', 'util.gpa', rest, rawRest);
       case 'bmi': return build('dot', 'util.bmi', rest, rawRest);
+      case 'calc':
+      case 'hitung':
+      case 'kalkulator':
+        return build('dot', 'util.calc', rest, rawRest);
+      case 'convert':
+      case 'konversi':
+      case 'kurs':
+        return build('dot', 'util.convert', rest, rawRest);
+      case 'jam':
+      case 'waktu':
+      case 'clock':
+        return build('dot', 'util.clock');
+      case 'cuaca':
+      case 'weather':
+        return build('dot', 'util.weather', rest, rawRest);
+      case 'wiki':
+      case 'wikipedia':
+      case 'kbbi':
+        return build('dot', 'util.wiki', rest, rawRest);
+      case 'urlcheck':
+      case 'shortlink':
+        return build('dot', 'util.urlcheck', rest, rawRest);
+
+      // Fun, Quotes, & Mini-Games Aman (Porting Akira)
+      case 'quotes':
+      case 'quoterandom':
+      case 'katabijak':
+        return build('dot', 'fun.quote', ['umum'], 'umum');
+      case 'quotesislami':
+        return build('dot', 'fun.quote', ['islami'], 'islami');
+      case 'quotesmotivasi':
+      case 'quotesnasehat':
+        return build('dot', 'fun.quote', ['motivasi'], 'motivasi');
+      case 'faktaunik':
+        return build('dot', 'fun.fact');
+      case 'pantun':
+        return build('dot', 'fun.pantun');
+      case 'doaharian':
+      case 'ayatkursi':
+        return build('dot', 'fun.doa');
+      case 'listsurah':
+      case 'quran':
+        return build('dot', 'fun.surah', rest, rawRest);
+      case 'jadwalsholat':
+        return build('dot', 'fun.sholat', rest, rawRest);
+      case 'truth':
+        return build('dot', 'fun.truth');
+      case 'dare':
+        return build('dot', 'fun.dare');
+      case 'dadu':
+        return build('dot', 'fun.dice');
+      case 'koin':
+      case 'flipcoin':
+        return build('dot', 'fun.coin');
+      case 'suit':
+        return build('dot', 'fun.suit', rest, rawRest);
+      case 'apakah':
+      case 'kapankah':
+      case 'bisakah':
+      case 'kerangajaib':
+      case 'rate':
+        return build('dot', 'fun.shell', [head, ...rest], rawRest);
+      case 'tebakkata':
+      case 'caklontong':
+      case 'family100':
+      case 'mathquiz':
+        return build('dot', 'fun.quiz_start', [head], head);
+      case 'jawab':
+        return build('dot', 'fun.quiz_answer', rest, rawRest);
+      case 'nyerah':
+        return build('dot', 'fun.quiz_giveup');
+      case 'hilih':
+      case 'alay':
+      case 'besarkecil':
+      case 'balikhuruf':
+      case 'namaninja':
+        return build('dot', 'fun.text', [head, ...rest], rawRest);
+      case 'afk':
+        return build('dot', 'fun.afk', rest, rawRest);
+      case 'unafk':
+        return build('dot', 'fun.unafk');
+
+      // Analitik & Gamifikasi
+      case 'stats':
+      case 'activity':
+      case 'report':
+        return build('dot', 'analytics.stats', rest, rawRest);
+      case 'leaderboard':
+      case 'lb':
+      case 'level':
+      case 'lvl':
+        return build('dot', 'gamification.leaderboard', rest, rawRest);
+      case 'privacy':
+        if (sub === 'gamification') return build('dot', 'gamification.privacy', rest2, rawRest2);
+        return build('dot', 'gamification.privacy', rest, rawRest);
+
       case 'backup': return build('dot', 'backup');
       case 'audit': return build('dot', 'audit');
       case 'confirm': return build('dot', 'confirm', rest, rawRest);
@@ -197,16 +447,20 @@ export function parseCommand(textInput: string): ParsedCommand {
         if (sub === 'test') return build('dot', 'ai.test', rest2, rawRest2);
         return build('dot', 'ai.status');
       case 'groups':
-        if (sub === 'sources') return build('dot', 'groups.sources');
-        if (sub === 'add') return build('dot', 'groups.add', rest2, rawRest2);
-        if (sub === 'pause') return build('dot', 'groups.pause', rest2, rawRest2);
+      case 'group':
+      case 'source':
+      case 'target':
+        if (sub === 'sources' || sub === 'list') return build('dot', 'groups.sources');
+        if (sub === 'add' || sub === 'set') return build('dot', 'groups.add', rest2, rawRest2);
+        if (sub === 'pause' || sub === 'remove') return build('dot', 'groups.pause', rest2, rawRest2);
         if (sub === 'resume') return build('dot', 'groups.resume', rest2, rawRest2);
         return build('dot', 'groups');
       case 'filter':
+      case 'monitor':
         if (sub === 'status') return build('dot', 'filter.status');
         if (sub === 'review') return build('dot', 'filter.review');
-        if (sub === 'pause') return build('dot', 'groups.pause', rest2, rawRest2);
-        if (sub === 'resume') return build('dot', 'groups.resume', rest2, rawRest2);
+        if (sub === 'pause' || sub === 'off') return build('dot', 'groups.pause', rest2, rawRest2);
+        if (sub === 'resume' || sub === 'on') return build('dot', 'groups.resume', rest2, rawRest2);
         return build('dot', 'filter.status');
       case 'digest':
         return build('dot', 'digest', [sub || 'today'], rawRest || 'today');
@@ -215,23 +469,26 @@ export function parseCommand(textInput: string): ParsedCommand {
         return build('dot', 'broadcast.preview', rest2, rawRest2);
       case 'schedule':
       case 'jadwal':
-        if (sub === 'add') return build('dot', 'schedule.add', rest2, rawRest2);
-        if (sub === 'edit') return build('dot', 'schedule.edit', rest2, rawRest2);
-        if (sub === 'delete') return build('dot', 'schedule.delete', rest2, rawRest2);
+        if (sub === 'add' || sub === 'tambah') return build('dot', 'schedule.add', rest2, rawRest2);
+        if (sub === 'edit' || sub === 'ubah') return build('dot', 'schedule.edit', rest2, rawRest2);
+        if (sub === 'delete' || sub === 'hapus') return build('dot', 'schedule.delete', rest2, rawRest2);
         if (sub === 'reset') return build('dot', 'schedule.reset', rest2, rawRest2);
+        if (sub === 'export') return build('dot', 'schedule.export', rest2, rawRest2);
         if (sub === 'besok') return build('dot', 'schedule.tomorrow');
+        if (sub === 'minggu' || sub === 'mingguini') return build('dot', 'schedule.week');
         if (DAY_NAMES.has(sub)) return build('dot', 'schedule.day', [sub], sub);
         return build('dot', 'schedule');
       case 'reminders':
       case 'reminder':
         if (sub === 'pause') return build('dot', 'reminders.pause', rest2, rawRest2);
-        return build('dot', 'reminders');
+        return build('dot', 'reminders', rest, rawRest);
       case 'admin':
+      case 'maintenance':
         if (sub === 'menu') return build('dot', 'menu');
         if (sub === 'status') return build('dot', 'status');
         if (sub === 'overview') return build('dot', 'dashboard');
-        if (sub === 'pause') return build('dot', 'emergency.stop');
-        if (sub === 'resume') return build('dot', 'emergency.resume');
+        if (sub === 'pause' || sub === 'on') return build('dot', 'emergency.stop');
+        if (sub === 'resume' || sub === 'off') return build('dot', 'emergency.resume');
         if (sub === 'review') return build('dot', 'pending');
         if (sub === 'approve') return build('dot', 'approve', rest2, rawRest2);
         if (sub === 'reject') return build('dot', 'reject', rest2, rawRest2);

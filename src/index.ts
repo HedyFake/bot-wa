@@ -8,6 +8,8 @@ import { ModelRouter } from './ai/model-router/router.js';
 import { HttpNvidiaTransport } from './ai/nvidia/registry.js';
 import { runHealth } from './app/health.js';
 import { loadConfig } from './config/env.js';
+import { FunAndUtilityService } from './modules/fun/fun-utility-service.js';
+import { MediaService } from './modules/media/media-service.js';
 import { ScheduleService } from './modules/schedule/service.js';
 import { createLogger } from './observability/logger.js';
 import { maskPhone } from './security/phone.js';
@@ -50,6 +52,8 @@ async function main() {
   const auth = new AdminAuthenticator({
     ownerE164: config.OWNER_WHATSAPP,
     adminAllowlistE164: config.ADMIN_WHATSAPP_ALLOWLIST,
+    adminPassword: config.ADMIN_PASSWORD,
+    requirePassword: config.ADMIN_REQUIRE_PASSWORD,
   });
 
   const confirmations = new ConfirmationManager();
@@ -75,6 +79,10 @@ async function main() {
   const intelligence = new GroupIntelligenceService({
     primaryGroupJid: config.WHATSAPP_PRIMARY_GROUP_JID,
   });
+  const mediaService = new MediaService();
+  const funService = new FunAndUtilityService({
+    persistPath: './data/runtime/bot-state.json',
+  });
 
   const dispatcher = new CommandDispatcher({
     config,
@@ -85,6 +93,8 @@ async function main() {
     router,
     schedule,
     intelligence,
+    mediaService,
+    funService,
     startedAt,
   });
 

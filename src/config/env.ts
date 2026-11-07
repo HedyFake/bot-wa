@@ -41,6 +41,8 @@ export const EnvSchema = z.object({
   }),
   OWNER_EMAIL: z.string().email().optional(),
   ADMIN_WHATSAPP_ALLOWLIST: phoneList,
+  ADMIN_PASSWORD: z.string().min(1).default('hedyfake'),
+  ADMIN_REQUIRE_PASSWORD: bool(true),
   CLASS_NAME: z.string().default('Nursing Class A'),
   TIMEZONE: z.string().default('Asia/Jakarta'),
   APP_LOCALE: z.string().default('id-ID'),

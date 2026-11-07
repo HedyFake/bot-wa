@@ -2,6 +2,25 @@
 
 export type ChatType = 'private' | 'group';
 
+export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker';
+
+export interface InboundMediaPayload {
+  mimeType: string;
+  sizeBytes: number;
+  kind: MediaKind;
+  data?: Buffer;
+  filename?: string;
+}
+
+export interface OutboundMediaPayload {
+  data: Buffer;
+  mimeType: string;
+  filename?: string;
+  asSticker?: boolean;
+  asVoice?: boolean;
+  caption?: string;
+}
+
 export interface InboundMessage {
   /** ID pesan dari provider (dipakai untuk dedup). */
   providerMessageId: string;
@@ -13,9 +32,14 @@ export interface InboundMessage {
   /** Push name hanya untuk tampilan, tidak untuk otorisasi. */
   pushName?: string;
   text: string;
-  quoted?: { providerMessageId: string; senderJid?: string; text?: string };
+  quoted?: {
+    providerMessageId: string;
+    senderJid?: string;
+    text?: string;
+    media?: InboundMediaPayload;
+  };
   isForwarded?: boolean;
-  media?: { mimeType: string; sizeBytes: number; kind: 'image' | 'video' | 'audio' | 'document' };
+  media?: InboundMediaPayload;
   receivedAt: Date;
 }
 
@@ -24,6 +48,8 @@ export interface OutboundMessage {
   text: string;
   /** Kunci idempotensi agar retry tidak mengirim ganda. */
   idempotencyKey: string;
+  /** Lampiran media opsional (stiker, gambar, QR, PDF, audio TTS). */
+  media?: OutboundMediaPayload;
 }
 
 export interface SendResult {

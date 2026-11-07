@@ -120,7 +120,11 @@ if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 2
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
   apt-get update -y && apt-get install -y nodejs
 fi
-c_ok "Node $(node -v), npm $(npm -v)"
+if ! command -v pm2 >/dev/null 2>&1; then
+  c_info "Memasang PM2 Process Manager secara global..."
+  npm install -g pm2 --no-fund --no-audit || true
+fi
+c_ok "Node $(node -v), npm $(npm -v), PM2 $(pm2 -v 2>/dev/null || echo 'siap')"
 
 # ---------------------------------------------------------------- 3. Perbaiki & Nyalakan PostgreSQL + Redis
 rm -rf /etc/systemd/system/postgresql.service.d /etc/systemd/system/redis-server.service.d
@@ -169,16 +173,24 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo ""
     echo "# Dibuat otomatis oleh install.sh pada $(date -Iseconds)"
     echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable"
+    echo "ADMIN_PASSWORD=hedyfake"
+    echo "ADMIN_REQUIRE_PASSWORD=true"
     echo "STORAGE_DIR=${DATA_DIR}/storage"
     echo "BACKUP_DIR=${BACKUP_DIR}"
     echo "BACKUP_ENCRYPTION_KEY=${BACKUP_KEY}"
   } >> "$ENV_FILE"
-  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs & Chrome Stable (permission 0600)"
+  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs, ADMIN_PASSWORD=hedyfake, & Chrome Stable (permission 0600)"
 else
   sed -i "s|^WHATSAPP_PROVIDER=.*|WHATSAPP_PROVIDER=wwebjs|" "$ENV_FILE"
   sed -i "s|^WHATSAPP_AUTH_DIR=.*|WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth|" "$ENV_FILE"
   sed -i "s|^OUTBOUND_ENABLED=.*|OUTBOUND_ENABLED=true|" "$ENV_FILE"
   sed -i "s|^DRY_RUN=.*|DRY_RUN=false|" "$ENV_FILE"
+  grep -q '^ADMIN_PASSWORD=' "$ENV_FILE" \
+    && sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=hedyfake|" "$ENV_FILE" \
+    || echo "ADMIN_PASSWORD=hedyfake" >> "$ENV_FILE"
+  grep -q '^ADMIN_REQUIRE_PASSWORD=' "$ENV_FILE" \
+    && sed -i "s|^ADMIN_REQUIRE_PASSWORD=.*|ADMIN_REQUIRE_PASSWORD=true|" "$ENV_FILE" \
+    || echo "ADMIN_REQUIRE_PASSWORD=true" >> "$ENV_FILE"
   grep -q '^PUPPETEER_EXECUTABLE_PATH=' "$ENV_FILE" \
     && sed -i "s|^PUPPETEER_EXECUTABLE_PATH=.*|PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable|" "$ENV_FILE" \
     || echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable" >> "$ENV_FILE"

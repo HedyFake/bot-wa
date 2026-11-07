@@ -6,6 +6,8 @@ export const REDACT_PATHS = [
   'password', '*.password', 'token', '*.token', 'secret', '*.secret',
   'session', '*.session', 'creds', '*.creds', 'otp', '*.otp', 'pin', '*.pin',
   'NVIDIA_API_KEY', '*.NVIDIA_API_KEY',
+  'ADMIN_PASSWORD', '*.ADMIN_PASSWORD',
+  'adminPassword', '*.adminPassword',
 ];
 
 const SECRET_PATTERNS: RegExp[] = [

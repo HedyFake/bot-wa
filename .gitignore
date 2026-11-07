@@ -16,3 +16,10 @@ backups/
 *.sqlite
 
 .pg-*.local
+
+# Arsip referensi pihak ketiga (berisi kredensial lama yang terekspos) — jangan commit
+reference/
+# Data runtime bot
+data/runtime/
+logs/
+
