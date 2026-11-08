@@ -176,10 +176,16 @@ async function main() {
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('unhandledRejection', (r) =>
-    log.error({ err: r instanceof Error ? r.name : 'unknown' }, 'unhandledRejection'),
+    log.error(
+      { err: r instanceof Error ? `${r.name}: ${r.message}` : String(r ?? 'unknown') },
+      'unhandledRejection',
+    ),
   );
   process.on('uncaughtException', (e) =>
-    log.error({ err: e instanceof Error ? e.name : 'unknown' }, 'uncaughtException'),
+    log.error(
+      { err: e instanceof Error ? `${e.name}: ${e.message}` : String(e ?? 'unknown') },
+      'uncaughtException',
+    ),
   );
 }
 

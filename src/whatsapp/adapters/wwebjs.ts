@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import QRCode from 'qrcode';
@@ -16,7 +17,7 @@ export const QR_CACHE_TS_FILE = '/tmp/hdybot-qr.ts';
 export const QR_CACHE_PNG_FILE = '/tmp/hdybot-qr.png';
 export const PAIRING_CODE_CACHE_FILE = '/tmp/hdybot-pairing-code.txt';
 
-const MODERN_CHROME_USER_AGENT =
+const DEFAULT_CHROME_USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 export interface WWebJsAdapterOptions {
@@ -41,22 +42,47 @@ function detectChromiumExecutable(explicit?: string): string | undefined {
 }
 
 /**
- * Bersihkan file lock Chromium (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
- * dan cache `.wwebjs_cache` usang yang sering membuat proses penautan QR gagal
- * dengan pesan "Tidak dapat menautkan perangkat. Coba lagi nanti".
+ * Bangun User-Agent Desktop Linux yang persis sama dengan versi binary Chrome yang terpasang
+ * (tanpa string "HeadlessChrome") agar `navigator.userAgent`, `navigator.platform`, dan
+ * Client Hints (`sec-ch-ua`) 100% konsisten saat verifikasi `syncd` pasca-scan QR.
+ */
+function buildMatchedUserAgent(executablePath?: string): string {
+  if (executablePath && existsSync(executablePath)) {
+    try {
+      const out = execFileSync(executablePath, ['--version'], {
+        encoding: 'utf8',
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      const m = out.match(/(\d+\.\d+\.\d+\.\d+)/);
+      if (m?.[1]) {
+        return `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${m[1]} Safari/537.36`;
+      }
+    } catch {
+      // gunakan fallback bila gagal membaca versi
+    }
+  }
+  return DEFAULT_CHROME_USER_AGENT;
+}
+
+/**
+ * Bersihkan proses Chrome yatim (orphan) yang masih memegang folder `session-hdybot`
+ * serta file lock Chromium (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
+ * tanpa menghapus data sesi IndexedDB yang sudah tersimpan.
  */
 function cleanupChromiumLocksAndStaleCache(authDir: string): void {
   const absAuth = resolve(authDir);
-  const authMarker = join(absAuth, '.hdybot-authenticated');
   const sessionDir = join(absAuth, 'session-hdybot');
 
-  // Jika belum pernah berhasil autentikasi sama sekali tetapi ada folder session setengah jadi
-  // akibat percobaan scan QR sebelumnya yang terputus, bersihkan agar kunci IndexedDB baru bersih.
-  if (!existsSync(authMarker) && existsSync(sessionDir)) {
+  // Pastikan tidak ada proses Chrome yatim dari run sebelumnya yang masih mengunci IndexedDB sessionDir
+  if (process.platform === 'linux' && existsSync(sessionDir)) {
     try {
-      rmSync(sessionDir, { recursive: true, force: true });
+      execFileSync('pkill', ['-9', '-f', sessionDir], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        timeout: 3000,
+      });
     } catch {
-      // abaikan
+      // abaikan bila tidak ada proses Chrome yatim
     }
   }
 
@@ -162,6 +188,14 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   private qrCount = 0;
   private client: {
     info?: { wid?: { user?: string; _serialized?: string }; pushname?: string };
+    pupPage?: {
+      evaluate: <T = unknown>(fn: (...args: unknown[]) => T, ...args: unknown[]) => Promise<T>;
+      exposeFunction?: (name: string, fn: (...args: unknown[]) => unknown) => Promise<void>;
+    };
+    lastLoggedOut?: boolean;
+    inject?: () => Promise<void>;
+    attachEventListeners?: () => Promise<void>;
+    getChatById?: (chatId: unknown) => Promise<unknown>;
     initialize: () => Promise<void>;
     destroy: () => Promise<void>;
     sendMessage: (
@@ -201,33 +235,16 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const authMarker = join(resolve(this.opts.authDir), '.hdybot-authenticated');
 
     const wwebPkg = 'whatsapp-web.js';
+    type WWebClientInstance = NonNullable<WWebJsWhatsAppProvider['client']> & {
+      on: (event: string, cb: (...args: unknown[]) => void) => void;
+    };
     const wwebMod = (await import(wwebPkg)) as unknown as {
       default?: {
-        Client: new (opts: Record<string, unknown>) => {
-          info?: { wid?: { user?: string; _serialized?: string }; pushname?: string };
-          on: (event: string, cb: (...args: unknown[]) => void) => void;
-          initialize: () => Promise<void>;
-          destroy: () => Promise<void>;
-          sendMessage: (
-            chatId: string,
-            content: unknown,
-            options?: Record<string, unknown>,
-          ) => Promise<{ id?: { _serialized?: string } }>;
-        };
+        Client: new (opts: Record<string, unknown>) => WWebClientInstance;
         LocalAuth: new (opts: { dataPath: string; clientId?: string }) => unknown;
         MessageMedia?: new (mimetype: string, data: string, filename?: string) => unknown;
       };
-      Client?: new (opts: Record<string, unknown>) => {
-        info?: { wid?: { user?: string; _serialized?: string }; pushname?: string };
-        on: (event: string, cb: (...args: unknown[]) => void) => void;
-        initialize: () => Promise<void>;
-        destroy: () => Promise<void>;
-        sendMessage: (
-          chatId: string,
-          content: unknown,
-          options?: Record<string, unknown>,
-        ) => Promise<{ id?: { _serialized?: string } }>;
-      };
+      Client?: new (opts: Record<string, unknown>) => WWebClientInstance;
       LocalAuth?: new (opts: { dataPath: string; clientId?: string }) => unknown;
       MessageMedia?: new (mimetype: string, data: string, filename?: string) => unknown;
     };
@@ -261,6 +278,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const executablePath = detectChromiumExecutable(
       this.opts.executablePath ?? process.env.PUPPETEER_EXECUTABLE_PATH,
     );
+    const matchedUserAgent = buildMatchedUserAgent(executablePath);
     const rawPairingPhone = (this.opts.pairingPhone ?? process.env.WHATSAPP_PAIRING_PHONE ?? '').replace(/\D/g, '');
     const normalizedPairingPhone = rawPairingPhone.startsWith('0')
       ? `62${rawPairingPhone.slice(1)}`
@@ -272,30 +290,39 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       })...`,
     );
 
+    const localAuth = new LocalAuth({
+      dataPath: this.opts.authDir,
+      clientId: 'hdybot',
+    }) as { logout?: () => Promise<void> };
+    if (typeof localAuth.logout === 'function') {
+      const origLogout = localAuth.logout.bind(localAuth);
+      localAuth.logout = async () => {
+        try {
+          await origLogout();
+        } catch {
+          // Abaikan error EBUSY/ENOTEMPTY bila Chrome masih menutup file session
+        }
+      };
+    }
+
     const clientOptions: Record<string, unknown> = {
-      authStrategy: new LocalAuth({
-        dataPath: this.opts.authDir,
-        clientId: 'hdybot',
-      }),
-      // PENTING: Gunakan versi live web.whatsapp.com secara langsung agar tidak memakai HTML cache usang
-      // yang menyebabkan error "Tidak dapat menautkan perangkat, coba lagi nanti" saat scan QR!
+      authStrategy: localAuth,
+      // PENTING:
+      // 1. Gunakan versi live web.whatsapp.com secara langsung (`type: 'none'`).
+      // 2. JANGAN set `deviceName` atau `browserName`! Di whatsapp-web.js, `setDeviceName`
+      //    mengubah `WAWebMiscBrowserUtils.info().os` setelah halaman dimuat sehingga tidak cocok
+      //    dengan platform registrasi awal saat `syncd` pasca-QR dan menyebabkan `LOGOUT` otomatis!
       webVersionCache: {
         type: 'none',
       },
-      userAgent: MODERN_CHROME_USER_AGENT,
-      deviceName: 'HdyBot Nursing 5A',
-      browserName: 'Chrome',
+      userAgent: matchedUserAgent,
       bypassCSP: true,
-      takeoverOnConflict: true,
-      takeoverTimeoutMs: 5000,
-      authTimeoutMs: 90000,
-      qrMaxRetries: 15,
+      authTimeoutMs: 120000,
+      qrMaxRetries: 0,
       puppeteer: {
         headless: true,
         defaultViewport: { width: 1280, height: 800 },
         ...(executablePath ? { executablePath } : {}),
-        // Catatan penting: JANGAN sertakan '--no-zygote' atau '--single-process' karena pada Chrome 120+
-        // flag tersebut mematikan worker IndexedDB/WebCrypto saat proses penautan perangkat multi-device.
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -303,15 +330,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           '--no-first-run',
           '--no-default-browser-check',
           '--disable-gpu',
-          '--disable-extensions',
-          '--disable-default-apps',
-          '--disable-sync',
-          '--disable-translate',
-          '--hide-scrollbars',
-          '--mute-audio',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
           '--window-size=1280,800',
         ],
       },
@@ -328,6 +346,131 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const client = new Client(clientOptions);
     this.client = client;
     this.qrCount = 0;
+
+    // --- Patch 1: Normalisasi & amankan `getChatById` agar event internal `onChatUnreadCountEvent`
+    // di whatsapp-web.js 1.34.2 (yang mengirim object `{_serialized}` alih-alih string) tidak melempar unhandledRejection.
+    if (typeof client.getChatById === 'function') {
+      const origGetChatById = client.getChatById.bind(client);
+      client.getChatById = async (chatId: unknown) => {
+        try {
+          const normalizedId =
+            typeof chatId === 'object' && chatId !== null && '_serialized' in chatId
+              ? String((chatId as { _serialized?: unknown })._serialized ?? '')
+              : String(chatId ?? '');
+          if (!normalizedId) return undefined;
+          return await origGetChatById(normalizedId);
+        } catch {
+          return undefined;
+        }
+      };
+    }
+
+    // --- Patch 2: Lindungi `client.inject` dari bug `onAuthAppStateChangedEvent` (window.require di Node.js)
+    // serta race condition `framenavigated` pada iframe setelah status READY.
+    if (typeof client.inject === 'function') {
+      const origInject = client.inject.bind(client);
+      let isInjecting = false;
+      const patchedPages = new WeakSet<object>();
+
+      client.inject = async () => {
+        if (isInjecting) return;
+        isInjecting = true;
+        try {
+          const page = client.pupPage;
+          if (page && this._state === 'connected' && !client.lastLoggedOut) {
+            const alreadyReady = await page
+              .evaluate(() => {
+                const w = window as unknown as { AuthStore?: unknown; WWebJS?: unknown };
+                return Boolean(w.AuthStore && w.WWebJS);
+              })
+              .catch(() => false);
+            if (alreadyReady) {
+              return;
+            }
+          }
+
+          if (page && typeof page.exposeFunction === 'function' && !patchedPages.has(page)) {
+            patchedPages.add(page);
+            await page
+              .exposeFunction('onAuthAppStateChangedEvent', async (state: unknown) => {
+                if (state === 'UNPAIRED_IDLE' && !normalizedPairingPhone) {
+                  try {
+                    await page.evaluate(() => {
+                      const w = window as unknown as {
+                        require?: (m: string) => { Cmd?: { refreshQR?: () => void } };
+                      };
+                      w.require?.('WAWebCmd')?.Cmd?.refreshQR?.();
+                    });
+                  } catch {
+                    // abaikan bila halaman sedang berpindah/reload
+                  }
+                }
+              })
+              .catch(() => undefined);
+          }
+
+          await origInject();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (
+            !msg.includes('Execution context was destroyed') &&
+            !msg.includes('Target closed') &&
+            !msg.includes('Session closed')
+          ) {
+            console.warn('[WA] Peringatan saat inject halaman WA Web (diabaikan):', msg);
+          }
+        } finally {
+          isInjecting = false;
+        }
+      };
+    }
+
+    // --- Patch 3: Matikan listener `Chat.on('change:unreadCount')` di dalam browser setelah `attachEventListeners`
+    // agar sinkronisasi awal pasca-scan QR tidak membanjiri websocket dengan puluhan `groupMetadata.update`
+    // secara bersamaan yang menyebabkan `unhandledRejection` & `LOGOUT` saat `syncd` berlangsung.
+    if (typeof client.attachEventListeners === 'function') {
+      const origAttach = client.attachEventListeners.bind(client);
+      client.attachEventListeners = async () => {
+        try {
+          await origAttach();
+        } catch (err) {
+          console.warn('[WA] Peringatan saat attachEventListeners (diabaikan):', err);
+        }
+        try {
+          await client.pupPage?.evaluate(() => {
+            const w = window as unknown as {
+              require?: (mod: string) => Record<string, unknown>;
+              WWebJS?: Record<string, (...args: unknown[]) => unknown>;
+            };
+            try {
+              const collections = w.require?.('WAWebCollections') as
+                | { Chat?: { off?: (ev: string) => void } }
+                | undefined;
+              collections?.Chat?.off?.('change:unreadCount');
+            } catch {
+              // abaikan
+            }
+            if (w.WWebJS && typeof w.WWebJS.getChat === 'function') {
+              const origGetChat = w.WWebJS.getChat.bind(w.WWebJS);
+              w.WWebJS.getChat = async (chatId: unknown, opts?: unknown) => {
+                const normalized =
+                  typeof chatId === 'object' && chatId !== null && '_serialized' in chatId
+                    ? (chatId as { _serialized: string })._serialized
+                    : chatId;
+                if (!normalized || typeof normalized !== 'string') return null;
+                try {
+                  return await origGetChat(normalized, opts);
+                } catch {
+                  return null;
+                }
+              };
+            }
+          });
+        } catch {
+          // abaikan
+        }
+      };
+    }
 
     client.on('qr', (qrRaw: unknown) => {
       const qr = String(qrRaw ?? '').trim();
@@ -453,6 +596,10 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           // abaikan
         }
       }
+      if (this.client === client) {
+        this.client = null;
+      }
+      void client.destroy().catch(() => undefined);
       this.setState('disconnected');
     });
 
@@ -593,7 +740,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     };
 
     client.on('message_create', (msgRaw: unknown) => {
-      void handleRawMessage(msgRaw);
+      void handleRawMessage(msgRaw).catch((err) => {
+        console.warn('[WA] Gagal memproses message_create:', err instanceof Error ? err.message : err);
+      });
     });
 
     try {
@@ -638,7 +787,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           msg.media.data.toString('base64'),
           msg.media.filename,
         );
-        const options: Record<string, unknown> = {};
+        const options: Record<string, unknown> = { sendSeen: false };
         if (msg.media.asSticker) {
           options.sendMediaAsSticker = true;
           options.stickerAuthor = 'HdyBot — Nursing Class A';
@@ -650,7 +799,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         }
         sent = await this.client.sendMessage(chatId, mediaObj, options);
       } else {
-        sent = await this.client.sendMessage(chatId, msg.text);
+        sent = await this.client.sendMessage(chatId, msg.text, { sendSeen: false });
       }
 
       const serializedId = sent?.id?._serialized ?? msg.idempotencyKey;

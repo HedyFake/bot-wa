@@ -15,6 +15,25 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const rootDir = dirname(fileURLToPath(import.meta.url));
 process.chdir(rootDir);
 
+// Cegah bentrok 2 instance (PM2 vs systemd hdybot.service) yang dapat membuat sesi WA logout sendiri
+if (process.platform === 'linux' && !process.env.INVOCATION_ID) {
+  try {
+    execSync('systemctl is-active --quiet hdybot.service', { stdio: 'ignore' });
+    console.log('[HdyBot] Menghentikan hdybot.service (systemd) agar tidak bentrok ganda dengan PM2/Node...');
+    try {
+      execSync('systemctl stop hdybot.service || sudo -n systemctl stop hdybot.service', {
+        stdio: 'ignore',
+      });
+    } catch {
+      console.warn(
+        '[HdyBot] ⚠️ Peringatan: hdybot.service (systemd) masih aktif! Jalankan `sudo systemctl stop hdybot` jika memakai PM2 agar sesi WA tidak bentrok.',
+      );
+    }
+  } catch {
+    // hdybot.service tidak aktif — aman
+  }
+}
+
 const distEntry = resolve(rootDir, 'dist', 'index.js');
 if (!existsSync(distEntry)) {
   console.log('[HdyBot] Membangun TypeScript ke dist/index.js terlebih dahulu...');

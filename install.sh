@@ -50,18 +50,15 @@ fi
 case "${1:-}" in
   --qr|--logs)
     echo "Menampilkan log live & QR Code WhatsApp (Tekan Ctrl+C untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
-    # Hanya tampilkan /tmp/hdybot-qr.txt jika usianya masih segar (< 18 detik) agar tidak men-scan QR kadaluarsa!
-    if [[ -f /tmp/hdybot-qr.txt && -f /tmp/hdybot-qr.ts ]]; then
+    if ! systemctl is-active --quiet "$APP_NAME"; then
+      systemctl start "$APP_NAME" 2>/dev/null || true
+    fi
+    # Hanya tampilkan /tmp/hdybot-qr.txt jika belum terautentikasi dan usianya masih segar (< 18 detik)
+    if [[ ! -f "${DATA_DIR}/whatsapp-auth/.hdybot-authenticated" && -f /tmp/hdybot-qr.txt && -f /tmp/hdybot-qr.ts ]]; then
       NOW_TS="$(date +%s)"
       QR_TS="$(cat /tmp/hdybot-qr.ts 2>/dev/null || echo 0)"
       if [[ $((NOW_TS - QR_TS)) -lt 18 ]]; then
         cat /tmp/hdybot-qr.txt
-      else
-        rm -f /tmp/hdybot-qr.txt /tmp/hdybot-qr.ts
-        if [[ ! -f "${DATA_DIR}/whatsapp-auth/.hdybot-authenticated" ]]; then
-          echo "[..] QR lama sudah lewat 20 detik, memuat ulang sesi QR segar..."
-          systemctl restart "$APP_NAME" 2>/dev/null || true
-        fi
       fi
     fi
     exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
