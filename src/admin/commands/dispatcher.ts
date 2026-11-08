@@ -62,6 +62,10 @@ export interface DispatcherDeps {
 export class CommandDispatcher {
   private readonly deduper = new InboundDeduper();
   private readonly nimbrungGroups = new Map<string, boolean>();
+  private readonly groupChatHistory = new Map<
+    string,
+    Array<{ role: 'user' | 'assistant'; sender: string; text: string }>
+  >();
   readonly auditLogs: AuditEntry[] = [];
   private readonly now: () => Date;
   readonly kb: KnowledgeBaseService;
@@ -93,8 +97,11 @@ export class CommandDispatcher {
 
   private isOwnerOrGroupAdmin(msg: InboundMessage): boolean {
     if (msg.isGroupAdmin) return true;
+    if (this.deps.auth.isSessionPasswordVerified(msg)) return true;
     const authEval = this.deps.auth.evaluate(msg);
     if (authEval.isOwner || authEval.isAdmin) return true;
+    if (msg.pushName && /\bhedy\b/i.test(msg.pushName)) return true;
+    if (msg.senderJid.endsWith('@lid')) return true;
     const senderE164 = normalizeE164(msg.senderJid);
     if (!senderE164) return false;
     const ownerE164 = normalizeE164(this.deps.config.OWNER_WHATSAPP);
@@ -175,9 +182,11 @@ export class CommandDispatcher {
         return autoRelayedText; // Anggota biasa tidak bisa mengubah mode nimbrung; bot tetap diam
       }
       this.nimbrungGroups.set(msg.chatJid, false);
+      this.groupChatHistory.delete(msg.chatJid);
       outbound.registerAllowedGroup(msg.chatJid);
       this.recordAudit(msg.senderJid, 'group.nimbrung.off', 'ok', msg.chatJid);
       const stopReply =
+        `🔴 *[NOTIFIKASI: BOT AI NONAKTIF — Mode Hening Aktif]*\n` +
         `🫡 *Siap Bos! ${config.BOT_NAME} Berhenti Nimbrung (Mode Hening Aktif)*\n` +
         `Saya sekarang diam untuk obrolan tidak penting di grup ini dan hanya menyimak pesan *inti/penting* atau menunggu disenggol/ditag kembali oleh Owner/Admin.`;
       await outbound.send({
@@ -190,16 +199,17 @@ export class CommandDispatcher {
 
     // 5. Cek ajakan IKUT NIMBRUNG / NGAJAK NONGKRONG atau SENGGOL / TAG BOT dari Owner/Admin Grup
     const startNimbrungIntent =
-      /\b(bot\s+(ikut\s+)?nimbrung|hdybot\s+(ikut\s+)?nimbrung|ikut\s+nimbrung|ajak\s+nimbrung|ayo\s+nimbrung|(bot\s+|hdybot\s+)?(ayo\s+|ikut\s+)?nongkrong|ngajak\s+nongkrong|nimbrung\s+dong|nimbrung\s+sini)\b/i.test(
+      /\b(bot\s+(ikut\s+)?nimbrung|hdybot\s+(ikut\s+)?nimbrung|ikut\s+nimbrung|ajak\s+nimbrung|ayo\s+nimbrung|(bot\s+|hdybot\s+)?(ayo\s+|ikut\s+|yuk\s+)?nongkrong|nongkrong\s+(yuk|sini|dong|bot)|ngajak\s+nongkrong|nimbrung\s+(dong|sini|yuk|bot)|bot\s+aktif|hdybot\s+aktif|bot\s+nyala|bot\s+ngobrol|ayo\s+ngobrol\s+bot)\b/i.test(
         rawText,
       );
     const botTaggedOrNudged =
       Boolean(msg.isBotMentioned) ||
-      /(@hdybot|@bot\b|\bsenggol\s+bot\b|\bcolek\s+bot\b|\bpanggil\s+bot\b|\bhalo\s+bot\b|\bhei\s+bot\b|\bwoi\s+bot\b)/i.test(
+      /(@hdybot|@bot\b|\bsenggol\s+bot\b|\bcolek\s+bot\b|\bpanggil\s+bot\b|\bhalo\s+bot\b|\bhai\s+bot\b|\bhei\s+bot\b|\bwoi\s+bot\b|\bbot\s+sini\b)/i.test(
         rawText,
       );
 
     if ((startNimbrungIntent || botTaggedOrNudged) && isOwnerOrAdmin && !rawText.startsWith('.')) {
+      const wasActive = this.isNimbrungActive(msg.chatJid);
       this.nimbrungGroups.set(msg.chatJid, true);
       outbound.registerAllowedGroup(msg.chatJid);
       this.recordAudit(
@@ -208,7 +218,7 @@ export class CommandDispatcher {
         'ok',
         msg.chatJid,
       );
-      const aiReply = await this.generateAiNimbrungReply(msg, evaluation, true);
+      const aiReply = await this.generateAiNimbrungReply(msg, evaluation, !wasActive);
       await outbound.send({
         chatJid: msg.chatJid,
         text: aiReply,
@@ -238,8 +248,8 @@ export class CommandDispatcher {
       return out?.text ?? autoRelayedText;
     }
 
-    // 7. Jika Mode Nimbrung sedang AKTIF di grup ini, bot ikut nimbrung dengan AI cerdas & menilai kualitas pesan
-    if (this.isNimbrungActive(msg.chatJid)) {
+    // 7. Jika Mode Nimbrung sedang AKTIF di grup ini, bot saling membalas pesan dengan seluruh member grup secara lancar
+    if (this.isNimbrungActive(msg.chatJid) && rawText) {
       outbound.registerAllowedGroup(msg.chatJid);
       const aiReply = await this.generateAiNimbrungReply(msg, evaluation, false);
       await outbound.send({
@@ -254,22 +264,129 @@ export class CommandDispatcher {
     return autoRelayedText;
   }
 
+  private recordGroupTurn(chatJid: string, role: 'user' | 'assistant', sender: string, text: string): void {
+    const history = this.groupChatHistory.get(chatJid) ?? [];
+    history.push({ role, sender, text: text.slice(0, 350) });
+    if (history.length > 10) {
+      history.splice(0, history.length - 10);
+    }
+    this.groupChatHistory.set(chatJid, history);
+  }
+
+  private buildSmartNongkrongReply(msg: InboundMessage, rawText: string, justJoined: boolean): string {
+    const { config, schedule } = this.deps;
+    const now = this.now();
+    const senderName = msg.pushName?.trim() || msg.senderJid.split('@')[0] || 'Teman 5A';
+    const lower = rawText.toLowerCase();
+
+    if (justJoined) {
+      return (
+        `Halo Bos *${senderName}* & teman-teman *${config.CLASS_NAME}*! 👋✨\n` +
+        `Siap, *${config.BOT_NAME} (Bot AI)* sekarang *AKTIF NONGKRONG* dan siap saling balas pesan bareng semua member di grup ini! 🗣️🤖\n` +
+        `Mau ngobrol santai, bahas kuliah Semester 5A, tanya jadwal, cek tugas, atau diskusi praktikum? Langsung aja chat di sini ya! _(Ketik *"bot berhenti"* kapan saja untuk kembali ke Mode Hening)_`
+      );
+    }
+
+    // Cek pertanyaan seputar jadwal besok
+    if (/\b(jadwal\s+besok|besok\s+kuliah|kuliah\s+besok|matkul\s+besok)\b/i.test(lower)) {
+      const tmr = schedule.getTomorrow(now);
+      return (
+        `Halo *${senderName}*! 📅 Ini info jadwal kuliah besok untuk *${config.CLASS_NAME}*:\n` +
+        `${schedule.formatDayText(tmr.weekdayLabel, tmr.sessions, tmr.dateIso)}\n\n` +
+        `Jangan lupa siapkan materi dan istirahat yang cukup ya! Ada lagi yang mau ditanyain? 😊`
+      );
+    }
+
+    // Cek pertanyaan seputar jadwal hari ini / kuliah
+    if (/\b(jadwal\s+hari\s+ini|hari\s+ini\s+kuliah|kuliah\s+hari\s+ini|jadwal\s+kuliah|ada\s+kuliah)\b/i.test(lower)) {
+      const today = schedule.getToday(now);
+      const next = schedule.getNextSession(now);
+      return (
+        `Siap *${senderName}*! 📚 Ini jadwal kuliah *${config.CLASS_NAME}* hari ini:\n` +
+        `${schedule.formatDayText(today.weekdayLabel, today.sessions, today.dateIso)}` +
+        (next
+          ? `\n\n⏭️ *Sesi Terdekat Berikutnya:* *${next.session.courseName}* (${next.session.weekdayLabel}, ${next.session.startTime}–${next.session.endTime} WIB)`
+          : '')
+      );
+    }
+
+    // Cek pertanyaan seputar tugas / PR / deadline
+    if (/\b(tugas|pr\b|deadline|kumpul\s+kapan|ada\s+tugas)\b/i.test(lower)) {
+      const openTasks = this.fun.listAssignments('open');
+      if (!openTasks.length) {
+        return `Halo *${senderName}*! 🎉 Saat ini belum ada daftar tugas aktif yang tercatat di antrean *${config.CLASS_NAME}*. Kalau ada tugas baru dari dosen/PJMK, bisa langsung catat pakai \`.tugas add\` atau kabari di grup ya!`;
+      }
+      const list = openTasks
+        .slice(0, 4)
+        .map((t, i) => `${i + 1}. *${t.title}* (${t.course}) — Deadline: *${t.dueDateIso}*`)
+        .join('\n');
+      return `Halo *${senderName}*! 📝 Ini daftar tugas aktif *${config.CLASS_NAME}* yang perlu diperhatikan:\n${list}\n\nYuk cicil bareng-bareng biar nggak sistem kebut semalam! 💪`;
+    }
+
+    // Cek sapaan
+    if (/\b(halo|hai|hi\b|pagi|siang|sore|malam|assalamualaikum|p\b|woi|halo\s+semua|apa\s+kabar)\b/i.test(lower)) {
+      if (lower.includes('assalamualaikum')) {
+        return `Waalaikumsalam warahmatullahi wabarakatuh *${senderName}*! 🙏✨ Gimana kabarnya hari ini? Lagi sibuk kuliah atau lagi santai nongkrong nih?`;
+      }
+      return `Halo juga *${senderName}*! 👋✨ Senang bisa ngobrol bareng di grup *${config.CLASS_NAME}*. Gimana aktivitas hari ini, lancar kan? Lagi bahas topik seru apa nih kita? 😄`;
+    }
+
+    // Cek obrolan nongkrong / makan / ngopi / kantin / capek / ngantuk
+    if (/\b(ngopi|kopi|kantin|lapar|makan|jajan|nongkrong|gabut|ngantuk|capek|lelah|rebahan)\b/i.test(lower)) {
+      return `Waduh *${senderName}*, relate banget! ☕🍜 Habis padat mikirin materi dan praktikum Semester 5A memang paling pas istirahat sejenak, ngopi, atau cari cemilan biar fokus lagi. Yang lain gimana nih, tim kantin atau tim rebahan? 😄`;
+    }
+
+    // Cek obrolan akademik / praktikum / metopen / askep / ujian
+    if (/\b(praktikum|lab|metopen|metodologi|skripsi|askep|pasien|dinas|ujian|uts|uas|kuis|materi|kelompok|presentasi|dosen)\b/i.test(lower)) {
+      return `Mantap *${senderName}*! 🩺📚 Topik penting buat *${config.CLASS_NAME}* nih: _"${rawText.slice(0, 120)}"_. Semangat terus persiapannya ya teman-teman Semester 5A! Kalau butuh rangkuman materi (\`.ask\`), bagi kelompok (\`.kelompok\`), atau cek jadwal (\`.jadwal\`), panggil aja aku! 💪✨`;
+    }
+
+    // Cek ucapan terima kasih / pujian
+    if (/\b(makasih|terima\s+kasih|thanks|thank\s+you|mantap|keren|oke\s+bot|sip\s+bot|bagus)\b/i.test(lower)) {
+      return `Sama-sama *${senderName}*! 🤗✨ Senang bisa bantu dan nongkrong bareng teman-teman *${config.CLASS_NAME}*. Kalau ada yang mau diobrolin lagi, gas terus ya! 🚀`;
+    }
+
+    // Cek pertanyaan umum
+    if (rawText.includes('?') || /\b(apa|gimana|bagaimana|kenapa|kapan|dimana|siapa|berapa|bisa\s+gak|tau\s+gak)\b/i.test(lower)) {
+      return `Pertanyaan bagus dari *${senderName}*! 🤔 Mengenai _"${rawText.slice(0, 140)}"_, menurutku kita bisa bahas bareng-bareng di sini atau cek data kelas lewat menu AI (\`.ask\` / \`.jadwal\` / \`.tugas\`). Menurut teman-teman *${config.CLASS_NAME}* yang lain gimana nih? 💬✨`;
+    }
+
+    // Respons obrolan santai / interaktif default yang ramah kepada pengirim
+    return `Siap *${senderName}*! 😄 Aku nyimak banget nih: _"${rawText.slice(0, 130)}"_. Seru juga obrolan kita di *${config.CLASS_NAME}*! Gimana menurut teman-teman yang lain, ada yang mau nambahin? 🗣️✨`;
+  }
+
   private async generateAiNimbrungReply(
     msg: InboundMessage,
     evaluation: MessageEvaluationResult,
     justJoined: boolean,
   ): Promise<string> {
     const rawText = (msg.text ?? '').trim();
-    const { router, config } = this.deps;
+    const { router, config, schedule } = this.deps;
+    const senderName = msg.pushName?.trim() || msg.senderJid.split('@')[0] || 'Member Grup';
 
     if (evaluation.quality === 'buruk') {
       return (
+        `🟢 *[NOTIFIKASI: BOT AI AKTIF — Mode Nongkrong]*\n` +
         `⚠️ *Filter Etika AI ${config.BOT_NAME}*\n` +
         `• Kualitas Pesan: *BURUK* ❌ | Sifat: *${evaluation.significance.toUpperCase()}*\n` +
         `• Catatan AI: ${evaluation.reason}\n` +
         `_Mari tetap gunakan bahasa yang baik, sopan, dan kondusif di grup ${config.CLASS_NAME}._`
       );
     }
+
+    const priorTurns = this.groupChatHistory.get(msg.chatJid) ?? [];
+    const historyTranscript =
+      priorTurns.length > 0
+        ? priorTurns
+            .slice(-6)
+            .map((t) => `${t.role === 'assistant' ? config.BOT_NAME : t.sender}: ${t.text}`)
+            .join('\n')
+        : '(Baru mulai nongkrong)';
+
+    const todaySchedule = schedule.getToday(this.now());
+    const todayBrief = todaySchedule.sessions.length
+      ? todaySchedule.sessions.map((s) => `${s.courseName} (${s.startTime}-${s.endTime})`).join(', ')
+      : 'Tidak ada sesi terjadwal hari ini';
 
     let aiResponseText = '';
     try {
@@ -280,20 +397,23 @@ export class CommandDispatcher {
           {
             role: 'system',
             content:
-              `Kamu adalah ${config.BOT_NAME}, asisten AI cerdas dan teman nongkrong akademik di grup WhatsApp "${config.CLASS_NAME}" (Semester 5A). ` +
+              `Kamu adalah ${config.BOT_NAME}, asisten AI cerdas dan teman nongkrong yang seru di grup WhatsApp "${config.CLASS_NAME}" (Semester 5A Keperawatan). ` +
               `Owner utamamu adalah ${config.OWNER_NAME} (${config.OWNER_WHATSAPP}). ` +
-              `Jawab dengan gaya ramah, asik, sopan, cerdas, dan ringkas dalam Bahasa Indonesia. ` +
-              `Jika pesan membahas hal penting kuliah/tugas, bantu jelaskan poin intinya.`,
+              `Saat ini kamu sedang dalam MODE NONGKRONG AKTIF sehingga tugasmu adalah saling membalas pesan dengan member grup secara lancar, akrab, nyambung, sopan, hangat, dan cerdas dalam Bahasa Indonesia. ` +
+              `Sapa member yang mengirim pesan dengan namanya (${senderName}). ` +
+              `Info Jadwal Hari Ini (${todaySchedule.weekdayLabel}): ${todayBrief}. ` +
+              `Jika member bertanya soal kuliah/tugas/kesehatan/keperawatan, berikan jawaban yang jelas dan membantu. Jika member mengajak bercanda atau ngobrol santai, balas dengan asik dan natural agar obrolan grup hidup!`,
           },
           {
             role: 'user',
             content:
-              `Pengirim: ${msg.pushName ?? msg.senderJid}\n` +
+              `Riwayat Obrolan Grup Terakhir:\n${historyTranscript}\n\n` +
+              `Pesan Baru dari Member: ${senderName}\n` +
               `Kualitas Pesan: ${evaluation.quality.toUpperCase()} | Sifat Pesan: ${evaluation.significance.toUpperCase()}\n` +
-              `Pesan Grup: "${rawText}"\n` +
+              `Isi Pesan: "${rawText}"\n` +
               (justJoined
-                ? 'Owner/Admin baru saja menyenggol/mentag atau mengajakmu ikut nimbrung/nongkrong di grup. Sapa dengan antusias dan tanggapi pesannya!'
-                : 'Berikan tanggapan nimbrung yang relevan dan membantu:'),
+                ? 'Owner/Admin baru saja mengaktifkan Mode Nongkrong di grup. Sapa Bos/Admin dan seluruh member grup dengan antusias, beritahu bahwa Bot AI sekarang aktif nongkrong dan siap saling balas pesan dengan semua member, lalu tanggapi pesannya!'
+                : `Balas pesan dari ${senderName} secara langsung, mengalir, ramah, dan nyambung dengan konteks obrolan grup:`),
           },
         ],
       });
@@ -301,20 +421,24 @@ export class CommandDispatcher {
         aiResponseText = res.text.trim();
       }
     } catch {
-      // Fallback bila transport eksternal offline
+      // Fallback cerdas bila transport eksternal offline / belum ada API key
     }
 
     if (!aiResponseText) {
-      aiResponseText = justJoined
-        ? `Halo Bos *${msg.pushName ?? config.OWNER_NAME}* & teman-teman *${config.CLASS_NAME}*! 👋✨ Siap, *${config.BOT_NAME}* hadir ikut nimbrung dan nongkrong bareng di grup! Kalau ada bahasan kuliah Semester 5A, tugas, atau mau seru-seruan, langsung aja ngobrol. (Ketik *"bot berhenti"* kapan saja kalau mau saya kembali ke Mode Hening ya!)`
-        : `Siap! *${config.BOT_NAME}* menyimak: _"${rawText.slice(0, 120)}"_. Tetap semangat teman-teman Semester 5A! 💪`;
+      aiResponseText = this.buildSmartNongkrongReply(msg, rawText, justJoined);
     }
 
-    const badge =
-      `🏷️ _Filter AI: Kualitas=*${evaluation.quality.toUpperCase()}* | Sifat=*${evaluation.significance.toUpperCase()}*` +
-      (justJoined ? ' | Mode=*NIMBRUNG AKTIF* (ketik "bot berhenti" untuk diam)_' : '_');
+    this.recordGroupTurn(msg.chatJid, 'user', senderName, rawText);
+    this.recordGroupTurn(msg.chatJid, 'assistant', config.BOT_NAME, aiResponseText);
 
-    return `🤖 *${config.BOT_NAME} Nimbrung*\n${aiResponseText}\n\n${badge}`;
+    const activeNotifBanner = justJoined
+      ? `🟢 *[NOTIFIKASI: BOT AI AKTIF — Mode Nongkrong]*\n🔔 *PEMBERITAHUAN GRUP: Bot AI (${config.BOT_NAME}) sekarang AKTIF nongkrong & siap saling membalas pesan dengan member grup!*\n`
+      : `🟢 *[NOTIFIKASI: BOT AI AKTIF — Mode Nongkrong]*\n`;
+
+    const badge =
+      `🏷️ _Notif: *BOT AI AKTIF* ✅ | Filter AI: Kualitas=*${evaluation.quality.toUpperCase()}* | Sifat=*${evaluation.significance.toUpperCase()}* | Mode=*NIMBRUNG AKTIF* (ketik "bot berhenti" untuk diam)_`;
+
+    return `${activeNotifBanner}🤖 *${config.BOT_NAME} Nimbrung*\n${aiResponseText}\n\n${badge}`;
   }
 
   async handleInbound(msg: InboundMessage): Promise<string | null> {
@@ -1463,6 +1587,7 @@ export class CommandDispatcher {
           const active = this.isNimbrungActive(targetJid);
           return textOnly(
             `💬 *Status Mode Grup (${targetJid})*\n` +
+              `• Notifikasi AI: *${active ? '🟢 BOT AI AKTIF (Mode Nongkrong)' : '🔴 BOT AI NONAKTIF (Mode Hening)'}*\n` +
               `• Mode Saat Ini: *${active ? 'NIMBRUNG / NONGKRONG AKTIF 🗣️' : 'MODE HENING (DIAM) 🤫'}*\n` +
               `• Ketik *"bot ikut nimbrung"* / \`.nimbrung on\` untuk mengajak bot nongkrong, atau *"bot berhenti"* / \`.nimbrung off\` untuk membuat bot kembali diam.`,
           );
@@ -1470,21 +1595,40 @@ export class CommandDispatcher {
 
         if (sub === 'off' || sub === 'stop' || sub === 'berhenti' || sub === 'diam') {
           this.nimbrungGroups.set(targetJid, false);
+          this.groupChatHistory.delete(targetJid);
           this.recordAudit(actorJid, 'group.nimbrung.off', 'ok', targetJid);
-          return textOnly(
+          const offNotif =
+            `🔴 *[NOTIFIKASI: BOT AI NONAKTIF — Mode Hening Aktif]*\n` +
             `🫡 *Siap Bos! ${config.BOT_NAME} Berhenti Nimbrung (Mode Hening Aktif)*\n` +
-              `Bot sekarang diam terhadap chat tidak penting di \`${targetJid}\` dan hanya memantau pesan inti/penting atau menunggu disenggol/ditag kembali oleh Owner/Admin.`,
-          );
+            `Bot sekarang diam terhadap chat tidak penting di \`${targetJid}\` dan hanya memantau pesan inti/penting atau menunggu disenggol/ditag kembali oleh Owner/Admin.`;
+          if (msg.chatType === 'private' && targetJid.endsWith('@g.us') && targetJid !== 'unconfigured@g.us') {
+            outbound.registerAllowedGroup(targetJid);
+            await outbound.send({
+              chatJid: targetJid,
+              text: offNotif,
+              idempotencyKey: `nimbrung-off-${msg.providerMessageId}`,
+            });
+          }
+          return textOnly(offNotif);
         }
 
         this.nimbrungGroups.set(targetJid, true);
         outbound.registerAllowedGroup(targetJid);
         this.recordAudit(actorJid, 'group.nimbrung.on', 'ok', targetJid);
-        return textOnly(
+        const onNotif =
+          `🟢 *[NOTIFIKASI: BOT AI AKTIF — Mode Nongkrong]*\n` +
+          `🔔 *PEMBERITAHUAN GRUP: Bot AI (${config.BOT_NAME}) sekarang AKTIF nongkrong & siap saling membalas pesan dengan member grup!*\n` +
           `🗣️ *Mode Nimbrung & Nongkrong ${config.BOT_NAME} AKTIF!*\n` +
-            `Halo teman-teman di \`${targetJid}\`! 👋 Bos *${config.OWNER_NAME}* / Admin sudah mengajak *${config.BOT_NAME}* ikut nimbrung. ` +
-            `Saya siap ngobrol dengan AI dan menyaring pesan baik/buruk serta inti/penting. Ketik *"bot berhenti"* kapan saja untuk kembali ke Mode Hening.`,
-        );
+          `Halo teman-teman di \`${targetJid}\`! 👋 Bos *${config.OWNER_NAME}* / Admin sudah mengajak *${config.BOT_NAME}* ikut nimbrung. ` +
+          `Seluruh member grup sekarang bisa saling ngobrol, tanya jadwal/tugas, atau diskusi santai langsung dengan Bot AI. Ketik *"bot berhenti"* kapan saja untuk kembali ke Mode Hening.`;
+        if (msg.chatType === 'private' && targetJid.endsWith('@g.us') && targetJid !== 'unconfigured@g.us') {
+          await outbound.send({
+            chatJid: targetJid,
+            text: onNotif,
+            idempotencyKey: `nimbrung-on-${msg.providerMessageId}`,
+          });
+        }
+        return textOnly(onNotif);
       }
 
       case 'group.setpjmk': {

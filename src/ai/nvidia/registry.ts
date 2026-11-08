@@ -110,6 +110,12 @@ export function sanitizeModelContent(raw: unknown): string {
   return raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
+const LIVE_NVIDIA_FALLBACK_MODELS = [
+  'meta/llama-3.1-70b-instruct',
+  'nvidia/llama-3.1-nemotron-70b-instruct',
+  'meta/llama-3.1-8b-instruct',
+];
+
 /**
  * OpenAI-compatible HTTP transport ke `https://integrate.api.nvidia.com/v1`.
  * Memakai `fetch` bawaan Node 20+ sehingga ringan dan bebas dependency berat.
@@ -129,40 +135,55 @@ export class HttpNvidiaTransport implements NvidiaTransport {
 
   async complete(req: NvidiaCompletionRequest, signal?: AbortSignal): Promise<NvidiaCompletionResult> {
     const url = `${this.opts.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    let res: Response;
-    try {
-      res = await this.f(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${this.opts.apiKey}`,
-        },
-        body: JSON.stringify({ ...req, stream: false }),
-        signal,
-      });
-    } catch (e) {
-      const isAbort = e instanceof Error && (e.name === 'AbortError' || /timeout|aborted/i.test(e.message));
-      throw new NvidiaProviderError(isAbort ? 'request_timeout' : 'network_error', undefined, isAbort);
+    const candidateModels = this.opts.fetchImpl
+      ? [req.model]
+      : [req.model, ...LIVE_NVIDIA_FALLBACK_MODELS.filter((m) => m !== req.model)];
+
+    let lastStatus = 500;
+    for (let i = 0; i < candidateModels.length; i++) {
+      const modelName = candidateModels[i]!;
+      let res: Response;
+      try {
+        res = await this.f(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${this.opts.apiKey}`,
+          },
+          body: JSON.stringify({ ...req, model: modelName, stream: false }),
+          signal,
+        });
+      } catch (e) {
+        const isAbort = e instanceof Error && (e.name === 'AbortError' || /timeout|aborted/i.test(e.message));
+        throw new NvidiaProviderError(isAbort ? 'request_timeout' : 'network_error', undefined, isAbort);
+      }
+
+      if (!res.ok) {
+        lastStatus = res.status;
+        // Jika model blueprint mengembalikan 404/400/422 di endpoint live NVIDIA, coba model live berikutnya
+        if ((res.status === 404 || res.status === 400 || res.status === 422) && i < candidateModels.length - 1) {
+          continue;
+        }
+        throw new NvidiaProviderError(`http_${res.status}`, res.status, res.status === 408 || res.status === 504);
+      }
+
+      const body = (await res.json()) as {
+        choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      // Sengaja abaikan `reasoning_content` agar tidak pernah bocor ke user/log.
+      const text = sanitizeModelContent(body.choices?.[0]?.message?.content);
+      if (!text) {
+        throw new NvidiaProviderError('empty_content', 502, false);
+      }
+      return {
+        content: text,
+        promptTokens: body.usage?.prompt_tokens,
+        completionTokens: body.usage?.completion_tokens,
+      };
     }
 
-    if (!res.ok) {
-      throw new NvidiaProviderError(`http_${res.status}`, res.status, res.status === 408 || res.status === 504);
-    }
-
-    const body = (await res.json()) as {
-      choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    // Sengaja abaikan `reasoning_content` agar tidak pernah bocor ke user/log.
-    const text = sanitizeModelContent(body.choices?.[0]?.message?.content);
-    if (!text) {
-      throw new NvidiaProviderError('empty_content', 502, false);
-    }
-    return {
-      content: text,
-      promptTokens: body.usage?.prompt_tokens,
-      completionTokens: body.usage?.completion_tokens,
-    };
+    throw new NvidiaProviderError(`http_${lastStatus}`, lastStatus, false);
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {

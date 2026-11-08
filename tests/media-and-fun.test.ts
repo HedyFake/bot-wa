@@ -269,11 +269,12 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: '@hdybot bot ikut nimbrung dan ngajak nongkrong sini di grup',
       receivedAt: new Date(),
     });
+    expect(ownerTag).toContain('NOTIFIKASI: BOT AI AKTIF');
     expect(ownerTag).toContain('HdyBot Nimbrung');
     expect(ownerTag).toContain('NIMBRUNG AKTIF');
     expect(dispatcher.isNimbrungActive('nursing-class-a@g.us')).toBe(true);
 
-    // 3. Saat mode nimbrung aktif, bot merespons obrolan anggota dan memfilter pesan buruk vs baik
+    // 3. Saat mode nimbrung aktif, bot merespons obrolan anggota secara lancar dan memberi notif BOT AI AKTIF
     const badChat = await dispatcher.handleInbound({
       providerMessageId: 'grp-bad-1',
       chatJid: 'nursing-class-a@g.us',
@@ -283,6 +284,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'dasar goblok tolol',
       receivedAt: new Date(),
     });
+    expect(badChat).toContain('NOTIFIKASI: BOT AI AKTIF');
     expect(badChat).toContain('Kualitas Pesan: *BURUK*');
 
     const goodChat = await dispatcher.handleInbound({
@@ -291,11 +293,26 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       chatType: 'group',
       chatName: 'Nursing Class A',
       senderJid: '628111222333@s.whatsapp.net',
+      pushName: 'Siti',
       text: 'Teman-teman, semangat belajar untuk persiapan praktikum besok ya',
       receivedAt: new Date(),
     });
+    expect(goodChat).toContain('NOTIFIKASI: BOT AI AKTIF');
     expect(goodChat).toContain('HdyBot Nimbrung');
     expect(goodChat).toContain('Kualitas=*BAIK*');
+
+    const memberFollowUp = await dispatcher.handleInbound({
+      providerMessageId: 'grp-good-2',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628555666777@s.whatsapp.net',
+      pushName: 'Rizky',
+      text: 'Halo bot, besok kuliah apa aja ya?',
+      receivedAt: new Date(),
+    });
+    expect(memberFollowUp).toContain('NOTIFIKASI: BOT AI AKTIF');
+    expect(memberFollowUp).toContain('HdyBot Nimbrung');
 
     // 4. Owner bilang "bot berhenti" -> Bot berhenti nimbrung dan kembali diam
     const stopMsg = await dispatcher.handleInbound({

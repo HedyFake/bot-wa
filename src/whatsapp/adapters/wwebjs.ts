@@ -650,8 +650,21 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const text = String(m.body ?? '').trim();
       if (!text && !m.hasMedia) return;
 
-      // Jika pesan dikirim dari perangkat bot sendiri (fromMe), hanya proses bila diawali '.'
-      if (m.fromMe && !text.startsWith('.')) return;
+      // Abaikan pesan balasan otomatis dari HdyBot sendiri agar tidak memicu loop
+      if (
+        m.fromMe &&
+        (/^[🟢🔴🤖🫡⚠️📊📡🔐✅❌]/.test(text) || text.includes('[NOTIFIKASI:') || text.includes('HdyBot Nimbrung'))
+      ) {
+        return;
+      }
+
+      // Jika pesan dikirim dari perangkat bot sendiri (fromMe), proses bila diawali '.' atau instruksi nimbrung/berhenti eksplisit
+      const isExplicitBotControl =
+        text.startsWith('.') ||
+        /\b(bot\s+(ikut\s+)?nimbrung|hdybot\s+(ikut\s+)?nimbrung|bot\s+(ayo\s+|ikut\s+)?nongkrong|bot\s+berhenti|hdybot\s+berhenti|bot\s+diam)\b/i.test(
+          text,
+        );
+      if (m.fromMe && !isExplicitBotControl) return;
 
       const rawChatId = m.fromMe ? String(m.to ?? m.from ?? '') : String(m.from ?? '');
       if (!rawChatId || rawChatId === 'status@broadcast') return;
@@ -704,7 +717,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       }
 
       let chatName: string | undefined;
-      let isGroupAdmin = false;
+      let isGroupAdmin = Boolean(m.fromMe);
       if (isGroup && typeof m.getChat === 'function') {
         try {
           const chat = await m.getChat();

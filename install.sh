@@ -234,6 +234,14 @@ else
   DB_PASS="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')"
   c_ok ".env diperbarui (WHATSAPP_PROVIDER=wwebjs & PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable)"
 fi
+if [[ -f "$SRC_DIR/.env" ]]; then
+  SRC_NV_KEY="$(grep -E '^NVIDIA_API_KEY=' "$SRC_DIR/.env" 2>/dev/null | head -n1 | cut -d= -f2- || true)"
+  if [[ -n "$SRC_NV_KEY" ]]; then
+    grep -q '^NVIDIA_API_KEY=' "$ENV_FILE" \
+      && sed -i "s|^NVIDIA_API_KEY=.*|NVIDIA_API_KEY=${SRC_NV_KEY}|" "$ENV_FILE" \
+      || echo "NVIDIA_API_KEY=${SRC_NV_KEY}" >> "$ENV_FILE"
+  fi
+fi
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
 
