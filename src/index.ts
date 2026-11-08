@@ -31,6 +31,7 @@ async function main() {
   } else if (config.WHATSAPP_PROVIDER === 'wwebjs') {
     whatsapp = new WWebJsWhatsAppProvider({
       authDir: config.WHATSAPP_AUTH_DIR,
+      pairingPhone: config.WHATSAPP_PAIRING_PHONE,
     });
   } else if (config.WHATSAPP_PROVIDER === 'baileys') {
     whatsapp = new BaileysWhatsAppProvider({
@@ -106,13 +107,20 @@ async function main() {
     }
   });
 
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   whatsapp.onStateChange((s) => {
     log.info({ state: s }, 'whatsapp state');
-    // Reconnect otomatis bila koneksi terputus di luar shutdown sengaja.
-    if (s === 'disconnected' && !stopping) {
-      setTimeout(() => {
+    if (s === 'connected' && reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    // Reconnect otomatis bila koneksi terputus atau sesi lama kadaluarsa di luar shutdown sengaja.
+    if ((s === 'disconnected' || s === 'session_expired') && !stopping && !reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
         if (!stopping) void whatsapp.connect().catch(() => undefined);
-      }, 5_000).unref();
+      }, 8_000);
+      reconnectTimer.unref();
     }
   });
 

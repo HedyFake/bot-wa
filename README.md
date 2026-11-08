@@ -262,8 +262,9 @@ pm2 logs hdybot --lines 100
 | 💻 Perintah `install.sh` | 📖 Fungsi Operasional |
 | :--- | :--- |
 | `sudo ./install.sh` | Instalasi penuh + build + aktifkan daemon 24/7 + tampilkan QR Code |
-| `sudo ./install.sh --qr` | Menampilkan QR Code WhatsApp aktif (dari cache `/tmp/hdybot-qr.txt` & live log) |
-| `sudo ./install.sh --reset-wa` | Menghapus sesi WA lama & menampilkan QR baru (gunakan saat ingin **ganti nomor bot**) |
+| `sudo ./install.sh --qr` | Menampilkan QR Code WhatsApp aktif yang masih segar (< 18 detik, bebas expired) |
+| `sudo ./install.sh --reset-wa` | Menghapus sesi WA lama, lockfile Chrome, & cache lama lalu menampilkan QR baru yang bersih |
+| `sudo ./install.sh --pair 08xxxxxxxxxx` | Menautkan nomor WA Bot menggunakan **Kode Pairing 8-Digit** (tanpa scan kamera QR) |
 | `sudo ./install.sh --status` | Memeriksa status service `hdybot.service` di systemd |
 | `sudo ./install.sh --logs` | Melihat log live systemd (`journalctl -u hdybot -f`) |
 | `sudo ./install.sh --restart` | Me-restart service `hdybot` di background |

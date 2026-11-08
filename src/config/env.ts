@@ -63,6 +63,7 @@ export const EnvSchema = z.object({
 
   WHATSAPP_PROVIDER: z.enum(['mock', 'wwebjs', 'baileys', 'cloud-api']).default('mock'),
   WHATSAPP_AUTH_DIR: z.string().default('./whatsapp-auth'),
+  WHATSAPP_PAIRING_PHONE: z.string().optional().transform((v) => (v && v.trim() ? v.trim() : undefined)),
   WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS: bool(false),
   WHATSAPP_PRIMARY_GROUP_JID: z.string().optional(),
   OUTBOUND_ENABLED: bool(false),

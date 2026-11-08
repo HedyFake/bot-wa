@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import QRCode from 'qrcode';
 import type {
   ConnectionState,
   InboundMediaPayload,
@@ -10,10 +12,17 @@ import type {
 } from './types.js';
 
 export const QR_CACHE_FILE = '/tmp/hdybot-qr.txt';
+export const QR_CACHE_TS_FILE = '/tmp/hdybot-qr.ts';
+export const QR_CACHE_PNG_FILE = '/tmp/hdybot-qr.png';
+export const PAIRING_CODE_CACHE_FILE = '/tmp/hdybot-pairing-code.txt';
+
+const MODERN_CHROME_USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 export interface WWebJsAdapterOptions {
   authDir: string;
   executablePath?: string;
+  pairingPhone?: string;
 }
 
 const CHROMIUM_CANDIDATES = [
@@ -29,6 +38,57 @@ function detectChromiumExecutable(explicit?: string): string | undefined {
     if (existsSync(p)) return p;
   }
   return undefined;
+}
+
+/**
+ * Bersihkan file lock Chromium (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
+ * dan cache `.wwebjs_cache` usang yang sering membuat proses penautan QR gagal
+ * dengan pesan "Tidak dapat menautkan perangkat. Coba lagi nanti".
+ */
+function cleanupChromiumLocksAndStaleCache(authDir: string): void {
+  const absAuth = resolve(authDir);
+  const authMarker = join(absAuth, '.hdybot-authenticated');
+  const sessionDir = join(absAuth, 'session-hdybot');
+
+  // Jika belum pernah berhasil autentikasi sama sekali tetapi ada folder session setengah jadi
+  // akibat percobaan scan QR sebelumnya yang terputus, bersihkan agar kunci IndexedDB baru bersih.
+  if (!existsSync(authMarker) && existsSync(sessionDir)) {
+    try {
+      rmSync(sessionDir, { recursive: true, force: true });
+    } catch {
+      // abaikan
+    }
+  }
+
+  // Hapus file lock Chromium yang tertinggal bila proses sebelumnya di-restart paksa
+  const removeLocksIn = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const lockName of ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'Lockfile']) {
+      try {
+        rmSync(join(dir, lockName), { force: true });
+      } catch {
+        // abaikan
+      }
+    }
+  };
+
+  removeLocksIn(absAuth);
+  removeLocksIn(sessionDir);
+  removeLocksIn(join(sessionDir, 'Default'));
+
+  // Hapus folder .wwebjs_cache lokal agar whatsapp-web.js selalu mengambil versi WhatsApp Web terbaru
+  for (const cacheCandidate of [
+    resolve('.wwebjs_cache'),
+    join(absAuth, '.wwebjs_cache'),
+  ]) {
+    if (existsSync(cacheCandidate)) {
+      try {
+        rmSync(cacheCandidate, { recursive: true, force: true });
+      } catch {
+        // abaikan
+      }
+    }
+  }
 }
 
 /** Konversi JID internal ke format `whatsapp-web.js` (`@c.us` untuk chat pribadi). */
@@ -83,9 +143,12 @@ interface WWebMessageLike {
 
 /**
  * Adapter WhatsApp ASLI menggunakan `whatsapp-web.js` + `qrcode-terminal`.
- * - Nomor bot bersifat dinamis/random (bisa ganti nomor WA kapan saja cukup dengan scan QR baru).
- * - Nomor admin utama (`082233038659`) dikenali otomatis + diverifikasi dengan password `hedyfake`.
- * - Mendukung teks, stiker, gambar, audio, PDF/dokumen, dan balasan media (quoted media).
+ * - Sudah dioptimalkan agar bebas dari error "Tidak dapat menautkan perangkat, coba lagi nanti":
+ *   1. `webVersionCache: { type: 'none' }` (selalu memakai protokol WhatsApp Web live terbaru, bukan cache 2024).
+ *   2. User-Agent Chrome 131 Desktop Linux modern + `bypassCSP: true`.
+ *   3. Tanpa flag `--no-zygote` yang merusak worker IndexedDB/WebCrypto saat sinkronisasi kunci QR.
+ *   4. Pembersihan otomatis `SingletonLock` & sesi setengah jadi sebelum inisialisasi QR baru.
+ *   5. Mendukung baik Scan QR Code (auto-refresh tiap 20 detik) maupun Kode Pairing 8-Digit (`WHATSAPP_PAIRING_PHONE`).
  */
 export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   readonly name = 'wwebjs';
@@ -95,6 +158,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   private stateHandlers: Array<(s: ConnectionState) => void> = [];
   private readonly botSentIds = new Set<string>();
   private MessageMediaCtor: (new (mimetype: string, data: string, filename?: string) => unknown) | null = null;
+  private connectingPromise: Promise<void> | null = null;
+  private qrCount = 0;
   private client: {
     info?: { wid?: { user?: string; _serialized?: string }; pushname?: string };
     initialize: () => Promise<void>;
@@ -113,8 +178,27 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   }
 
   async connect(): Promise<void> {
+    if (this.connectingPromise) {
+      return this.connectingPromise;
+    }
+    this.connectingPromise = this.doConnect().finally(() => {
+      this.connectingPromise = null;
+    });
+    return this.connectingPromise;
+  }
+
+  private async doConnect(): Promise<void> {
+    // Pastikan instance client lama dibersihkan terlebih dahulu agar tidak terjadi bentrok 2 Chrome
+    if (this.client) {
+      await this.client.destroy().catch(() => undefined);
+      this.client = null;
+    }
+
     this.setState('connecting');
     mkdirSync(this.opts.authDir, { recursive: true, mode: 0o700 });
+    cleanupChromiumLocksAndStaleCache(this.opts.authDir);
+
+    const authMarker = join(resolve(this.opts.authDir), '.hdybot-authenticated');
 
     const wwebPkg = 'whatsapp-web.js';
     const wwebMod = (await import(wwebPkg)) as unknown as {
@@ -177,40 +261,91 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const executablePath = detectChromiumExecutable(
       this.opts.executablePath ?? process.env.PUPPETEER_EXECUTABLE_PATH,
     );
-    console.log(`[WA] Memulai whatsapp-web.js (browser: ${executablePath ?? 'puppeteer-bundled'})...`);
+    const rawPairingPhone = (this.opts.pairingPhone ?? process.env.WHATSAPP_PAIRING_PHONE ?? '').replace(/\D/g, '');
+    const normalizedPairingPhone = rawPairingPhone.startsWith('0')
+      ? `62${rawPairingPhone.slice(1)}`
+      : rawPairingPhone;
 
-    const client = new Client({
+    console.log(
+      `[WA] Memulai whatsapp-web.js (browser: ${executablePath ?? 'puppeteer-bundled'}${
+        normalizedPairingPhone ? `, mode: Pairing Code untuk +${normalizedPairingPhone}` : ', mode: QR Code Live'
+      })...`,
+    );
+
+    const clientOptions: Record<string, unknown> = {
       authStrategy: new LocalAuth({
         dataPath: this.opts.authDir,
         clientId: 'hdybot',
       }),
+      // PENTING: Gunakan versi live web.whatsapp.com secara langsung agar tidak memakai HTML cache usang
+      // yang menyebabkan error "Tidak dapat menautkan perangkat, coba lagi nanti" saat scan QR!
+      webVersionCache: {
+        type: 'none',
+      },
+      userAgent: MODERN_CHROME_USER_AGENT,
+      deviceName: 'HdyBot Nursing 5A',
+      browserName: 'Chrome',
+      bypassCSP: true,
+      takeoverOnConflict: true,
+      takeoverTimeoutMs: 5000,
+      authTimeoutMs: 90000,
+      qrMaxRetries: 15,
       puppeteer: {
         headless: true,
+        defaultViewport: { width: 1280, height: 800 },
         ...(executablePath ? { executablePath } : {}),
+        // Catatan penting: JANGAN sertakan '--no-zygote' atau '--single-process' karena pada Chrome 120+
+        // flag tersebut mematikan worker IndexedDB/WebCrypto saat proses penautan perangkat multi-device.
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
           '--no-first-run',
-          '--no-zygote',
+          '--no-default-browser-check',
           '--disable-gpu',
-          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--mute-audio',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--window-size=1280,800',
         ],
       },
-    });
+    };
 
+    if (normalizedPairingPhone.length >= 9) {
+      clientOptions.pairWithPhoneNumber = {
+        phoneNumber: normalizedPairingPhone,
+        showNotification: true,
+        intervalMs: 180000,
+      };
+    }
+
+    const client = new Client(clientOptions);
     this.client = client;
+    this.qrCount = 0;
 
     client.on('qr', (qrRaw: unknown) => {
-      const qr = String(qrRaw ?? '');
+      const qr = String(qrRaw ?? '').trim();
+      if (!qr) return;
+      this.qrCount += 1;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const timeLabel = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false });
+
       try {
         qrTerminal.generate?.(qr, { small: true }, (asciiQr: string) => {
           const banner = [
             '',
             '===================================================================',
-            ' 📱 SCAN QR CODE INI DI WHATSAPP BOT ANDA (NOMOR BOT BEBAS/RANDOM)',
-            '    Buka WhatsApp Bot -> Perangkat Tertaut -> Tautkan Perangkat',
+            ` 📱 SCAN QR CODE WHATSAPP BOT (Refresh #${this.qrCount} — ${timeLabel} WIB)`,
+            '    ⚠️ PENTING: Scan QR PALING BAWAH / TERBARU ini dalam < 20 detik!',
+            '    Buka WA Bot -> Perangkat Tertaut -> Tautkan Perangkat',
+            '    (Jika gagal/lama, ketik: sudo ./install.sh --reset-wa)',
+            '    (Atau pakai kode 8 digit: sudo ./install.sh --pair 08xxxxxxxxxx)',
             '    Nomor Admin Kontrol: 082233038659 (Password: hedyfake)',
             '===================================================================',
             asciiQr,
@@ -220,18 +355,58 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           process.stdout.write(`${banner}\n`);
           try {
             writeFileSync(QR_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o644 });
+            writeFileSync(QR_CACHE_TS_FILE, String(nowSec), { encoding: 'utf8', mode: 0o644 });
           } catch {
             // abaikan bila /tmp tidak dapat ditulis
           }
         });
+
+        // Simpan juga versi gambar PNG resolusi tajam di /tmp/hdybot-qr.png
+        void QRCode.toFile(QR_CACHE_PNG_FILE, qr, {
+          type: 'png',
+          width: 600,
+          margin: 4,
+          errorCorrectionLevel: 'M',
+        }).catch(() => undefined);
       } catch (err) {
         console.error('[WA] Gagal merender QR Code di terminal:', err);
       }
     });
 
+    client.on('code', (codeRaw: unknown) => {
+      const raw = String(codeRaw ?? '').trim();
+      const formatted = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
+      const banner = [
+        '',
+        '===================================================================',
+        ' 🔑 KODE PAIRING 8-DIGIT WHATSAPP BOT ANDA SIAP!',
+        `    KODE TAUtKAN PERANGKAT :  [  ${formatted}  ]`,
+        `    Nomor WA Bot           :  +${normalizedPairingPhone}`,
+        '    Cara Pakai di HP Bot   :  Buka WhatsApp -> Perangkat Tertaut ->',
+        '                              Tautkan Perangkat -> Tautkan dengan nomor',
+        '                              telepon saja -> Masukkan kode di atas!',
+        '===================================================================',
+        '',
+      ].join('\n');
+      process.stdout.write(`${banner}\n`);
+      try {
+        writeFileSync(PAIRING_CODE_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o644 });
+      } catch {
+        // abaikan
+      }
+    });
+
+    client.on('loading_screen', (percent: unknown, message: unknown) => {
+      console.log(`[WA] ⏳ Menautkan & menyinkronkan perangkat WhatsApp: ${String(percent ?? 0)}% (${String(message ?? 'WhatsApp')})...`);
+    });
+
     client.on('authenticated', () => {
       try {
         rmSync(QR_CACHE_FILE, { force: true });
+        rmSync(QR_CACHE_TS_FILE, { force: true });
+        rmSync(QR_CACHE_PNG_FILE, { force: true });
+        rmSync(PAIRING_CODE_CACHE_FILE, { force: true });
+        writeFileSync(authMarker, new Date().toISOString(), { encoding: 'utf8', mode: 0o600 });
       } catch {
         // abaikan
       }
@@ -241,6 +416,10 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     client.on('ready', () => {
       try {
         rmSync(QR_CACHE_FILE, { force: true });
+        rmSync(QR_CACHE_TS_FILE, { force: true });
+        rmSync(QR_CACHE_PNG_FILE, { force: true });
+        rmSync(PAIRING_CODE_CACHE_FILE, { force: true });
+        writeFileSync(authMarker, new Date().toISOString(), { encoding: 'utf8', mode: 0o600 });
       } catch {
         // abaikan
       }
@@ -253,12 +432,27 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('auth_failure', (msg: unknown) => {
-      console.error('[WA] ❌ Autentikasi WhatsApp gagal / sesi kadaluarsa:', msg);
+      console.error('[WA] ❌ Autentikasi WhatsApp gagal / sesi rusak, membersihkan sesi lama agar QR baru bersih:', msg);
+      try {
+        rmSync(authMarker, { force: true });
+        for (const entry of readdirSync(this.opts.authDir)) {
+          rmSync(join(this.opts.authDir, entry), { recursive: true, force: true });
+        }
+      } catch {
+        // abaikan
+      }
       this.setState('session_expired');
     });
 
     client.on('disconnected', (reason: unknown) => {
       console.warn('[WA] ⚠️ Koneksi WhatsApp terputus:', reason);
+      if (String(reason ?? '').toUpperCase().includes('LOGOUT')) {
+        try {
+          rmSync(authMarker, { force: true });
+        } catch {
+          // abaikan
+        }
+      }
       this.setState('disconnected');
     });
 

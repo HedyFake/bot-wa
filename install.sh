@@ -8,12 +8,13 @@
 #   chmod +x install.sh && sudo ./install.sh
 #
 # Sub-perintah operasional:
-#   sudo ./install.sh --qr                # tampilkan QR code / log WhatsApp live
+#   sudo ./install.sh --qr                # tampilkan QR code / log WhatsApp live (anti-expired)
+#   sudo ./install.sh --reset-wa          # hapus sesi WA lama & munculkan QR baru yang bersih
+#   sudo ./install.sh --pair 08xxxxxxxxxx # tautkan WA dengan Kode Pairing 8-Digit (tanpa scan kamera)
 #   sudo ./install.sh --status            # cek status service systemd
 #   sudo ./install.sh --logs              # lihat log live
 #   sudo ./install.sh --cli               # simulasi chat admin dari terminal
 #   sudo ./install.sh --restart           # restart service HdyBot
-#   sudo ./install.sh --reset-wa          # hapus sesi WA lama & munculkan QR baru
 #   sudo ./install.sh --uninstall-service # hapus unit systemd (data & DB aman)
 #
 # Catatan penting:
@@ -49,10 +50,21 @@ fi
 case "${1:-}" in
   --qr|--logs)
     echo "Menampilkan log live & QR Code WhatsApp (Tekan Ctrl+C untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
-    if [[ -f /tmp/hdybot-qr.txt ]]; then
-      cat /tmp/hdybot-qr.txt
+    # Hanya tampilkan /tmp/hdybot-qr.txt jika usianya masih segar (< 18 detik) agar tidak men-scan QR kadaluarsa!
+    if [[ -f /tmp/hdybot-qr.txt && -f /tmp/hdybot-qr.ts ]]; then
+      NOW_TS="$(date +%s)"
+      QR_TS="$(cat /tmp/hdybot-qr.ts 2>/dev/null || echo 0)"
+      if [[ $((NOW_TS - QR_TS)) -lt 18 ]]; then
+        cat /tmp/hdybot-qr.txt
+      else
+        rm -f /tmp/hdybot-qr.txt /tmp/hdybot-qr.ts
+        if [[ ! -f "${DATA_DIR}/whatsapp-auth/.hdybot-authenticated" ]]; then
+          echo "[..] QR lama sudah lewat 20 detik, memuat ulang sesi QR segar..."
+          systemctl restart "$APP_NAME" 2>/dev/null || true
+        fi
+      fi
     fi
-    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
+    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
   --status)
     systemctl --no-pager status "$APP_NAME" hdybot-backup.timer || true
     exit 0 ;;
@@ -68,12 +80,35 @@ case "${1:-}" in
     systemctl --no-pager status "$APP_NAME"
     exit 0 ;;
   --reset-wa)
-    systemctl stop "$APP_NAME" || true
-    rm -rf "${DATA_DIR}/whatsapp-auth/"* /tmp/hdybot-qr.txt
+    c_info "Menghentikan instance ganda & membersihkan seluruh cache sesi WhatsApp..."
+    pm2 delete "$APP_NAME" 2>/dev/null || true
+    systemctl stop "$APP_NAME" 2>/dev/null || true
+    pkill -u "$APP_USER" -f chrome 2>/dev/null || true
+    rm -rf "${DATA_DIR}/whatsapp-auth/"* "${DATA_DIR}/whatsapp-auth/".* 2>/dev/null || true
+    rm -rf "${APP_DIR}/.wwebjs_cache" "/home/${APP_USER}/.wwebjs_cache" /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt 2>/dev/null || true
+    if [[ -f "$APP_DIR/.env" ]]; then
+      sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env" || true
+    fi
     systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl start "$APP_NAME"
-    c_ok "Sesi WhatsApp di-reset. Menampilkan QR Code baru..."
-    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 100 -o cat ;;
+    c_ok "Sesi WhatsApp bersih total! Menampilkan QR Code baru (scan dalam < 20 detik)..."
+    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
+  --pair)
+    PAIR_PHONE="${2:-}"
+    [[ -n "$PAIR_PHONE" ]] || die "Masukkan nomor WA Bot! Contoh: sudo ./install.sh --pair 081234567890"
+    pm2 delete "$APP_NAME" 2>/dev/null || true
+    systemctl stop "$APP_NAME" 2>/dev/null || true
+    pkill -u "$APP_USER" -f chrome 2>/dev/null || true
+    rm -rf "${DATA_DIR}/whatsapp-auth/"* "${DATA_DIR}/whatsapp-auth/".* 2>/dev/null || true
+    rm -rf "${APP_DIR}/.wwebjs_cache" /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt 2>/dev/null || true
+    if [[ -f "$APP_DIR/.env" ]]; then
+      sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env" || true
+      echo "WHATSAPP_PAIRING_PHONE=${PAIR_PHONE}" >> "$APP_DIR/.env"
+    fi
+    systemctl reset-failed "$APP_NAME" 2>/dev/null || true
+    systemctl start "$APP_NAME"
+    c_ok "Meminta Kode Pairing 8-Digit untuk nomor ${PAIR_PHONE} (tunggu 5-12 detik)..."
+    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
   --uninstall-service)
     systemctl disable --now "$APP_NAME" hdybot-watchdog.timer hdybot-backup.timer 2>/dev/null || true
     rm -f /etc/systemd/system/hdybot*.service /etc/systemd/system/hdybot*.timer
@@ -84,8 +119,13 @@ esac
 
 randhex() { openssl rand -hex "${1:-24}"; }
 
-# Hentikan service di awal agar tidak terus mencoba restart selama proses instalasi berlangsung
+# Sinkronkan jam server (NTP) agar tanda tangan kriptografi QR WhatsApp tidak ditolak karena selisih waktu
+timedatectl set-ntp true 2>/dev/null || true
+
+# Hentikan service systemd & PM2 di awal agar tidak bentrok 2 Chrome selama proses instalasi berlangsung
+pm2 delete hdybot 2>/dev/null || true
 systemctl stop hdybot.service 2>/dev/null || true
+pkill -u "$APP_USER" -f chrome 2>/dev/null || true
 systemctl disable --now hdybot-watchdog.timer hdybot-watchdog.service 2>/dev/null || true
 rm -f /etc/systemd/system/hdybot-watchdog.timer /etc/systemd/system/hdybot-watchdog.service
 systemctl reset-failed hdybot.service 2>/dev/null || true
@@ -277,7 +317,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-rm -f /tmp/hdybot-qr.txt
+rm -f /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt
 systemctl daemon-reload
 systemctl reset-failed hdybot.service postgresql.service redis-server.service 2>/dev/null || true
 systemctl enable --now hdybot.service hdybot-backup.timer
@@ -296,12 +336,10 @@ echo " HDYBOT — INSTALASI UBUNTU SERVER SELESAI (24/7 MODE)"
 echo "  Browser WA  : Google Chrome Stable (/usr/bin/google-chrome-stable)"
 echo "  Lihat QR    : sudo ./install.sh --qr"
 echo "  Reset Sesi  : sudo ./install.sh --reset-wa"
+echo "  Kode 8Digit : sudo ./install.sh --pair 08xxxxxxxxxx"
 echo "  Status      : sudo ./install.sh --status"
 echo "==================================================================="
 echo
 echo "📲 Menunggu QR Code dari whatsapp-web.js (biasanya 5-10 detik saat Chrome headless start)..."
 echo "   (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)"
-if [[ -f /tmp/hdybot-qr.txt ]]; then
-  cat /tmp/hdybot-qr.txt
-fi
 exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u hdybot -f -n 80 -o cat
