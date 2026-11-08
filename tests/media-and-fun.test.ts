@@ -62,20 +62,20 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
     const step2 = await dispatcher.handleInbound(hedyMsg('m2', 'passwordsalah'));
     expect(step2).toContain('Password salah');
 
-    // 3. Nomor asing mencoba mengirim password hedyfake -> ditolak karena bukan nomor admin 082233038659
-    const strangerVer = auth.verifyAdminPassword(
+    // 3. Pengirim dengan JID @lid atau variasi penulisan 'password "hedyfake"' / 'Hedyfake' diterima di chat pribadi
+    const lidVer = auth.verifyAdminPassword(
       {
         chatType: 'private',
-        chatJid: '6281111222233@s.whatsapp.net',
-        senderJid: '6281111222233@s.whatsapp.net',
+        chatJid: '184729182374819@lid',
+        senderJid: '184729182374819@s.whatsapp.net',
       },
-      'hedyfake',
+      'password "Hedyfake"',
     );
-    expect(strangerVer.ok).toBe(false);
-    expect(strangerVer.reason).toBe('not_admin_number');
+    expect(lidVer.ok).toBe(true);
+    expect(lidVer.reason).toBe('password_verified');
 
-    // 4. Admin 082233038659 membalas "hedyfake" -> berhasil & otomatis menampilkan .dashboard yang tertunda
-    const step3 = await dispatcher.handleInbound(hedyMsg('m3', 'hedyfake'));
+    // 4. Admin 082233038659 membalas '"hedyfake"' -> berhasil & otomatis menampilkan .dashboard yang tertunda
+    const step3 = await dispatcher.handleInbound(hedyMsg('m3', '"hedyfake"'));
     expect(step3).toContain('Password Admin Terverifikasi');
     expect(step3).toContain('DASHBOARD HDYBOT');
 
@@ -83,7 +83,19 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
     const step4 = await dispatcher.handleInbound(hedyMsg('m4', '.status'));
     expect(step4).toContain('Health & Ready Check');
 
-    // 6. Admin melakukan .logout -> sesi terkunci kembali
+    // 6. Semua grup otomatis memiliki allow access untuk melihat fitur (.menu, .dashboard, .jadwal, .owner, .groups)
+    const groupMenu = await dispatcher.handleInbound({
+      providerMessageId: 'grp-allow-1',
+      chatJid: '120363999888777@g.us',
+      chatType: 'group',
+      chatName: 'Grup Diskusi Umum',
+      senderJid: '6281111222233@s.whatsapp.net',
+      text: '.dashboard',
+      receivedAt: new Date(),
+    });
+    expect(groupMenu).toContain('DASHBOARD HDYBOT');
+
+    // 7. Admin melakukan .logout -> sesi terkunci kembali
     const step5 = await dispatcher.handleInbound(hedyMsg('m5', '.logout'));
     expect(step5).toContain('dikunci');
     const step6 = await dispatcher.handleInbound(hedyMsg('m6', '.dashboard'));

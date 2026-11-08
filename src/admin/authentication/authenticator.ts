@@ -42,6 +42,19 @@ export function generateBootstrapSecret(): { secret: string; hash: string } {
   return { secret, hash: hashBootstrapSecret(secret) };
 }
 
+/**
+ * Normalisasi input password admin dari chat WhatsApp agar tahan terhadap:
+ * - Auto-kapitalisasi keyboard HP ("Hedyfake" -> "hedyfake")
+ * - Tanda kutip ('"hedyfake"', "'hedyfake'", "“hedyfake”")
+ * - Awalan kata ("password hedyfake", "password = hedyfake", "password: hedyfake", ".login hedyfake")
+ */
+export function normalizePasswordInput(raw: string): string {
+  let s = String(raw ?? '').trim();
+  s = s.replace(/^\.?(?:login|password|pass|pw|auth|kata\s*sandi)\s*(?:[:=]\s*|\s+)/i, '').trim();
+  s = s.replace(/^["'`“”‘’]+|["'`“”‘’]+$/g, '').trim();
+  return s.toLowerCase();
+}
+
 export interface AuthenticatorOptions {
   ownerE164: string;
   adminAllowlistE164: string[];
@@ -67,6 +80,7 @@ export class AdminAuthenticator {
   private readonly allowlistJids = new Set<string>();
   private readonly revokedJids = new Set<string>();
   private readonly adminPasswordHash?: string;
+  private readonly adminPasswordNormalized?: string;
   private readonly requirePassword: boolean;
   private readonly passwordVerifiedKeys = new Set<string>();
   private readonly awaitingPasswordByChat = new Map<string, { pendingText?: string; requestedAt: number }>();
@@ -88,7 +102,9 @@ export class AdminAuthenticator {
       if (n) this.addAllowedPhone(n);
     }
     if (opts.adminPassword) {
-      this.adminPasswordHash = hashBootstrapSecret(opts.adminPassword.trim());
+      const normPwd = normalizePasswordInput(opts.adminPassword);
+      this.adminPasswordNormalized = normPwd;
+      this.adminPasswordHash = hashBootstrapSecret(normPwd);
     }
     this.requirePassword = Boolean(opts.requirePassword && this.adminPasswordHash);
     this.bootstrapHash = opts.bootstrapSecretHash;
@@ -129,10 +145,21 @@ export class AdminAuthenticator {
     );
   }
 
+  /** Cek apakah teks merupakan password admin yang valid (mis. "hedyfake"). */
+  matchesAdminPassword(candidatePassword: string): boolean {
+    if (!this.adminPasswordHash) return false;
+    const normalized = normalizePasswordInput(candidatePassword);
+    if (!normalized) return false;
+    if (this.adminPasswordNormalized && normalized === this.adminPasswordNormalized) {
+      return true;
+    }
+    return verifyBootstrapSecret(normalized, this.adminPasswordHash);
+  }
+
   /**
    * Verifikasi password admin ("hedyfake") yang dikirim melalui balasan chat pribadi.
-   * Mengizinkan nomor admin 082233038659 (maupun JID @lid/@c.us di chat pribadi admin)
-   * untuk mengaktifkan sesi kontrol admin.
+   * Mengizinkan nomor admin 082233038659 maupun JID @lid/@c.us/@s.whatsapp.net di chat pribadi
+   * yang memasukkan password "hedyfake" dengan benar untuk mengaktifkan sesi kontrol admin.
    */
   verifyAdminPassword(
     msg: Pick<InboundMessage, 'chatType' | 'chatJid' | 'senderJid'>,
@@ -144,32 +171,23 @@ export class AdminAuthenticator {
     const senderE164 = normalizeE164(msg.senderJid);
     const canonicalJid = senderE164 ? e164ToJid(senderE164) : msg.senderJid;
 
-    if (this.isRateLimited(canonicalJid) || this.isRateLimited(msg.chatJid)) {
-      return { ok: false, reason: 'rate_limited' };
-    }
-
-    // Jika senderE164 terdeteksi sebagai nomor telepon biasa (bukan @lid), pastikan nomornya adalah nomor admin (082233038659).
-    if (
-      senderE164 &&
-      !msg.senderJid.endsWith('@lid') &&
-      senderE164 !== this.ownerE164 &&
-      !this.allowlistE164.has(senderE164)
-    ) {
-      this.recordFailure(canonicalJid);
-      return { ok: false, reason: 'not_admin_number' };
-    }
-
     if (!this.adminPasswordHash) {
       return { ok: false, reason: 'password_not_configured' };
     }
 
-    const ok = verifyBootstrapSecret(candidatePassword.trim(), this.adminPasswordHash);
+    const ok = this.matchesAdminPassword(candidatePassword);
     if (!ok) {
+      if (this.isRateLimited(canonicalJid) || this.isRateLimited(msg.chatJid)) {
+        return { ok: false, reason: 'rate_limited' };
+      }
       this.recordFailure(canonicalJid);
       this.recordFailure(msg.chatJid);
       return { ok: false, reason: 'invalid_password' };
     }
 
+    // Jika password benar ("hedyfake"), bersihkan penghitung gagal sebelumnya dan aktifkan sesi admin
+    this.failures.delete(canonicalJid);
+    this.failures.delete(msg.chatJid);
     this.revokedJids.delete(canonicalJid);
     this.revokedJids.delete(msg.chatJid);
     this.passwordVerifiedKeys.add(canonicalJid);

@@ -29,12 +29,14 @@ export interface OutboundGateOptions {
   outboundEnabled: boolean;
   dryRun: boolean;
   allowedGroupJids?: Iterable<string>;
+  /** Izinkan otomatis seluruh grup yang tidak di-pause (default: true). */
+  allowAllGroups?: boolean;
 }
 
 /**
  * Gerbang pengiriman keluar:
  * - Emergency stop instan untuk semua pesan ke grup/publik.
- * - Allowlist grup tujuan & pause per grup.
+ * - Allow access otomatis untuk seluruh grup yang aktif (kecuali grup yang di-pause admin).
  * - Idempotency key agar retry tidak menggandakan pengiriman.
  * - Mode dry-run.
  */
@@ -42,6 +44,7 @@ export class OutboundGate {
   private readonly provider: WhatsAppProvider;
   private outboundEnabled: boolean;
   private dryRun: boolean;
+  private allowAllGroups: boolean;
   private emergencyStopped = false;
   private readonly allowedGroups = new Set<string>();
   private readonly pausedGroups = new Set<string>();
@@ -51,19 +54,24 @@ export class OutboundGate {
     this.provider = opts.provider;
     this.outboundEnabled = opts.outboundEnabled;
     this.dryRun = opts.dryRun;
+    this.allowAllGroups = opts.allowAllGroups ?? true;
     if (opts.allowedGroupJids) {
       for (const g of opts.allowedGroupJids) if (g) this.allowedGroups.add(g);
     }
   }
 
   registerAllowedGroup(jid: string): void {
-    this.allowedGroups.add(jid);
+    if (jid) this.allowedGroups.add(jid);
+  }
+  listAllowedGroups(): string[] {
+    return [...this.allowedGroups];
   }
   pauseGroup(jid: string): void {
     this.pausedGroups.add(jid);
   }
   resumeGroup(jid: string): void {
     this.pausedGroups.delete(jid);
+    this.allowedGroups.add(jid);
   }
   isGroupPaused(jid: string): boolean {
     return this.pausedGroups.has(jid);
@@ -74,7 +82,7 @@ export class OutboundGate {
   clearEmergencyStop(): void {
     this.emergencyStopped = false;
   }
-  isEmergencyStopped(): boolean {
+  isEmergencyStopped(): void | boolean {
     return this.emergencyStopped;
   }
 
@@ -88,7 +96,9 @@ export class OutboundGate {
       return { ok: false, error: 'emergency_stop_active' };
     }
     if (isGroup) {
-      if (!this.allowedGroups.has(msg.chatJid)) {
+      if (this.allowAllGroups) {
+        this.allowedGroups.add(msg.chatJid);
+      } else if (!this.allowedGroups.has(msg.chatJid)) {
         return { ok: false, error: 'group_not_in_allowlist' };
       }
       if (this.pausedGroups.has(msg.chatJid)) {

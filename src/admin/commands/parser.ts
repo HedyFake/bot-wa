@@ -141,11 +141,13 @@ export interface ParsedCommand {
   requiresConfirmation: boolean;
 }
 
+// Hanya perintah mutasi/destruktif sensitif yang dibatasi admin;
+// seluruh fitur informasi, dashboard, jadwal, tugas, AI, media, & hiburan diizinkan untuk dilihat di semua grup yang allow!
 const ADMIN_ONLY = new Set<CanonicalCommand>([
-  'owner', 'dashboard', 'system', 'logs', 'errors',
-  'ai.status', 'ai.models', 'ai.model', 'ai.auto', 'ai.test',
-  'groups', 'groups.sources', 'groups.add', 'groups.pause', 'groups.resume',
-  'filter.status', 'filter.review', 'priority', 'digest',
+  'logs', 'errors',
+  'ai.model', 'ai.auto',
+  'groups.add', 'groups.pause', 'groups.resume',
+  'filter.review',
   'pending', 'approve', 'reject', 'send', 'broadcast.preview', 'broadcast.send',
   'schedule.add', 'schedule.edit', 'schedule.delete', 'schedule.reset',
   'reminders.pause', 'backup', 'audit', 'emergency.stop', 'emergency.resume',

@@ -109,16 +109,16 @@ export class CommandDispatcher {
     const rawText = (msg.text ?? '').trim();
     const { intelligence, outbound, router, config } = this.deps;
 
-    // 1. Auto-deteksi nama grup "Nursing Class A" & "PJMK Semester 5" jika tersedia dari metadata grup WA
+    // 1. Berikan allow access otomatis untuk semua grup yang aktif & auto-deteksi "Nursing Class A" / "PJMK Semester 5"
+    outbound.registerAllowedGroup(msg.chatJid);
     if (msg.chatName && /nursing\s*class\s*a|kelas\s*5\s*a/i.test(msg.chatName)) {
       if (!intelligence.getPrimaryGroupJid() || intelligence.getPrimaryGroupJid() === 'unconfigured@g.us') {
         intelligence.setPrimaryGroupJid(msg.chatJid);
       }
-      outbound.registerAllowedGroup(msg.chatJid);
-    }
-    if (msg.chatName && /pjmk/i.test(msg.chatName)) {
+    } else if (msg.chatName && /pjmk/i.test(msg.chatName)) {
       intelligence.registerPjmkGroup(msg.chatJid, msg.chatName);
-      outbound.registerAllowedGroup(msg.chatJid);
+    } else if (!intelligence.listSources().some((s) => s.jid === msg.chatJid)) {
+      intelligence.registerSourceGroup(msg.chatJid, msg.chatName ?? `Grup (${msg.chatJid})`, 'member');
     }
 
     // 2. Ingest ke GroupIntelligenceService & evaluasi kualitas (baik/netral/buruk) + signifikansi (inti_penting/biasa/tidak_penting)
@@ -217,23 +217,17 @@ export class CommandDispatcher {
       return aiReply;
     }
 
-    // 6. Evaluasi command titik eksplisit (diawali '.') di grup
+    // 6. Evaluasi command titik eksplisit (diawali '.') di semua grup yang allow
     const parsedGroup = parseCommand(rawText);
     if (parsedGroup.kind === 'dot' && parsedGroup.command !== 'unknown') {
-      if (parsedGroup.adminOnly) {
+      if (parsedGroup.adminOnly && (!isOwnerOrAdmin || parsedGroup.requiresConfirmation)) {
         this.recordAudit(msg.senderJid, parsedGroup.command, 'denied_group_context', msg.chatJid);
         return autoRelayedText;
       }
       this.fun.recordCommandUsage(parsedGroup.command, msg.chatJid);
       const out = await this.executePublicOrAdmin(parsedGroup, msg);
       if (out) {
-        if (
-          parsedGroup.command === 'group.nimbrung' ||
-          parsedGroup.command === 'group.setpjmk' ||
-          parsedGroup.command === 'group.setkelasa'
-        ) {
-          outbound.registerAllowedGroup(msg.chatJid);
-        }
+        outbound.registerAllowedGroup(msg.chatJid);
         await outbound.send({
           chatJid: msg.chatJid,
           text: out.text,
@@ -335,21 +329,42 @@ export class CommandDispatcher {
     // ==================== PRIVATE CHAT ====================
     const rawText = (msg.text ?? '').trim();
 
-    // 1. Jika sedang dalam state ditanya password, tangkap balasan password langsung (contoh: "hedyfake")
-    if (this.deps.auth.isAwaitingPassword(msg.chatJid) && rawText && !rawText.startsWith('.pair')) {
-      const candidate = rawText.replace(/^\.(login|password|pass|auth)\s+/i, '').trim();
-      const ver = this.deps.auth.verifyAdminPassword(msg, candidate);
+    // 1. Jika sedang dalam state ditanya password ATAU pengirim langsung mengetik password admin ("hedyfake"),
+    //    tangkap & verifikasi langsung (tahan terhadap kutip, huruf besar/kecil, maupun awalan "password ").
+    if (
+      (this.deps.auth.isAwaitingPassword(msg.chatJid) || this.deps.auth.matchesAdminPassword(rawText)) &&
+      rawText &&
+      !rawText.startsWith('.pair')
+    ) {
+      if (
+        this.deps.auth.isAwaitingPassword(msg.chatJid) &&
+        rawText.startsWith('.') &&
+        !/^\.(login|password|pass|auth)\b/i.test(rawText) &&
+        !this.deps.auth.matchesAdminPassword(rawText)
+      ) {
+        this.deps.auth.promptForPassword(msg.chatJid, rawText);
+        const remindText =
+          `🔐 *Verifikasi Password Admin ${this.deps.config.BOT_NAME}*\n` +
+          `Perintah \`${rawText}\` disimpan. Silakan balas dengan *password admin* terlebih dahulu (contoh: \`hedyfake\`):`;
+        await this.replyPrivate(msg, remindText);
+        return remindText;
+      }
+
+      const ver = this.deps.auth.verifyAdminPassword(msg, rawText);
       this.recordAudit(msg.senderJid, 'auth.password_reply', ver.reason);
       if (!ver.ok) {
         const failText =
           ver.reason === 'rate_limited'
             ? '⛔ Terlalu banyak percobaan password gagal. Silakan tunggu beberapa menit.'
-            : '❌ Password salah. Silakan balas ulang dengan password admin yang benar:';
+            : '❌ Password salah. Silakan balas ulang dengan password admin yang benar (ketik: `hedyfake`):';
         await this.replyPrivate(msg, failText);
         return failText;
       }
 
-      let welcome = `✅ *Password Admin Terverifikasi!*\nSelamat datang, *${this.deps.config.OWNER_NAME}* (\`${this.deps.config.OWNER_WHATSAPP}\`). Sesi kontrol penuh HdyBot kini aktif.`;
+      let welcome =
+        `✅ *Password Admin Terverifikasi!*\n` +
+        `Selamat datang, *${this.deps.config.OWNER_NAME}* (\`${this.deps.config.OWNER_WHATSAPP}\`). Sesi kontrol penuh HdyBot kini aktif.\n` +
+        `💡 Ketik \`.menu\` untuk daftar seluruh fitur atau \`.dashboard\` untuk panel kendali utama.`;
       if (ver.pendingText) {
         const pendingParsed = parseCommand(ver.pendingText);
         if (pendingParsed.command !== 'unknown' && pendingParsed.command !== 'auth.login') {
@@ -1384,10 +1399,25 @@ export class CommandDispatcher {
       case 'groups':
       case 'groups.sources': {
         const sources = intelligence.listSources();
-        if (!sources.length) return textOnly('📭 Belum ada grup sumber yang didaftarkan.');
+        const allowedList = outbound.listAllowedGroups();
+        if (!sources.length && !allowedList.length) {
+          return textOnly(
+            `👥 *Status Akses Grup ${config.BOT_NAME}*\n` +
+              `• Mode Allow Access Semua Grup: *AKTIF ✅* (Semua grup tempat bot bergabung otomatis diizinkan melihat & memakai seluruh fitur)\n` +
+              `• Grup Terdeteksi Saat Ini: _Belum ada pesan grup masuk (otomatis terdaftar begitu ada chat di grup)_`,
+          );
+        }
         return textOnly(
-          `👥 *Grup Sumber Terdaftar*\n` +
-            sources.map((g, i) => `${i + 1}. ${g.name} (\`${g.jid}\`) — ${g.paused ? 'PAUSED' : 'AKTIF'} [${g.reliability}]`).join('\n'),
+          `👥 *Daftar Grup Terdaftar & Allow Access (${sources.length || allowedList.length})*\n` +
+            `• Mode Allow Access Semua Grup: *AKTIF ✅*\n` +
+            (sources.length
+              ? sources
+                  .map(
+                    (g, i) =>
+                      `${i + 1}. *${g.name}* (\`${g.jid}\`) — ${g.paused ? 'PAUSED ⏸️' : 'ALLOW / AKTIF ✅'} [${g.reliability}]`,
+                  )
+                  .join('\n')
+              : allowedList.map((jid, i) => `${i + 1}. \`${jid}\` — ALLOW / AKTIF ✅`).join('\n')),
         );
       }
 

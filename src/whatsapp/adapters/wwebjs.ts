@@ -391,6 +391,21 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
           if (page && typeof page.exposeFunction === 'function' && !patchedPages.has(page)) {
             patchedPages.add(page);
+            // Buat page.exposeFunction idempotent agar tidak pernah gagal dengan
+            // "window['onAddMessageEvent'] already exists!" saat attachEventListeners dipanggil ulang.
+            const origExpose = page.exposeFunction.bind(page);
+            page.exposeFunction = async (name: string, fn: (...args: unknown[]) => unknown) => {
+              try {
+                await origExpose(name, fn);
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                if (msg.includes('already exists')) {
+                  return;
+                }
+                throw err;
+              }
+            };
+
             await page
               .exposeFunction('onAuthAppStateChangedEvent', async (state: unknown) => {
                 if (state === 'UNPAIRED_IDLE' && !normalizedPairingPhone) {
@@ -430,11 +445,16 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     // secara bersamaan yang menyebabkan `unhandledRejection` & `LOGOUT` saat `syncd` berlangsung.
     if (typeof client.attachEventListeners === 'function') {
       const origAttach = client.attachEventListeners.bind(client);
+      let isAttaching = false;
       client.attachEventListeners = async () => {
+        if (isAttaching) return;
+        isAttaching = true;
         try {
           await origAttach();
         } catch (err) {
           console.warn('[WA] Peringatan saat attachEventListeners (diabaikan):', err);
+        } finally {
+          isAttaching = false;
         }
         try {
           await client.pupPage?.evaluate(() => {
@@ -638,13 +658,24 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
       const isGroup = rawChatId.endsWith('@g.us');
       let senderJid = isGroup ? String(m.author ?? m.from ?? '') : String(m.from ?? '');
+      const isLidSender = senderJid.endsWith('@lid');
 
       if (typeof m.getContact === 'function') {
         try {
           const contact = await m.getContact();
-          const digits = (contact?.number ?? contact?.id?.user ?? '').replace(/\D/g, '');
-          if (digits.length >= 8) {
-            senderJid = `${digits}@s.whatsapp.net`;
+          const contactNumberDigits = (contact?.number ?? '').replace(/\D/g, '');
+          const contactUserDigits = (contact?.id?.user ?? '').replace(/\D/g, '');
+          if (isLidSender) {
+            // Untuk pengirim @lid, hanya ganti ke @s.whatsapp.net bila contact.number berisi nomor telepon asli
+            // yang berbeda dari ID LID internal.
+            if (contactNumberDigits.length >= 8 && contactNumberDigits !== contactUserDigits) {
+              senderJid = `${contactNumberDigits}@s.whatsapp.net`;
+            }
+          } else {
+            const digits = contactNumberDigits || contactUserDigits;
+            if (digits.length >= 8) {
+              senderJid = `${digits}@s.whatsapp.net`;
+            }
           }
         } catch {
           // Gunakan senderJid apa adanya jika getContact gagal
