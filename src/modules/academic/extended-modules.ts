@@ -138,6 +138,17 @@ export class GamificationService {
   private readonly optInUsers = new Set<string>();
   private readonly xpByUser = new Map<string, number>();
 
+  constructor(initial: Record<string, number> = {}, private persist?: (scores: Record<string, number>) => void) {
+    for (const [jid, xp] of Object.entries(initial)) {
+      this.optInUsers.add(jid);
+      this.xpByUser.set(jid, xp);
+    }
+  }
+
+  private save() {
+    this.persist?.(Object.fromEntries([...this.optInUsers].map(jid => [jid, this.xpByUser.get(jid) ?? 0])));
+  }
+
   setOptIn(userJid: string, enabled: boolean): void {
     if (enabled) {
       this.optInUsers.add(userJid);
@@ -145,6 +156,7 @@ export class GamificationService {
       this.optInUsers.delete(userJid);
       this.xpByUser.delete(userJid);
     }
+    this.save();
   }
 
   isOptedIn(userJid: string): boolean {
@@ -163,6 +175,7 @@ export class GamificationService {
     void activity;
     const next = (this.xpByUser.get(userJid) ?? 0) + points;
     this.xpByUser.set(userJid, next);
+    this.save();
     return { awarded: true, totalXp: next };
   }
 

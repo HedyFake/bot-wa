@@ -1,4 +1,6 @@
-import { mkdirSync } from 'node:fs';
+import QRCode from 'qrcode';
+import { join } from 'node:path';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import type {
   ConnectionState,
   InboundMessage,
@@ -70,7 +72,7 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
     const { state, saveCreds } = await useMultiFileAuthState(this.opts.authDir);
     const sock = makeWASocket({
       auth: state,
-      printQRInTerminal: !this.opts.pairingPhoneE164,
+      printQRInTerminal: false,
     });
     this.sock = sock;
 
@@ -85,10 +87,22 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
     });
 
     sock.ev.on('connection.update', (u: Record<string, unknown>) => {
+      if (typeof u.qr === 'string') {
+        void QRCode.toBuffer(u.qr).then(data => {
+          if (this._state === 'connecting') writeFileSync(join(this.opts.authDir, 'pairing-qr.png'), data, { mode: 0o600 });
+        }).catch(() => undefined);
+      }
       const connection = u.connection as string | undefined;
-      if (connection === 'open') this.setState('connected');
+      if (connection === 'open') {
+        rmSync(join(this.opts.authDir, 'pairing-qr.png'), { force: true });
+        rmSync(join(this.opts.authDir, 'pairing-code.txt'), { force: true });
+        this.setState('connected');
+      }
       else if (connection === 'connecting') this.setState('connecting');
-      else if (connection === 'close') this.setState('disconnected');
+      else if (connection === 'close') {
+        const last = u.lastDisconnect as { error?: { output?: { statusCode?: number } } } | undefined;
+        this.setState(last?.error?.output?.statusCode === 401 ? 'logged_out' : 'disconnected');
+      }
     });
 
     sock.ev.on('messages.upsert', (ev: Record<string, unknown>) => {
@@ -141,9 +155,10 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
     if (!this.sock || this._state !== 'connected') {
       return { ok: false, error: `not_connected:${this._state}` };
     }
+    if (msg.media) return { ok: false, error: 'media_unsupported' };
     try {
       const res = await this.sock.sendMessage(msg.chatJid, { text: msg.text });
-      return { ok: true, providerMessageId: res?.key?.id ?? msg.idempotencyKey };
+      return res?.key?.id ? { ok: true, providerMessageId: res.key.id } : { ok: false, error: 'send_failed' };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.name : 'send_failed' };
     }

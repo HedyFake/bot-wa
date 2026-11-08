@@ -10,6 +10,8 @@ import { PrismaClient } from '@prisma/client';
 import { normalizedCourseName, parseSeed } from '../src/database/seed-schema.js';
 
 const ROLES: Array<[string, string]> = [
+  ['super_admin', 'Super Admin'], ['class_admin', 'Admin Kelas'], ['class_leader', 'Ketua Kelas'],
+  ['secretary', 'Sekretaris'], ['treasurer', 'Bendahara'], ['lecturer', 'Dosen'], ['student', 'Mahasiswa'], ['group_leader', 'Ketua Kelompok'],
   ['owner', 'Owner'], ['admin', 'Admin'], ['ketua', 'Ketua Kelas'], ['sekretaris', 'Sekretaris'],
   ['bendahara', 'Bendahara'], ['wali_kelas', 'Wali Kelas'], ['member', 'Anggota'],
 ];
@@ -45,17 +47,17 @@ async function main() {
       courseIds.set(c.code, row.id);
     }
 
-    for (const s of seed.schedule_entries) {
-      const courseId = courseIds.get(s.course_code)!;
-      await prisma.schedule.upsert({
-        where: { classId_weekday_startTime: { classId: cls.id, weekday: s.weekday, startTime: s.start_time } },
-        update: { courseId, endTime: s.end_time, room: s.room, sourceStatus: s.source_status },
-        create: {
-          classId: cls.id, courseId, weekday: s.weekday, startTime: s.start_time,
-          endTime: s.end_time, room: s.room, sourceStatus: s.source_status,
-        },
-      });
-    }
+    // Jadwal yang sudah dikelola admin, termasuk penghapusan seluruh slot, harus bertahan saat deploy ulang.
+    await prisma.$transaction(async tx => {
+      const key = 'schedule.initialized.' + cls.id;
+      if (await tx.botSetting.findUnique({ where: { key } })) return;
+      if (!await tx.schedule.count({ where: { classId: cls.id } })) {
+        await tx.schedule.createMany({ data: seed.schedule_entries.map(s => ({ classId: cls.id,
+          courseId: courseIds.get(s.course_code)!, weekday:s.weekday, startTime:s.start_time,
+          endTime:s.end_time, room:s.room, sourceStatus:s.source_status })) });
+      }
+      await tx.botSetting.create({ data: { key, value:true } });
+    }, { isolationLevel: 'Serializable' });
 
     for (const l of seed.lecturer_associations) {
       const lec = await prisma.lecturer.upsert({

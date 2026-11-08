@@ -41,6 +41,24 @@ c_info() { echo -e "\e[36m[..]\e[0m $*"; }
 c_warn() { echo -e "\e[33m[!!]\e[0m $*"; }
 die()    { echo -e "\e[31m[XX]\e[0m $*" >&2; exit 1; }
 
+archive_session() {
+  local session="$DATA_DIR/whatsapp-auth"
+  if [[ -d "$session" ]]; then
+    install -d -m 0700 "$BACKUP_DIR"
+    local archive key
+    key="$(sed -n 's/^BACKUP_ENCRYPTION_KEY=//p' "$APP_DIR/.env" | tail -1)"
+    [[ -n "$key" ]] || die "Isi BACKUP_ENCRYPTION_KEY sebelum mengganti sesi."
+    archive="$(mktemp "$BACKUP_DIR/session-XXXXXXXX.enc")"
+    if ! tar -C "$DATA_DIR" -czf - whatsapp-auth | BACKUP_ENCRYPTION_KEY="$key" openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass env:BACKUP_ENCRYPTION_KEY -out "$archive"; then
+      rm -f -- "$archive"
+      die "Backup sesi gagal. Periksa penyimpanan backup."
+    fi
+    rm -rf -- "$session"
+    c_info "Backup sesi terenkripsi tersimpan di $archive."
+  fi
+  install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "$session"
+}
+
 [[ $EUID -eq 0 ]] || die "Jalankan dengan sudo: sudo bash install.sh"
 if [[ -f /etc/os-release ]]; then
   . /etc/os-release
@@ -48,20 +66,20 @@ if [[ -f /etc/os-release ]]; then
 fi
 
 case "${1:-}" in
-  --qr|--logs)
-    echo "Menampilkan log live & QR Code WhatsApp (Tekan Ctrl+C untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)..."
-    if ! systemctl is-active --quiet "$APP_NAME"; then
-      systemctl start "$APP_NAME" 2>/dev/null || true
-    fi
-    # Hanya tampilkan /tmp/hdybot-qr.txt jika belum terautentikasi dan usianya masih segar (< 18 detik)
-    if [[ ! -f "${DATA_DIR}/whatsapp-auth/.hdybot-authenticated" && -f /tmp/hdybot-qr.txt && -f /tmp/hdybot-qr.ts ]]; then
-      NOW_TS="$(date +%s)"
-      QR_TS="$(cat /tmp/hdybot-qr.ts 2>/dev/null || echo 0)"
-      if [[ $((NOW_TS - QR_TS)) -lt 18 ]]; then
-        cat /tmp/hdybot-qr.txt
-      fi
-    fi
-    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
+  --qr)
+    pairing_dir="$DATA_DIR/whatsapp-auth"
+    while systemctl is-active --quiet "$APP_NAME"; do
+      for file in "$pairing_dir/pairing-qr.txt" "$pairing_dir/pairing-code.txt"; do
+        if [[ -f "$file" && "$(stat -c %Y "$file")" != "${seen:-}" ]]; then
+          seen="$(stat -c %Y "$file")"
+          cat "$file"
+        fi
+      done
+      sleep 1
+    done
+    exit 0 ;;
+  --logs)
+    exec journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
   --status)
     systemctl --no-pager status "$APP_NAME" hdybot-backup.timer || true
     exit 0 ;;
@@ -69,7 +87,7 @@ case "${1:-}" in
     exec sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm run -s cli" ;;
   --cmd)
     shift
-    exec sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm run -s cli -- \"$*\"" ;;
+    exec sudo -u "$APP_USER" -H bash -c 'cd "$1" && shift && npm run -s cli -- "$@"' _ "$APP_DIR" "$@" ;;
   --restart)
     systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl restart "$APP_NAME"
@@ -78,10 +96,8 @@ case "${1:-}" in
     exit 0 ;;
   --reset-wa)
     c_info "Menghentikan instance ganda & membersihkan seluruh cache sesi WhatsApp..."
-    pm2 delete "$APP_NAME" 2>/dev/null || true
     systemctl stop "$APP_NAME" 2>/dev/null || true
-    pkill -u "$APP_USER" -f chrome 2>/dev/null || true
-    rm -rf "${DATA_DIR}/whatsapp-auth/"* "${DATA_DIR}/whatsapp-auth/".* 2>/dev/null || true
+    archive_session
     rm -rf "${APP_DIR}/.wwebjs_cache" "/home/${APP_USER}/.wwebjs_cache" /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt 2>/dev/null || true
     if [[ -f "$APP_DIR/.env" ]]; then
       sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env" || true
@@ -89,14 +105,12 @@ case "${1:-}" in
     systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl start "$APP_NAME"
     c_ok "Sesi WhatsApp bersih total! Menampilkan QR Code baru (scan dalam < 20 detik)..."
-    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
+    exec bash "$0" --qr ;;
   --pair)
     PAIR_PHONE="${2:-}"
-    [[ -n "$PAIR_PHONE" ]] || die "Masukkan nomor WA Bot! Contoh: sudo ./install.sh --pair 081234567890"
-    pm2 delete "$APP_NAME" 2>/dev/null || true
+    [[ "$PAIR_PHONE" =~ ^\+?[0-9]{8,15}$ ]] || die "Masukkan nomor WA Bot! Contoh: sudo ./install.sh --pair 081234567890"
     systemctl stop "$APP_NAME" 2>/dev/null || true
-    pkill -u "$APP_USER" -f chrome 2>/dev/null || true
-    rm -rf "${DATA_DIR}/whatsapp-auth/"* "${DATA_DIR}/whatsapp-auth/".* 2>/dev/null || true
+    archive_session
     rm -rf "${APP_DIR}/.wwebjs_cache" /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt 2>/dev/null || true
     if [[ -f "$APP_DIR/.env" ]]; then
       sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env" || true
@@ -105,7 +119,7 @@ case "${1:-}" in
     systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl start "$APP_NAME"
     c_ok "Meminta Kode Pairing 8-Digit untuk nomor ${PAIR_PHONE} (tunggu 5-12 detik)..."
-    exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
+    exec bash "$0" --qr ;;
   --uninstall-service)
     systemctl disable --now "$APP_NAME" hdybot-watchdog.timer hdybot-backup.timer 2>/dev/null || true
     rm -f /etc/systemd/system/hdybot*.service /etc/systemd/system/hdybot*.timer
@@ -134,6 +148,7 @@ apt-get update -y
 apt-get install -y \
   ca-certificates curl wget gnupg openssl rsync \
   postgresql postgresql-contrib redis-server \
+  poppler-utils tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng \
   fonts-liberation libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
   libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
   libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils
@@ -157,21 +172,9 @@ if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 2
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
   apt-get update -y && apt-get install -y nodejs
 fi
-if ! command -v pm2 >/dev/null 2>&1; then
-  c_info "Memasang PM2 Process Manager secara global..."
-  npm install -g pm2 --no-fund --no-audit || true
-fi
-c_ok "Node $(node -v), npm $(npm -v), PM2 $(pm2 -v 2>/dev/null || echo 'siap')"
+c_ok "Node $(node -v), npm $(npm -v), process manager systemd"
 
-# ---------------------------------------------------------------- 3. Perbaiki & Nyalakan PostgreSQL + Redis
-rm -rf /etc/systemd/system/postgresql.service.d /etc/systemd/system/redis-server.service.d
-sed -i 's/^#\?\s*bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf || true
-sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf || true
-systemctl daemon-reload
-systemctl reset-failed postgresql.service redis-server.service 2>/dev/null || true
 systemctl enable --now postgresql redis-server
-systemctl restart postgresql redis-server
-redis-cli ping | grep -q PONG && c_ok "PostgreSQL & Redis aktif normal"
 
 # ---------------------------------------------------------------- 4. User & Direktori
 id "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "/home/$APP_USER" --shell /bin/bash "$APP_USER"
@@ -182,14 +185,14 @@ chmod 0700 "$DATA_DIR/whatsapp-auth" "$BACKUP_DIR"
 # Hanya jalankan rsync bila install.sh tidak sedang dijalankan langsung dari dalam /opt/hdybot
 if [[ "$(readlink -f "$SRC_DIR")" != "$(readlink -f "$APP_DIR")" ]]; then
   c_info "Menyalin source code proyek dari $SRC_DIR ke $APP_DIR ..."
-  rsync -a --delete \
+  rsync -a \
     --exclude node_modules --exclude dist --exclude .git --exclude '.env' --exclude '.pg-*.local' \
-    --exclude whatsapp-auth --exclude storage --exclude backups \
+    --exclude whatsapp-auth --exclude storage --exclude backups --exclude secrets --exclude reference --exclude data/runtime \
     "$SRC_DIR/" "$APP_DIR/"
 else
   c_info "install.sh dijalankan langsung di $APP_DIR (skip rsync ke diri sendiri)"
 fi
-rm -rf "$APP_DIR/dist" "$APP_DIR/src/app/http.ts"
+
 chmod +x "$APP_DIR/scripts/"*.sh 2>/dev/null || true
 chown -R "$APP_USER:$APP_USER" "$APP_DIR" "$DATA_DIR" "$BACKUP_DIR" "/home/$APP_USER"
 
@@ -198,6 +201,7 @@ ENV_FILE="$APP_DIR/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   DB_PASS="$(randhex 24)"
   BACKUP_KEY="$(randhex 32)"
+  umask 077
   cp "$APP_DIR/.env.example" "$ENV_FILE"
   sed -i "s|^NODE_ENV=.*|NODE_ENV=production|" "$ENV_FILE"
   sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}|" "$ENV_FILE"
@@ -210,21 +214,21 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo ""
     echo "# Dibuat otomatis oleh install.sh pada $(date -Iseconds)"
     echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable"
-    echo "ADMIN_PASSWORD=hedyfake"
+    echo "ADMIN_PASSWORD=$(randhex 24)"
     echo "ADMIN_REQUIRE_PASSWORD=true"
     echo "STORAGE_DIR=${DATA_DIR}/storage"
     echo "BACKUP_DIR=${BACKUP_DIR}"
     echo "BACKUP_ENCRYPTION_KEY=${BACKUP_KEY}"
   } >> "$ENV_FILE"
-  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs, ADMIN_PASSWORD=hedyfake, & Chrome Stable (permission 0600)"
+  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs, password admin acak & Chrome Stable (permission 0600)"
 else
   sed -i "s|^WHATSAPP_PROVIDER=.*|WHATSAPP_PROVIDER=wwebjs|" "$ENV_FILE"
   sed -i "s|^WHATSAPP_AUTH_DIR=.*|WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth|" "$ENV_FILE"
   sed -i "s|^OUTBOUND_ENABLED=.*|OUTBOUND_ENABLED=true|" "$ENV_FILE"
   sed -i "s|^DRY_RUN=.*|DRY_RUN=false|" "$ENV_FILE"
-  grep -q '^ADMIN_PASSWORD=' "$ENV_FILE" \
-    && sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=hedyfake|" "$ENV_FILE" \
-    || echo "ADMIN_PASSWORD=hedyfake" >> "$ENV_FILE"
+  if ! grep -qE '^ADMIN_PASSWORD=.+' "$ENV_FILE"; then
+    echo "ADMIN_PASSWORD=$(randhex 24)" >> "$ENV_FILE"
+  fi
   grep -q '^ADMIN_REQUIRE_PASSWORD=' "$ENV_FILE" \
     && sed -i "s|^ADMIN_REQUIRE_PASSWORD=.*|ADMIN_REQUIRE_PASSWORD=true|" "$ENV_FILE" \
     || echo "ADMIN_REQUIRE_PASSWORD=true" >> "$ENV_FILE"
@@ -255,7 +259,7 @@ c_ok "PostgreSQL database '${DB_NAME}' siap"
 # ---------------------------------------------------------------- 6. Install, Migrate, Seed, Test, Build
 as_app() { sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && $*"; }
 c_info "Menjalankan npm install (whatsapp-web.js, qrcode-terminal, prisma)..."
-as_app "PUPPETEER_SKIP_DOWNLOAD=true npm install --no-fund --no-audit"
+as_app "PUPPETEER_SKIP_DOWNLOAD=true npm ci --no-fund --no-audit"
 as_app "npx prisma generate"
 c_info "Menjalankan migrasi database PostgreSQL..."
 as_app "npx prisma migrate deploy"
@@ -275,7 +279,8 @@ cat > /etc/systemd/system/hdybot.service <<EOF
 Description=HdyBot — Nursing Class A Assistant (24/7 WhatsApp Admin Control)
 After=network-online.target postgresql.service redis-server.service
 Wants=network-online.target postgresql.service redis-server.service
-StartLimitIntervalSec=0
+StartLimitIntervalSec=300
+StartLimitBurst=8
 
 [Service]
 Type=simple
@@ -290,6 +295,7 @@ EnvironmentFile=${ENV_FILE}
 ExecStart=/usr/bin/node ${APP_DIR}/dist/index.js
 Restart=always
 RestartSec=5
+MemoryMax=2G
 TimeoutStopSec=25
 KillSignal=SIGTERM
 UMask=0077
@@ -347,4 +353,4 @@ echo "==================================================================="
 echo
 echo "📲 Menunggu QR Code dari whatsapp-web.js (biasanya 5-10 detik saat Chrome headless start)..."
 echo "   (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)"
-exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 journalctl -u hdybot -f -n 80 -o cat
+exec bash "$0" --qr

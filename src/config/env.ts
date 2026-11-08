@@ -41,15 +41,22 @@ export const EnvSchema = z.object({
   }),
   OWNER_EMAIL: z.string().email().optional(),
   ADMIN_WHATSAPP_ALLOWLIST: phoneList,
-  ADMIN_PASSWORD: z.string().min(1).default('hedyfake'),
+  ADMIN_PASSWORD: z.string().optional(),
   ADMIN_REQUIRE_PASSWORD: bool(true),
   CLASS_NAME: z.string().default('Nursing Class A'),
   TIMEZONE: z.string().default('Asia/Jakarta'),
   APP_LOCALE: z.string().default('id-ID'),
 
+  GOOGLE_DRIVE_FOLDER_ID: z.string().regex(/^[\w-]+$/).default('1mMDceZROeLNxlxonHy9obtGKxSzGHIVy'),
+  GOOGLE_DRIVE_AUTH_MODE: z.literal('service_account').default('service_account'),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
+  GOOGLE_DRIVE_ALLOWED_CHATS: z.string().default('').transform(v => v.split(',').map(s => s.trim()).filter(Boolean)),
   DATABASE_URL: z.string().url().optional(),
   REDIS_URL: z.string().url().optional(),
 
+  SOUNDCLOUD_CLIENT_ID: z.string().optional(),
+  SOUNDCLOUD_CLIENT_SECRET: z.string().optional(),
+  MUSIC_LIBRARY_DIR: z.string().optional(),
   NVIDIA_API_KEY: z.string().optional().transform((v) => (v ? v : undefined)),
   NVIDIA_BASE_URL: z.string().url().default('https://integrate.api.nvidia.com/v1'),
   NVIDIA_MODEL_ULTRA: z.string().default('nvidia/nemotron-3-ultra-550b-a55b'),
@@ -101,6 +108,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   if (cfg.NODE_ENV === 'production' && !cfg.DATABASE_URL) {
     throw new Error('DATABASE_URL wajib di production');
+  }
+  if (cfg.WHATSAPP_PROVIDER !== 'mock' && cfg.ADMIN_REQUIRE_PASSWORD && !cfg.ADMIN_PASSWORD?.trim()) {
+    throw new Error('ADMIN_PASSWORD wajib untuk verifikasi admin');
   }
   return cfg;
 }

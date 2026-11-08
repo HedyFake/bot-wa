@@ -71,8 +71,8 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
       },
       'password "Hedyfake"',
     );
-    expect(lidVer.ok).toBe(true);
-    expect(lidVer.reason).toBe('password_verified');
+    expect(lidVer.ok).toBe(false);
+    expect(lidVer.reason).toBe('not_in_allowlist');
 
     // 4. Admin 082233038659 membalas '"hedyfake"' -> berhasil & otomatis menampilkan .dashboard yang tertunda
     const step3 = await dispatcher.handleInbound(hedyMsg('m3', '"hedyfake"'));
@@ -93,7 +93,10 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
       text: '.dashboard',
       receivedAt: new Date(),
     });
-    expect(groupMenu).toContain('DASHBOARD HDYBOT');
+    expect(groupMenu).toBeNull();
+    for (const cmd of ['.health', '.ai status', '.logs 20', '.db status', '.drive status', '.runtime', '.storage', '.scheduler status']) {
+      expect(await dispatcher.handleInbound({ ...hedyMsg('denied-' + cmd, cmd), chatJid: 'private-monitor@g.us', chatType: 'group', isGroupAdmin: true })).toBeNull();
+    }
 
     // 7. Admin melakukan .logout -> sesi terkunci kembali
     const step5 = await dispatcher.handleInbound(hedyMsg('m5', '.logout'));
@@ -176,7 +179,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     expect(fun.transformText('hilih', 'Selamat Pagi Kelas')).toBe('Silimit Pigi Kilis');
   });
 
-  it('diam di grup untuk chat tidak penting, ikut nimbrung saat disenggol/diajak Owner/Admin, berhenti saat "bot berhenti", dan auto-relay AI + Tabel dari PJMK Semester 5 ke Nursing Class A', async () => {
+  it('diam di grup untuk chat tidak penting, ikut nimbrung saat disenggol/diajak Owner/Admin, berhenti saat "bot berhenti", dan mengirim relay PJMK hanya setelah persetujuan Hedy', async () => {
     const config = loadConfig({
       OWNER_WHATSAPP: '082233038659',
       ADMIN_PASSWORD: 'hedyfake',
@@ -219,6 +222,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     });
     const schedule = new ScheduleService();
     const intelligence = new GroupIntelligenceService({ primaryGroupJid: 'nursing-class-a@g.us' });
+    intelligence.registerPjmkGroup('pjmk-sem5@g.us');
 
     const dispatcher = new CommandDispatcher({
       config,
@@ -269,9 +273,8 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: '@hdybot bot ikut nimbrung dan ngajak nongkrong sini di grup',
       receivedAt: new Date(),
     });
-    expect(ownerTag).toContain('NOTIFIKASI: BOT AI AKTIF');
-    expect(ownerTag).toContain('HdyBot Nimbrung');
-    expect(ownerTag).toContain('NIMBRUNG AKTIF');
+    expect(ownerTag).toContain('Halo');
+    expect(ownerTag).not.toMatch(/NOTIFIKASI|HdyBot Nimbrung|Filter AI/);
     expect(dispatcher.isNimbrungActive('nursing-class-a@g.us')).toBe(true);
 
     // 3. Saat mode nimbrung aktif, bot merespons obrolan anggota secara lancar dan memberi notif BOT AI AKTIF
@@ -284,8 +287,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'dasar goblok tolol',
       receivedAt: new Date(),
     });
-    expect(badChat).toContain('NOTIFIKASI: BOT AI AKTIF');
-    expect(badChat).toContain('Kualitas Pesan: *BURUK*');
+    expect(badChat).toBeNull();
 
     const goodChat = await dispatcher.handleInbound({
       providerMessageId: 'grp-good-1',
@@ -297,9 +299,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'Teman-teman, semangat belajar untuk persiapan praktikum besok ya',
       receivedAt: new Date(),
     });
-    expect(goodChat).toContain('NOTIFIKASI: BOT AI AKTIF');
-    expect(goodChat).toContain('HdyBot Nimbrung');
-    expect(goodChat).toContain('Kualitas=*BAIK*');
+    expect(goodChat).toBeNull();
 
     const memberFollowUp = await dispatcher.handleInbound({
       providerMessageId: 'grp-good-2',
@@ -311,8 +311,10 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'Halo bot, besok kuliah apa aja ya?',
       receivedAt: new Date(),
     });
-    expect(memberFollowUp).toContain('NOTIFIKASI: BOT AI AKTIF');
-    expect(memberFollowUp).toContain('HdyBot Nimbrung');
+    expect(memberFollowUp).toContain('Halo');
+    expect(memberFollowUp).not.toMatch(/NOTIFIKASI|Filter AI/);
+    expect(wa.sent.at(-1)).toMatchObject({ quotedMessageId: 'grp-good-2', mentionedJids: ['628555666777@s.whatsapp.net'] });
+    expect(await dispatcher.handleInbound({ providerMessageId: 'repeat', chatType: 'group', chatJid: 'nursing-class-a@g.us', senderJid: '628555666777@s.whatsapp.net', text: 'Halo bot, besok kuliah apa aja ya?', receivedAt: new Date() })).toBeNull();
 
     // 4. Owner bilang "bot berhenti" -> Bot berhenti nimbrung dan kembali diam
     const stopMsg = await dispatcher.handleInbound({
@@ -324,7 +326,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'bot berhenti',
       receivedAt: new Date(),
     });
-    expect(stopMsg).toContain('Berhenti Nimbrung');
+    expect(stopMsg).toContain('berhenti nongkrong');
     expect(dispatcher.isNimbrungActive('nursing-class-a@g.us')).toBe(false);
 
     // Setelah berhenti, chat santai kembali diabaikan (diam)
@@ -339,7 +341,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     });
     expect(casualAfterStop).toBeNull();
 
-    // 5. Pesan penting dari grup "PJMK Semester 5" otomatis diringkas oleh AI + Tabel dan dikirim ke "Nursing Class A"
+    // 5. Pesan PJMK diperiksa Hedy sebelum diteruskan.
     const pjmkImportant = await dispatcher.handleInbound({
       providerMessageId: 'pjmk-msg-1',
       chatJid: 'pjmk-sem5@g.us',
@@ -349,17 +351,28 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'Info penting dari Dosen Ns. Rina: perubahan jadwal kuliah Metodologi Penelitian pindah jam ke hari Rabu pukul 13:00 WIB di Ruang Lab 2, dan tugas baru dikumpulkan sebelum kuliah.',
       receivedAt: new Date(),
     });
-    expect(pjmkImportant).toContain('INFORMASI PENTING AKADEMIK — NURSING CLASS A');
-    expect(pjmkImportant).toContain('PJMK Semester 5');
-    expect(pjmkImportant).toContain('Metodologi Penelitian');
-    expect(pjmkImportant).toContain('| **Mata Kuliah** |');
-    expect(pjmkImportant).toContain('+------------------+------------------------------------------+');
+    expect(pjmkImportant).toBeNull();
+    const preview = wa.sent.at(-1)!;
+    expect(preview.chatJid).toBe('6282233038659@s.whatsapp.net');
+    expect(preview.text).toContain('boleh saya kirim');
+    const id = preview.text.match(/\.relay kirim (\w+)/)![1];
+    const dm = (msgId: string, text: string) => ({providerMessageId: msgId, chatType: 'private' as const, chatJid: preview.chatJid, senderJid: preview.chatJid, text, receivedAt: new Date()});
+    expect(await dispatcher.handleInbound({...dm('spoof',' .relay kirim ' + id), chatType:'group', chatJid:'lain@g.us'})).toBeNull();
+    await dispatcher.handleInbound(dm('login-relay','.login ' + config.ADMIN_PASSWORD));
+    expect(await dispatcher.handleInbound({ ...dm('approval','ya'), quoted: { providerMessageId: 'mock-out-' + wa.sent.findIndex(m => m === preview) } })).not.toContain('sudah dikirim');
+    const previewNumber = wa.sent.indexOf(preview) + 1;
+    expect(await dispatcher.handleInbound({ ...dm('approval-quoted','ya'), quoted: { providerMessageId: 'mock-out-' + previewNumber } })).toContain('sudah dikirim');
+    expect(await dispatcher.handleInbound(dm('repeat-approval','.relay kirim ' + id))).toContain('sudah diproses');
+    expect(wa.sent.filter(m => m.chatJid === 'nursing-class-a@g.us' && m.text.startsWith('Info penting dari Dosen'))).toHaveLength(1);
 
-    // Pastikan pesan terkirim ke grup Nursing Class A
-    const sentToClassA = wa.sent.find(
-      (s) => s.chatJid === 'nursing-class-a@g.us' && s.text.includes('INFORMASI PENTING AKADEMIK — NURSING CLASS A'),
-    );
-    expect(sentToClassA).toBeDefined();
+    await dispatcher.handleInbound({providerMessageId:'pjmk-msg-2',chatType:'group',chatJid:'pjmk-sem5@g.us',senderJid:'628999888777@s.whatsapp.net',text:'Info penting: jadwal ujian besok pukul 10.00 di ruang kelas.',receivedAt:new Date()});
+    const secondPreview = wa.sent.at(-1)!;
+    const secondId = secondPreview.text.match(/\.relay kirim (\w+)/)![1];
+    const stranger = { ...dm('foreign',' .relay kirim ' + secondId), senderJid:'628555111777@s.whatsapp.net', chatJid:'628555111777@s.whatsapp.net' };
+    expect(await dispatcher.handleInbound(stranger)).toContain('Akses ditolak');
+    expect(await dispatcher.handleInbound(dm('deny',' .relay tolak ' + secondId))).toContain('tidak diteruskan');
+    expect(await dispatcher.handleInbound(dm('deny-replay','.relay kirim ' + secondId))).toContain('sudah diproses');
+    expect(wa.sent.filter(m => m.chatJid === 'nursing-class-a@g.us' && m.text.startsWith('Info penting: jadwal ujian'))).toHaveLength(0);
 
     // 6. Verifikasi Pengurus Kelas, 36 Anggota Kelas + NIM, dan 23 Nomor Dosen Lengkap
     const officersReply = await dispatcher.handleInbound({

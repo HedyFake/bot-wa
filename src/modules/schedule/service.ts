@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import type { ScheduleDatabase } from './database.js';
 import { resolve } from 'node:path';
 import { type ClassSeed, normalizedCourseName, parseSeed, WEEKDAYS } from '../../database/seed-schema.js';
 
@@ -110,13 +111,43 @@ const hhmmToMin = (t: string): number => {
 };
 
 export class ScheduleService {
-  private readonly seed: ClassSeed;
-  private readonly exceptions = new Map<string, ScheduleExceptionRecord>();
+  private snapshot: ClassSeed;
+  private database?: ScheduleDatabase;
+  private loadedAt = 0;
+  private loading?: Promise<void>;
+  private get seed() {
+    if (this.database && !this.loadedAt) throw new Error('Jadwal database belum tersedia');
+    return this.snapshot;
+  }
+  private exceptions = new Map<string, ScheduleExceptionRecord>();
 
   constructor(seedData?: ClassSeed) {
-    this.seed =
+    this.snapshot =
       seedData ??
       parseSeed(JSON.parse(readFileSync(resolve('data/class-5a.seed.json'), 'utf8')));
+  }
+
+  useDatabase(database: ScheduleDatabase) { this.database = database; }
+
+  async refresh(force = false): Promise<void> {
+    if (!this.database) return;
+    if (this.loading) {
+      await this.loading;
+      if (!force) return;
+    }
+    if (!force && Date.now() - this.loadedAt < 15_000) return;
+    this.loading = this.database.read().then(({ data, exceptions }) => {
+      const checked = parseSeed(data);
+      const next = new Map<string, ScheduleExceptionRecord>();
+      for (const ex of exceptions) {
+        if (ex.kind !== 'cancelled' && ex.kind !== 'room_changed' && ex.kind !== 'moved') throw new Error('Jenis pengecualian jadwal tidak dikenal');
+        next.set(ex.date + '|' + ex.weekday + '|' + ex.startTime, { ...ex, kind:ex.kind });
+      }
+      this.snapshot = checked;
+      this.exceptions = next;
+      this.loadedAt = Date.now();
+    }).catch(e => { this.loadedAt = 0; throw e; }).finally(() => { this.loading = undefined; });
+    await this.loading;
   }
 
   static resolveWeekday(input: string): WeekdayName | null {
@@ -188,7 +219,7 @@ export class ScheduleService {
             ? { kind: ex.kind, newStart: ex.newStart, newEnd: ex.newEnd, newRoom: ex.newRoom, note: ex.note }
             : undefined,
         };
-      });
+      }).sort((a,b) => a.startTime.localeCompare(b.startTime));
   }
 
   getToday(now = new Date()): { dateIso: string; weekdayLabel: string; sessions: ScheduleSessionView[] } {
@@ -250,6 +281,7 @@ export class ScheduleService {
         : '';
       return `${idx + 1}. *${s.startTime}–${s.endTime} WIB* — ${s.courseName} (${s.creditsSks} SKS)${exTxt}\n   ${roomTxt} | Status: ${s.status}`;
     });
-    return `${header}\n${lines.join('\n')}\n⏸️ Istirahat: 11:20–12:30 WIB`;
+    const breaks = this.seed.breaks.map(b => '⏸️ ' + b.label + ' · ' + b.start_time + '–' + b.end_time + ' WIB');
+    return [header, ...lines, ...breaks].join('\n');
   }
 }

@@ -17,9 +17,11 @@ backups/
 
 .pg-*.local
 
-# Arsip referensi pihak ketiga (berisi kredensial lama yang terekspos) — jangan commit
+# Arsip referensi pihak ketiga (berisi kredensial lama yang terekspos) ï¿½ jangan commit
 reference/
 # Data runtime bot
 data/runtime/
 logs/
 
+
+secrets/

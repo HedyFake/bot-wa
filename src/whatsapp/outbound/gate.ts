@@ -86,6 +86,14 @@ export class OutboundGate {
     return this.emergencyStopped;
   }
 
+  private remember(key: string, result: SendResult) {
+    if (this.sentKeys.size >= 10_000) {
+      const oldest = this.sentKeys.keys().next().value;
+      if (oldest !== undefined) this.sentKeys.delete(oldest);
+    }
+    this.sentKeys.set(key, result);
+  }
+
   async send(msg: OutboundMessage, opts?: { isAdminPrivateReply?: boolean }): Promise<SendResult> {
     const prev = this.sentKeys.get(msg.idempotencyKey);
     if (prev) return prev;
@@ -109,13 +117,13 @@ export class OutboundGate {
       }
       if (this.dryRun) {
         const res: SendResult = { ok: true, dryRun: true, providerMessageId: `dryrun-${msg.idempotencyKey}` };
-        this.sentKeys.set(msg.idempotencyKey, res);
+        this.remember(msg.idempotencyKey, res);
         return res;
       }
     }
 
     const res = await this.provider.send(msg);
-    if (res.ok) this.sentKeys.set(msg.idempotencyKey, res);
+    if (res.ok) this.remember(msg.idempotencyKey, res);
     return res;
   }
 }

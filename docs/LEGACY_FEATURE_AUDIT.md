@@ -11,7 +11,7 @@ Dokumen ini mengelompokkan seluruh temuan audit terhadap `akirabotv1-main.zip` (
 - **Kutipan, Ibadah, & Permainan Aman**: `.quotes`, `.quotesislami`, `.quotesmotivasi`, `.faktaunik`, `.pantun`, `.doaharian`, `.listsurah`, `.jadwalsholat`, `.truth`, `.dare`, `.dadu`, `.koin`, `.suit`, `.apakah`, `.kapankah`, `.bisakah`, `.kerangajaib`, `.rate`, `.tebakkata`, `.caklontong`, `.family100`, `.mathquiz`, `.jawab`, `.nyerah`, `.hilih`, `.alay`, `.besarkecil`, `.balikhuruf`, `.namaninja`, `.afk`, `.unafk`.
 
 ## 2. Bangun Ulang dari Nol dengan Arsitektur Modern
-- **Koneksi WhatsApp**: `WWebJsWhatsAppProvider` (`whatsapp-web.js` + `qrcode-terminal` + Google Chrome Stable `.deb`) dengan nomor bot dinamis/random dan verifikasi nomor admin `082233038659` + password `hedyfake`.
+- **Koneksi WhatsApp**: `WWebJsWhatsAppProvider` (`whatsapp-web.js` + `qrcode-terminal` + Google Chrome Stable `.deb`) dengan nomor bot dinamis/random dan verifikasi nomor admin `082233038659` + password `<password admin dari konfigurasi>`.
 - **Database**: PostgreSQL + Prisma ORM (21 model) + state runtime persisten.
 - **AI Router**: NVIDIA Nemotron (`lightning`, `super-vl`, `ultra`) dengan circuit breaker dan fallback deterministik.
 - **Group Intelligence & Approval**: Klasifikasi pesan grup sumber, antrean `.pending`, `.approve`, `.reject`, `.send` + nonce satu kali `.confirm`.

@@ -8,11 +8,11 @@
 - **Keputusan:** Menggunakan `WWebJsWhatsAppProvider` sebagai provider utama dengan browser `/usr/bin/google-chrome-stable` (`.deb` resmi Google, bukan paket Snap `chromium-browser` Ubuntu).
 - **Alasan:** Di Ubuntu Server 22.04/24.04, `chromium-browser` berbasis Snap sering ditolak ketika dijalankan di bawah daemon background. Google Chrome Stable `.deb` berjalan stabil 24/7 dan langsung merender QR Code ASCII di terminal melalui `qrcode-terminal`.
 
-## ADR-003: Nomor Bot Dinamis/Random + Nomor Admin Tetap (`082233038659`) + Password Interaktif (`hedyfake`)
+## ADR-003: Nomor Bot Dinamis/Random + Nomor Admin Tetap (`082233038659`) + Password Interaktif (`<password admin dari konfigurasi>`)
 - **Keputusan:**
   1. Nomor WhatsApp bot tidak di-hardcode sehingga Hedy bebas mengganti nomor bot kapan saja cukup dengan scan QR baru.
   2. Nomor admin kontrol ditetapkan ke `082233038659` (`+6282233038659`).
-  3. Saat admin pertama kali memulai sesi chat pribadi dengan bot, bot meminta password admin. Ketika admin membalas `hedyfake`, sesi admin dibuka menggunakan verifikasi `scrypt` + `timingSafeEqual` dan perintah yang tertunda langsung dijalankan otomatis.
+  3. Saat admin pertama kali memulai sesi chat pribadi dengan bot, bot meminta password admin. Ketika admin membalas `<password admin dari konfigurasi>`, sesi admin dibuka menggunakan verifikasi `scrypt` + `timingSafeEqual` dan perintah yang tertunda langsung dijalankan otomatis.
 
 ## ADR-004: Tanpa Port HTTP Terbuka (`3000`), Tanpa `ufw`, dan Tanpa `fail2ban`
 - **Keputusan:** Menghapus server HTTP lokal dan tidak memasang `ufw`/`fail2ban` pada `install.sh`.

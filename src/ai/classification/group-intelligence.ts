@@ -80,6 +80,7 @@ const UNIMPORTANT_CHITCHAT_PATTERNS: RegExp[] = [
 ];
 
 const IMPORTANT_CORE_PATTERNS: RegExp[] = [
+  /\bjadwal\s+(?:ujian|praktikum|perkuliahan)\b/i,
   /\b(kelas\s+dibatalkan|kuliah\s+batal|perubahan\s+jadwal|jadwal\s+pengganti|pindah\s+ruang|pindah\s+jam|ujian\s+dimajukan|deadline\s+hari\s+ini)\b/i,
   /\b(tugas\s+baru|tugas\s+kelompok|tugas\s+individu|deadline|dikumpulkan|pengumpulan|presentasi|praktikum|lab\s+keperawatan|materi\s+kuliah|zoom|google\s+meet|gmeet|link\s+kuliah|uts|uas|kuis|osce|soc|pjmk|dosen|kontrak\s+kuliah|rps|absensi|presensi)\b/i,
 ];
@@ -235,57 +236,7 @@ export function formatStructuredTableAnnouncement(opts: {
 }): string {
   const { sourceGroupName, rawText, analysis, fields, aiSummary } = opts;
   const cleanSummary = (aiSummary ?? analysis.summary ?? rawText).trim();
-  const pad = (str: string, len: number) => {
-    const s = str.replace(/\r?\n/g, ' ').trim();
-    return s.length >= len ? s.slice(0, len - 1) + '…' : s + ' '.repeat(len - s.length);
-  };
-
-  const mdTable = [
-    '| Komponen Informasi | Detail Lengkap untuk Nursing Class A |',
-    '| :--- | :--- |',
-    `| **Sumber Informasi** | ${sourceGroupName} |`,
-    `| **Status & Sifat Pesan** | ${analysis.category} (Kualitas: **${analysis.quality.toUpperCase()}** / Sifat: **${analysis.significance.toUpperCase()}**) |`,
-    `| **Mata Kuliah** | ${fields.mataKuliah} |`,
-    `| **Agenda / Topik Inti** | ${fields.agendaTopik} |`,
-    `| **Waktu / Deadline** | ${fields.waktuDeadline} |`,
-    `| **Ruang / Media** | ${fields.ruangMedia} |`,
-    `| **Dosen / PJMK** | ${fields.dosenPjmk} |`,
-    `| **Tindakan Mahasiswa** | ${fields.tindakanMahasiswa} |`,
-  ].join('\n');
-
-  const boxTable = [
-    '```',
-    '+------------------+------------------------------------------+',
-    '| ASPEK            | KETERANGAN INTI (NURSING CLASS A)        |',
-    '+------------------+------------------------------------------+',
-    `| Sumber Grup      | ${pad(sourceGroupName, 40)} |`,
-    `| Mata Kuliah      | ${pad(fields.mataKuliah, 40)} |`,
-    `| Agenda / Topik   | ${pad(fields.agendaTopik, 40)} |`,
-    `| Waktu / Deadline | ${pad(fields.waktuDeadline, 40)} |`,
-    `| Ruang / Media    | ${pad(fields.ruangMedia, 40)} |`,
-    `| Dosen / PJMK     | ${pad(fields.dosenPjmk, 40)} |`,
-    `| Prioritas AI     | ${pad(`${analysis.category} (${analysis.significance})`, 40)} |`,
-    '+------------------+------------------------------------------+',
-    '```',
-  ].join('\n');
-
-  return [
-    `📢 *INFORMASI PENTING AKADEMIK — NURSING CLASS A (SEMESTER 5A)*`,
-    `🔄 _Diteruskan & Diringkas Otomatis oleh AI HdyBot dari Grup: *${sourceGroupName}*_`,
-    ``,
-    `🧠 *Ringkasan Jelas AI:*`,
-    `${cleanSummary}`,
-    ``,
-    `📊 *Tabel Ringkasan Cepat (Tampilan Kotak WA):*`,
-    boxTable,
-    ``,
-    `📋 *Tabel Detail Terstruktur:*`,
-    mdTable,
-    ``,
-    `✅ *Tindakan Wajib Mahasiswa 5A:*`,
-    `• ${fields.tindakanMahasiswa}`,
-    `• _Pesan Asli PJMK:_ "${rawText.slice(0, 260)}${rawText.length > 260 ? '...' : ''}"`,
-  ].join('\n');
+  return ['*Informasi kelas*', cleanSummary, '', 'Mata kuliah · ' + fields.mataKuliah, 'Waktu · ' + fields.waktuDeadline, 'Tempat · ' + fields.ruangMedia, 'Tindak lanjut · ' + fields.tindakanMahasiswa, '', 'Sumber · ' + sourceGroupName].join('\n');
 }
 
 /**
@@ -324,12 +275,11 @@ export class GroupIntelligenceService {
     reliability: 'official' | 'officer' | 'member' = 'member',
     autoRelayToClassA?: boolean,
   ): void {
-    const isPjmkName = /pjmk/i.test(name) || /pjmk/i.test(groupJid);
     this.activeSources.set(groupJid, {
       name,
       paused: false,
       reliability,
-      autoRelayToClassA: autoRelayToClassA ?? isPjmkName,
+      autoRelayToClassA: autoRelayToClassA ?? false,
     });
   }
 
@@ -342,13 +292,9 @@ export class GroupIntelligenceService {
     });
   }
 
-  isPjmkGroup(groupJid: string, chatName?: string): boolean {
+  isPjmkGroup(groupJid: string): boolean {
     const src = this.activeSources.get(groupJid);
-    if (src?.autoRelayToClassA) return true;
-    if (src && /pjmk/i.test(src.name)) return true;
-    if (/pjmk/i.test(groupJid)) return true;
-    if (chatName && /pjmk/i.test(chatName)) return true;
-    return false;
+    return Boolean(src?.autoRelayToClassA && !src.paused);
   }
 
   pauseSourceGroup(groupJid: string): boolean {
@@ -377,11 +323,6 @@ export class GroupIntelligenceService {
   /** Ingest pesan grup sumber; mengembalikan `null` jika grup tidak diizinkan atau duplikat. */
   ingest(msg: InboundMessage): AnalyzedGroupMessage | null {
     if (msg.chatType !== 'group') return null;
-
-    // Auto-daftarkan bila nama grup mengandung "PJMK" (contoh: "PJMK Semester 5")
-    if (!this.activeSources.has(msg.chatJid) && msg.chatName && /pjmk/i.test(msg.chatName)) {
-      this.registerPjmkGroup(msg.chatJid, msg.chatName);
-    }
 
     const src = this.activeSources.get(msg.chatJid);
     if (!src || src.paused) return null;

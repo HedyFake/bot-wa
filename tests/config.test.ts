@@ -37,7 +37,7 @@ describe('loadConfig', () => {
 
   it('baileys wajib opt-in eksplisit', () => {
     expect(() => loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys' })).toThrow(/WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS/);
-    expect(loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys', WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS: 'true' }).WHATSAPP_PROVIDER).toBe('baileys');
+    expect(loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys', WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS: 'true', ADMIN_PASSWORD: 'fixture' }).WHATSAPP_PROVIDER).toBe('baileys');
   });
 
   it('menerima alias env blueprint', () => {

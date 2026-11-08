@@ -6,6 +6,7 @@ export const REDACT_PATHS = [
   'password', '*.password', 'token', '*.token', 'secret', '*.secret',
   'session', '*.session', 'creds', '*.creds', 'otp', '*.otp', 'pin', '*.pin',
   'NVIDIA_API_KEY', '*.NVIDIA_API_KEY',
+  'SOUNDCLOUD_CLIENT_SECRET', '*.SOUNDCLOUD_CLIENT_SECRET', 'refresh_token', '*.refresh_token', 'access_token', '*.access_token',
   'ADMIN_PASSWORD', '*.ADMIN_PASSWORD',
   'adminPassword', '*.adminPassword',
 ];

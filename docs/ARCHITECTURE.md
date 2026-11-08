@@ -1,13 +1,13 @@
 # ARSITEKTUR SISTEM HDYBOT (`docs/ARCHITECTURE.md`)
 
 ## 1. Gambaran Umum
-HdyBot adalah asisten AI WhatsApp modular untuk **Nursing Class A (Semester 5A)** yang dikendalikan penuh melalui chat pribadi WhatsApp **Hedy** (`082233038659` / `+6282233038659`, verifikasi password `hedyfake`).
+HdyBot adalah asisten AI WhatsApp modular untuk **Nursing Class A (Semester 5A)** yang dikendalikan penuh melalui chat pribadi WhatsApp **Hedy** (`082233038659` / `+6282233038659`, verifikasi password `<password admin dari konfigurasi>`).
 
 ```mermaid
 flowchart TD
     WA["WhatsApp Web (wwebjs + qrcode-terminal)"] --> DEDUP["InboundDeduper"]
     DEDUP --> DISP["CommandDispatcher"]
-    DISP -->|Chat Pribadi Admin| AUTH["AdminAuthenticator (082233038659 + Password hedyfake)"]
+    DISP -->|Chat Pribadi Admin| AUTH["AdminAuthenticator (082233038659 + Password <password admin dari konfigurasi>)"]
     DISP -->|Pesan Grup Sumber| GI["GroupIntelligenceService"]
     AUTH --> PARSER["Command & Natural Language Parser"]
     PARSER --> SCHED["ScheduleService (Kelas 5A)"]

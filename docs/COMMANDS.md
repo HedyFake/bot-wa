@@ -1,14 +1,16 @@
 # KATALOG LENGKAP PERINTAH HDYBOT (`docs/COMMANDS.md`)
 
+Revisi 9 November 2026. Gunakan `.relay list` untuk pratinjau owner, `.keperawatan` untuk sembilan kategori Perawat.org, dan `.music <judul atau artis>` untuk pencarian musik. `.download` membuka sumber keperawatan, sedangkan `.download <id>` mengambil dokumen Drive. [Rincian](../IMPLEMENTATION_STATUS.md)
+
 > **Prefix Default:** `.`
 > **Nomor Admin Utama:** `082233038659` (`+6282233038659`)
-> **Password Admin:** `hedyfake` (ketika admin pertama kali chat ke bot, bot akan menanyakan password; cukup balas `hedyfake`)
+> **Password Admin:** `<password admin dari konfigurasi>` (ketika admin pertama kali chat ke bot, bot akan menanyakan password; cukup balas `<password admin dari konfigurasi>`)
 > **Nomor Bot:** Bebas/Random (bisa diganti kapan saja melalui scan QR Code)
 
 ## 1. Kontrol Privat Admin & Sistem (Hanya Chat Pribadi Hedy)
 | Perintah | Alias / Contoh | Fungsi |
 |---|---|---|
-| `.login <password>` | `.password hedyfake` | Membuka sesi kontrol admin (atau langsung balas `hedyfake` saat ditanya bot) |
+| `.login <password>` | `.password <password admin dari konfigurasi>` | Membuka sesi kontrol admin (atau langsung balas `<password admin dari konfigurasi>` saat ditanya bot) |
 | `.logout` | `.lock` | Mengunci kembali sesi admin |
 | `.dashboard` | `.admin overview` | Menampilkan ringkasan lengkap status WA, AI, grup sumber, review, & kuliah berikutnya |
 | `.status` | `.health`, `.system` | Pemeriksaan kesehatan (Health & Ready Check) database, WA, & NVIDIA AI |

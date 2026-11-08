@@ -1,5 +1,13 @@
 # CHANGELOG — HDYBOT
 
+## 9 November 2026
+
+- Relay PJMK sekarang menunggu keputusan Hedy di DM untuk isi dan tujuan yang ditampilkan. Persetujuan lewat kutipan, penolakan, klaim pengiriman, dan pencegahan replay disimpan.
+- Balasan nongkrong mengutip pengirim dengan teks percakapan biasa. NVIDIA merutekan permintaan bahasa alami ke perintah baca yang diizinkan.
+- Perawat.org menjadi sumber untuk sembilan menu keperawatan. SoundCloud menyediakan pencarian dan atribusi. Audio yang diizinkan dapat dilampirkan dari katalog lokal.
+- Perbaikan sebelumnya mencakup autentikasi, privasi pairing, reconnect, pengingat PostgreSQL, Drive baca-saja, sesi game, XP, dan monitoring.
+
+
 ## [0.2.0] - 2026-11-07
 ### Ditambahkan
 - **Entrypoint 24/7 PM2 (`start.js` & `ecosystem.config.cjs`)**: Mendukung `pm2 start start.js --name hdybot` dan `pm2 save` agar bot tetap berjalan terus-menerus setelah keluar dari SSH server.

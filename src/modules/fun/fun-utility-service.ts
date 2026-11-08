@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { questions } from './questions.js';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateSafeExternalUrl } from '../../security/guards.js';
 
@@ -47,7 +48,11 @@ export interface AfkEntry {
 }
 
 export interface ActiveQuizSession {
-  kind: 'tebakkata' | 'caklontong' | 'family100' | 'mathquiz';
+  daily?: string;
+  expiresAt?: number;
+  points?: number;
+  explanation?: string;
+  kind: 'bank' | 'tebakkata' | 'caklontong' | 'family100' | 'mathquiz';
   question: string;
   answer: string;
   hint: string;
@@ -76,7 +81,18 @@ export interface AcademicJournalItem {
   snippet: string;
 }
 
+export interface RelayDraft { id: string; source: string; target: string; text: string; previewId?: string; status: 'pending' | 'sending' | 'sent' | 'rejected' | 'uncertain' }
+
 export interface PersistedBotState {
+  relayDrafts?: Record<string, RelayDraft>;
+  primaryGroup?: string;
+  relaySources?: Record<string,string>;
+  rounds?: Record<string, ActiveQuizSession>;
+  rooms?: Record<string, { host: string; players: string[]; limit: number; seconds: number; level?: string; category: string }>;
+  gameHistory?: { chat: string; user: string; points: number; when: string; daily?: string }[];
+  dailyWinners?: Record<string,string>;
+  scores?: Record<string, number>;
+  nimbrung?: Record<string, boolean>;
   assignments: AssignmentItem[];
   reminders: CustomReminderItem[];
   announcements: AnnouncementDraft[];
@@ -317,7 +333,7 @@ const FAMILY100_BANK = [
 export class FunAndUtilityService {
   private state: PersistedBotState;
   private readonly persistPath?: string;
-  private readonly activeQuizzes = new Map<string, ActiveQuizSession>();
+
 
   constructor(opts?: { persistPath?: string }) {
     this.persistPath = opts?.persistPath;
@@ -347,7 +363,7 @@ export class FunAndUtilityService {
               },
         };
       } catch {
-        return structuredClone(DEFAULT_STATE);
+        throw new Error('State bot tidak dapat dibaca. Pulihkan data/runtime/bot-state.json dari backup.');
       }
     }
     return structuredClone(DEFAULT_STATE);
@@ -355,12 +371,48 @@ export class FunAndUtilityService {
 
   private saveState(): void {
     if (!this.persistPath) return;
-    try {
-      mkdirSync(dirname(this.persistPath), { recursive: true });
-      writeFileSync(this.persistPath, JSON.stringify(this.state, null, 2), 'utf8');
-    } catch {
-      // abaikan bila filesystem read-only pada test
-    }
+    mkdirSync(dirname(this.persistPath), { recursive: true });
+    const temp = this.persistPath + '.tmp';
+    writeFileSync(temp, JSON.stringify(this.state, null, 2), { mode: 0o600 });
+    renameSync(temp, this.persistPath);
+  }
+
+  relayDrafts() { return Object.values(this.state.relayDrafts ?? {}); }
+
+  saveRelay(draft: RelayDraft) {
+    this.state.relayDrafts ??= {};
+    this.state.relayDrafts[draft.id] = draft;
+    this.saveState();
+  }
+
+  getRelaySettings() { return { primary: this.state.primaryGroup, sources: { ...this.state.relaySources } }; }
+
+  setRelaySource(jid: string, name: string) {
+    this.state.relaySources ??= {};
+    this.state.relaySources[jid] = name;
+    this.saveState();
+  }
+
+  setRelayTarget(jid: string) {
+    this.state.primaryGroup = jid;
+    this.saveState();
+  }
+
+  getScores(): Record<string, number> { return { ...this.state.scores }; }
+
+  saveScores(scores: Record<string, number>) {
+    this.state.scores = scores;
+    this.saveState();
+  }
+
+  nimbrungActive(chat: string): boolean {
+    return this.state.nimbrung?.[chat] === true;
+  }
+
+  setNimbrung(chat: string, enabled: boolean): void {
+    this.state.nimbrung ??= {};
+    this.state.nimbrung[chat] = enabled;
+    this.saveState();
   }
 
   recordCommandUsage(command: string, chatJid: string): void {
@@ -883,7 +935,7 @@ export class FunAndUtilityService {
             const pdfUrl = r.pmcid ? `https://europepmc.org/articles/${r.pmcid}?pdf=render` : undefined;
             items.push({
               title: r.title.replace(/<[^>]+>/g, '').trim(),
-              authors: r.authorString || 'Tim Peneliti Akademik',
+              authors: r.authorString || 'Penulis belum tersedia',
               year: r.pubYear || 'Terbaru',
               journalName: r.journalTitle || 'PubMed / EuropePMC Journal',
               doiOrUrl: doiLink,
@@ -949,30 +1001,6 @@ export class FunAndUtilityService {
       } catch {
         // Fallback ke referensi kurasi akademik
       }
-    }
-
-    // 3. Fallback kurasi akademik apabila jaringan offline / tidak ada hasil
-    if (items.length === 0) {
-      items.push(
-        {
-          title: `Studi Literatur & Evidence-Based Nursing: ${query}`,
-          authors: 'Tim Peneliti Keperawatan Indonesia',
-          year: '2024–2026',
-          journalName: 'Google Scholar & Garuda Kemdikbud Repository',
-          doiOrUrl: scholarUrl,
-          pdfUrl: scholarPdfUrl,
-          snippet: `Kumpulan artikel jurnal ilmiah full-text PDF mengenai "${query}" untuk referensi tugas & Metodologi Penelitian Semester 5A.`,
-        },
-        {
-          title: `Systematic Review & Clinical Nursing Intervention on ${query}`,
-          authors: 'International Nursing Research Group',
-          year: '2024–2026',
-          journalName: 'PubMed / NCBI Nursing & Health Sciences',
-          doiOrUrl: pubmedUrl,
-          pdfUrl: scholarPdfUrl,
-          snippet: `Tinjauan sistematis intervensi asuhan keperawatan dan manajemen klinis berbasis bukti terkait "${query}".`,
-        },
-      );
     }
 
     return {
@@ -1146,7 +1174,65 @@ export class FunAndUtilityService {
     return `🐚 *Kerang Ajaib HdyBot*\n• Pertanyaan: _${q}_\n• Jawaban: *${answers[q.length % answers.length]!}*`;
   }
 
+  gameHint(chat: string) { return this.state.rounds?.[chat]?.hint ?? 'Belum ada permainan aktif.'; }
+
+  private storeRound(chat: string, round: ActiveQuizSession) {
+    this.state.rounds ??= {};
+    this.state.rounds[chat] = round;
+    this.saveState();
+  }
+
+  gameRoom(chat: string, user: string, args: string[], admin: boolean): string {
+    const [action, value] = args;
+    this.state.rooms ??= {};
+    let room = this.state.rooms[chat];
+    if (action === 'buat') {
+      if (room) return 'Sesi sudah tersedia. Gunakan .game gabung.';
+      const limit = value === 'duel' ? 2 : Number(value ?? 12);
+      if (!Number.isInteger(limit) || limit < 2 || limit > 50) return 'Jumlah peserta harus 2–50, atau gunakan .game buat duel.';
+      this.state.rooms[chat] = { host: user, limit, players: [user], seconds: 60, category: 'acak' };
+      this.saveState();
+      return '🎮 Sesi dibuat. Peserta dapat mengetik .game gabung. Pembuat memulai dengan .game mulai.';
+    }
+    if (action === 'riwayat') return (this.state.gameHistory ?? []).filter(h => h.chat === chat && h.user === user).slice(-10).map(h => h.when + ' · ' + h.points + ' poin').join('\n') || 'Belum ada riwayat permainan Anda di chat ini.';
+    if (action === 'mulai' && !room) return this.startBankQuiz(chat, value ?? 'acak', args[2]);
+    if (!room) return 'Buat sesi dahulu dengan .game buat [jumlah peserta|duel].';
+    if (action === 'gabung') {
+      if (room.players.includes(user)) return 'Anda sudah tergabung.';
+      if (room.players.length >= room.limit) return 'Jumlah peserta sudah penuh.';
+      room.players.push(user);
+    } else if (action === 'keluar') {
+      room.players = room.players.filter(p => p !== user);
+      if (!room.players.length) { delete this.state.rooms[chat]; this.giveUpQuiz(chat); }
+      else if (room.host === user) room.host = room.players[0]!;
+    } else {
+      if (room.host !== user && !admin) return 'Pengaturan sesi hanya untuk pembuat atau admin grup.';
+      if (action === 'stop') { delete this.state.rooms[chat]; this.giveUpQuiz(chat); }
+      else if (action === 'mulai') return this.startBankQuiz(chat, value ?? room.category, room.level);
+      else if (action === 'kategori' && (value === 'acak' || questions.some(q => q.category === value))) room.category = value!;
+      else if (action === 'level' && ['easy','medium','hard'].includes(value ?? '')) room.level = value;
+      else if (action === 'waktu' && Number.isInteger(Number(value)) && Number(value) >= 15 && Number(value) <= 300) room.seconds = Number(value);
+      else return 'Periksa kategori, level, atau waktu (15–300 detik).';
+    }
+    this.saveState();
+    return action === 'stop' || !this.state.rooms[chat] ? 'Sesi ditutup.' : '🎮 Peserta ' + room.players.length + '/' + room.limit + ' · ' + room.category + ' · ' + (room.level ?? 'semua level') + ' · ' + room.seconds + ' detik';
+  }
+
+  startBankQuiz(chat: string, category: string, level?: string, day?: string) {
+    const choices = questions.filter(q => (category === 'acak' || q.category === category) && (!level || q.level === level));
+    if (!choices.length) return 'Soal kategori atau level tersebut belum tersedia.';
+    const current = this.state.rounds?.[chat];
+    if (current && (!current.expiresAt || current.expiresAt > Date.now())) return 'Permainan masih berlangsung. Gunakan .jawab atau .nyerah.';
+    const index = day ? Number(day.replace(/-/g, '')) % choices.length : Math.floor(Math.random() * choices.length);
+    const q = choices[index]!;
+    const seconds = this.state.rooms?.[chat]?.seconds ?? 60;
+    this.storeRound(chat, { daily: day, kind: 'bank', question: q.prompt, answer: q.answer, hint: q.hint, explanation: q.explanation, points: { easy: 10, medium: 20, hard: 30 }[q.level], expiresAt: Date.now() + seconds * 1000 });
+    return ['🎮 *' + q.category + ' · ' + q.level + '*', q.prompt, 'Petunjuk: ' + q.hint, 'Waktu ' + seconds + ' detik. Balas dengan .jawab <jawaban>.'].join('\n');
+  }
+
   startQuiz(chatJid: string, kind: ActiveQuizSession['kind']): string {
+    const current = this.state.rounds?.[chatJid];
+    if (current && (!current.expiresAt || current.expiresAt > Date.now())) return 'Kuis masih aktif. Gunakan .jawab atau .nyerah.';
     if (kind === 'mathquiz') {
       const a = Math.floor(Math.random() * 20) + 5;
       const b = Math.floor(Math.random() * 15) + 3;
@@ -1156,13 +1242,13 @@ export class FunAndUtilityService {
         answer: String(a * b + 10),
         hint: 'Hitung perkalian terlebih dahulu lalu tambahkan 10.',
       };
-      this.activeQuizzes.set(chatJid, session);
+      this.storeRound(chatJid, session);
       return `🧮 *Kuis Matematika Cepat*\nSoal: *${session.question}*\nBalas dengan \`.jawab <angka>\``;
     }
 
     if (kind === 'caklontong') {
       const item = CAK_LONTONG_BANK[Math.floor(Math.random() * CAK_LONTONG_BANK.length)]!;
-      this.activeQuizzes.set(chatJid, {
+      this.storeRound(chatJid, {
         kind: 'caklontong',
         question: item.q,
         answer: item.a,
@@ -1173,7 +1259,7 @@ export class FunAndUtilityService {
 
     if (kind === 'family100') {
       const item = FAMILY100_BANK[Math.floor(Math.random() * FAMILY100_BANK.length)]!;
-      this.activeQuizzes.set(chatJid, {
+      this.storeRound(chatJid, {
         kind: 'family100',
         question: item.q,
         answer: item.a,
@@ -1187,7 +1273,7 @@ export class FunAndUtilityService {
       .split('')
       .sort((a, b) => a.localeCompare(b))
       .join(' - ');
-    this.activeQuizzes.set(chatJid, {
+    this.storeRound(chatJid, {
       kind: 'tebakkata',
       question: scrambled,
       answer: item.q.toLowerCase(),
@@ -1196,24 +1282,39 @@ export class FunAndUtilityService {
     return `🧩 *Tebak Kata Keperawatan*\nHuruf Acak: *${scrambled}*\nPetunjuk: _${item.hint}_\nBalas dengan \`.jawab <kata>\``;
   }
 
-  answerQuiz(chatJid: string, guessRaw: string): { ok: boolean; message: string } {
-    const session = this.activeQuizzes.get(chatJid);
+  answerQuiz(chatJid: string, guessRaw: string, user?: string): { ok: boolean; points?: number; message: string } {
+    const session = this.state.rounds?.[chatJid];
     if (!session) {
       return { ok: false, message: 'ℹ️ Belum ada kuis aktif di chat ini. Mulai dengan `.tebakkata`, `.caklontong`, `.family100`, atau `.mathquiz`.' };
     }
+    if (session.expiresAt && Date.now() >= session.expiresAt) return { ok: false, message: 'Waktu habis. ' + this.giveUpQuiz(chatJid) };
+    const room = this.state.rooms?.[chatJid];
+    if (user && room && !room.players.includes(user)) return { ok: false, message: 'Gabung dengan .game gabung sebelum menjawab.' };
     const guess = guessRaw.trim().toLowerCase();
     if (guess === session.answer.toLowerCase()) {
-      this.activeQuizzes.delete(chatJid);
-      return { ok: true, message: `🎉 *BENAR!* Jawabannya adalah *${session.answer.toUpperCase()}* (+15 XP).` };
+      if (user && session.daily) {
+        this.state.dailyWinners ??= {};
+        if (this.state.dailyWinners[user] === session.daily) return { ok: false, message: 'Tantangan harian Anda sudah selesai.' };
+        this.state.dailyWinners[user] = session.daily;
+      }
+      if (user) {
+        this.state.gameHistory ??= [];
+        this.state.gameHistory.push({ chat: chatJid, user, points: session.points ?? 15, when: new Date().toISOString(), daily: session.daily });
+        if (this.state.gameHistory.length > 1000) this.state.gameHistory.shift();
+      }
+      delete this.state.rounds![chatJid];
+      this.saveState();
+      return { ok: true, points: session.points ?? 15, message: `🎉 *BENAR!* Jawabannya adalah *${session.answer.toUpperCase()}* — ${session.explanation ?? session.hint}` };
     }
     return { ok: false, message: `❌ Belum tepat! Petunjuk: _${session.hint}_ (atau ketik \`.nyerah\` untuk melihat jawaban).` };
   }
 
   giveUpQuiz(chatJid: string): string {
-    const session = this.activeQuizzes.get(chatJid);
+    const session = this.state.rounds?.[chatJid];
     if (!session) return 'ℹ️ Tidak ada kuis yang sedang berlangsung.';
-    this.activeQuizzes.delete(chatJid);
-    return `🏳️ Kuis dihentikan. Jawaban yang benar adalah: *${session.answer.toUpperCase()}*.`;
+    delete this.state.rounds![chatJid];
+    this.saveState();
+    return `🏳️ Kuis dihentikan. Jawaban yang benar adalah: *${session.answer.toUpperCase()}*. ${session.explanation ?? session.hint}`;
   }
 
   transformText(mode: 'hilih' | 'alay' | 'besarkecil' | 'balikhuruf' | 'namaninja', input: string): string {

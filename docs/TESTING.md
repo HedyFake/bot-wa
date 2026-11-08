@@ -10,7 +10,7 @@ npm run build
 ## Cakupan Pengujian Otomatis (10 File Test Vitest)
 1. `tests/admin-auth.test.ts`: Normalisasi nomor, RBAC owner/admin, penolakan konteks grup, bootstrap pairing, rate-limit brute force, dan one-time nonce `ConfirmationManager`.
 2. `tests/media-and-fun.test.ts`:
-   - Alur interaktif tanya-jawab password admin (`hedyfake`) untuk nomor admin `082233038659`, penolakan password salah, penolakan nomor asing, eksekusi otomatis command tertunda, dan `.logout`.
+   - Alur interaktif tanya-jawab password admin (`<password admin dari konfigurasi>`) untuk nomor admin `082233038659`, penolakan password salah, penolakan nomor asing, eksekusi otomatis command tertunda, dan `.logout`.
    - Pembuatan stiker WebP (`.ttp`, `.sticker`), konversi `.toimg`, efek gambar `sharp`, kartu kutipan/jadwal, QR Code PNG, dan dokumen PDF berlabel DRAFT.
    - CRUD tugas, kalkulator matematika aman, konversi satuan, SSRF guard `.urlcheck`, kuis interaktif, dan transformasi teks.
 3. `tests/integration-e2e.test.ts`: Alur ujung-ke-ujung Group Intelligence -> deteksi prompt injection -> deduplikasi -> `.pending` -> `.approve` -> `.send` -> `.confirm` -> Emergency Stop (`.admin pause`).

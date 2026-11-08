@@ -6,22 +6,15 @@ Nomor bot bersifat bebas/random dan dapat diganti kapan saja:
   ```bash
   sudo ./install.sh --reset-wa
   ```
-- **Jika menggunakan PM2:**
-  ```bash
-  pm2 stop hdybot
-  rm -rf ./whatsapp-auth/* /var/lib/hdybot/whatsapp-auth/*
-  pm2 restart hdybot
-  pm2 logs hdybot --lines 100
-  ```
 Lalu scan QR Code yang tampil di terminal dengan nomor WhatsApp bot yang baru.
 
 ## 2. QR Code Tidak Muncul atau Ingin Melihat Ulang QR Code
-- Jalankan `sudo ./install.sh --qr` atau `pm2 logs hdybot --lines 100`.
-- File cache QR aktif juga disimpan sementara di `/tmp/hdybot-qr.txt` sampai WhatsApp berhasil ditautkan.
+- Jalankan `sudo ./install.sh --qr`.
+- File cache QR aktif juga disimpan sementara di `/var/lib/hdybot/whatsapp-auth/pairing-qr.txt` sampai WhatsApp berhasil ditautkan.
 
-## 3. Lupa atau Ingin Mengubah Password Admin (`hedyfake`)
-- Secara default, `ADMIN_PASSWORD=hedyfake`.
-- Untuk mengubahnya, edit `/opt/hdybot/.env` (atau `.env` lokal) pada baris `ADMIN_PASSWORD=hedyfake`, lalu restart dengan `sudo ./install.sh --restart` atau `pm2 restart hdybot`.
+## 3. Lupa atau Ingin Mengubah Password Admin (`<password admin dari konfigurasi>`)
+- Pada instalasi baru, installer menghasilkan password acak dan menyimpannya di file .env privat.
+- Untuk mengubahnya, edit `/opt/hdybot/.env` (atau `.env` lokal) pada baris `ADMIN_PASSWORD=<password admin dari konfigurasi>`, lalu restart dengan `sudo ./install.sh --restart` atau `pm2 restart hdybot`.
 
 ## 4. Menghentikan Pengiriman ke Grup Secara Darurat (Emergency Stop)
 - Kirim `.admin pause` dari chat pribadi WhatsApp Hedy (`082233038659`).

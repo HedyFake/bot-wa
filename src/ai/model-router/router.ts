@@ -80,7 +80,9 @@ export class ModelRouter {
   private readonly timeoutMs: number;
   private readonly unhealthy = new Set<ModelAlias>();
   private authHalted = false;
+  private inFlight = 0;
   private lastError?: string;
+  private callCount = 0;
   readonly usageHistory: UsageLogEntry[] = [];
   private readonly now: () => number;
 
@@ -185,8 +187,20 @@ export class ModelRouter {
     };
   }
 
+  private recordUsage(entry: UsageLogEntry) {
+    if (this.usageHistory.length >= 1000) this.usageHistory.shift();
+    this.usageHistory.push(entry);
+    this.callCount++;
+  }
+
   /** Jalankan permintaan ke NVIDIA dengan retry terbatas dan fallback kompatibel. */
   async invoke(req: RouteRequest): Promise<{ text: string; alias: ModelAlias; modelId: string; routeReason: string }> {
+    if (this.inFlight >= 3) throw new Error('ai_busy');
+    this.inFlight++;
+    try { return await this.invokeAvailable(req); } finally { this.inFlight--; }
+  }
+
+  private async invokeAvailable(req: RouteRequest) {
     if (this.authHalted) throw new Error('nvidia_auth_halted');
     if (!this.opts.transport) throw new Error('nvidia_transport_not_configured');
 
@@ -218,7 +232,7 @@ export class ModelRouter {
             ctrl.signal,
           );
           clearTimeout(timer);
-          this.usageHistory.push({
+          this.recordUsage({
             alias,
             modelId: spec.modelId,
             task: req.task,
@@ -240,7 +254,7 @@ export class ModelRouter {
           const pErr = err instanceof NvidiaProviderError ? err : new NvidiaProviderError('unknown_error');
           const code = pErr.isTimeout ? 'timeout' : pErr.statusCode ? `http_${pErr.statusCode}` : pErr.message;
           this.lastError = `${alias}:${code}`;
-          this.usageHistory.push({
+          this.recordUsage({
             alias,
             modelId: spec.modelId,
             task: req.task,
@@ -331,7 +345,7 @@ export class ModelRouter {
           healthy: !this.unhealthy.has('ultra'),
         },
       },
-      totalCalls: this.usageHistory.length,
+      totalCalls: this.callCount,
       lastError: this.lastError,
     };
   }

@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import QRCode from 'qrcode';
 import type {
   ConnectionState,
   InboundMediaPayload,
@@ -12,16 +11,12 @@ import type {
   WhatsAppProvider,
 } from './types.js';
 
-export const QR_CACHE_FILE = '/tmp/hdybot-qr.txt';
-export const QR_CACHE_TS_FILE = '/tmp/hdybot-qr.ts';
-export const QR_CACHE_PNG_FILE = '/tmp/hdybot-qr.png';
-export const PAIRING_CODE_CACHE_FILE = '/tmp/hdybot-pairing-code.txt';
-
 const DEFAULT_CHROME_USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 export interface WWebJsAdapterOptions {
   authDir: string;
+  maxMediaBytes?: number;
   executablePath?: string;
   pairingPhone?: string;
 }
@@ -63,58 +58,6 @@ function buildMatchedUserAgent(executablePath?: string): string {
     }
   }
   return DEFAULT_CHROME_USER_AGENT;
-}
-
-/**
- * Bersihkan proses Chrome yatim (orphan) yang masih memegang folder `session-hdybot`
- * serta file lock Chromium (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
- * tanpa menghapus data sesi IndexedDB yang sudah tersimpan.
- */
-function cleanupChromiumLocksAndStaleCache(authDir: string): void {
-  const absAuth = resolve(authDir);
-  const sessionDir = join(absAuth, 'session-hdybot');
-
-  // Pastikan tidak ada proses Chrome yatim dari run sebelumnya yang masih mengunci IndexedDB sessionDir
-  if (process.platform === 'linux' && existsSync(sessionDir)) {
-    try {
-      execFileSync('pkill', ['-9', '-f', sessionDir], {
-        stdio: ['ignore', 'ignore', 'ignore'],
-        timeout: 3000,
-      });
-    } catch {
-      // abaikan bila tidak ada proses Chrome yatim
-    }
-  }
-
-  // Hapus file lock Chromium yang tertinggal bila proses sebelumnya di-restart paksa
-  const removeLocksIn = (dir: string) => {
-    if (!existsSync(dir)) return;
-    for (const lockName of ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'Lockfile']) {
-      try {
-        rmSync(join(dir, lockName), { force: true });
-      } catch {
-        // abaikan
-      }
-    }
-  };
-
-  removeLocksIn(absAuth);
-  removeLocksIn(sessionDir);
-  removeLocksIn(join(sessionDir, 'Default'));
-
-  // Hapus folder .wwebjs_cache lokal agar whatsapp-web.js selalu mengambil versi WhatsApp Web terbaru
-  for (const cacheCandidate of [
-    resolve('.wwebjs_cache'),
-    join(absAuth, '.wwebjs_cache'),
-  ]) {
-    if (existsSync(cacheCandidate)) {
-      try {
-        rmSync(cacheCandidate, { recursive: true, force: true });
-      } catch {
-        // abaikan
-      }
-    }
-  }
 }
 
 /** Konversi JID internal ke format `whatsapp-web.js` (`@c.us` untuk chat pribadi). */
@@ -230,8 +173,11 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     this.setState('connecting');
     mkdirSync(this.opts.authDir, { recursive: true, mode: 0o700 });
-    cleanupChromiumLocksAndStaleCache(this.opts.authDir);
+    // Chromium memegang lock profilnya sendiri. Jangan hentikan proses lain.
 
+    const QR_CACHE_FILE = join(this.opts.authDir, 'pairing-qr.txt');
+    const QR_CACHE_TS_FILE = join(this.opts.authDir, 'pairing-qr.ts');
+    const PAIRING_CODE_CACHE_FILE = join(this.opts.authDir, 'pairing-code.txt');
     const authMarker = join(resolve(this.opts.authDir), '.hdybot-authenticated');
 
     const wwebPkg = 'whatsapp-web.js';
@@ -286,7 +232,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     console.log(
       `[WA] Memulai whatsapp-web.js (browser: ${executablePath ?? 'puppeteer-bundled'}${
-        normalizedPairingPhone ? `, mode: Pairing Code untuk +${normalizedPairingPhone}` : ', mode: QR Code Live'
+        normalizedPairingPhone ? `, mode: Pairing Code` : ', mode: QR Code Live'
       })...`,
     );
 
@@ -294,16 +240,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       dataPath: this.opts.authDir,
       clientId: 'hdybot',
     }) as { logout?: () => Promise<void> };
-    if (typeof localAuth.logout === 'function') {
-      const origLogout = localAuth.logout.bind(localAuth);
-      localAuth.logout = async () => {
-        try {
-          await origLogout();
-        } catch {
-          // Abaikan error EBUSY/ENOTEMPTY bila Chrome masih menutup file session
-        }
-      };
-    }
+    // LocalAuth.logout() menghapus profil Chromium. Arsipkan/ganti sesi hanya melalui tindakan owner.
+    localAuth.logout = async () => { this.setState('logged_out'); };
 
     const clientOptions: Record<string, unknown> = {
       authStrategy: localAuth,
@@ -509,28 +447,21 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
             '    Buka WA Bot -> Perangkat Tertaut -> Tautkan Perangkat',
             '    (Jika gagal/lama, ketik: sudo ./install.sh --reset-wa)',
             '    (Atau pakai kode 8 digit: sudo ./install.sh --pair 08xxxxxxxxxx)',
-            '    Nomor Admin Kontrol: 082233038659 (Password: hedyfake)',
+
             '===================================================================',
             asciiQr,
             '===================================================================',
             '',
           ].join('\n');
-          process.stdout.write(`${banner}\n`);
+
           try {
-            writeFileSync(QR_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o644 });
-            writeFileSync(QR_CACHE_TS_FILE, String(nowSec), { encoding: 'utf8', mode: 0o644 });
+            writeFileSync(QR_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o600 });
+            writeFileSync(QR_CACHE_TS_FILE, String(nowSec), { encoding: 'utf8', mode: 0o600 });
           } catch {
             // abaikan bila /tmp tidak dapat ditulis
           }
         });
 
-        // Simpan juga versi gambar PNG resolusi tajam di /tmp/hdybot-qr.png
-        void QRCode.toFile(QR_CACHE_PNG_FILE, qr, {
-          type: 'png',
-          width: 600,
-          margin: 4,
-          errorCorrectionLevel: 'M',
-        }).catch(() => undefined);
       } catch (err) {
         console.error('[WA] Gagal merender QR Code di terminal:', err);
       }
@@ -551,9 +482,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         '===================================================================',
         '',
       ].join('\n');
-      process.stdout.write(`${banner}\n`);
+
       try {
-        writeFileSync(PAIRING_CODE_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o644 });
+        writeFileSync(PAIRING_CODE_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o600 });
       } catch {
         // abaikan
       }
@@ -567,7 +498,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       try {
         rmSync(QR_CACHE_FILE, { force: true });
         rmSync(QR_CACHE_TS_FILE, { force: true });
-        rmSync(QR_CACHE_PNG_FILE, { force: true });
         rmSync(PAIRING_CODE_CACHE_FILE, { force: true });
         writeFileSync(authMarker, new Date().toISOString(), { encoding: 'utf8', mode: 0o600 });
       } catch {
@@ -580,7 +510,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       try {
         rmSync(QR_CACHE_FILE, { force: true });
         rmSync(QR_CACHE_TS_FILE, { force: true });
-        rmSync(QR_CACHE_PNG_FILE, { force: true });
         rmSync(PAIRING_CODE_CACHE_FILE, { force: true });
         writeFileSync(authMarker, new Date().toISOString(), { encoding: 'utf8', mode: 0o600 });
       } catch {
@@ -588,27 +517,19 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       }
       const widUser = client.info?.wid?.user ?? null;
       this._botPhoneNumber = widUser ? `+${widUser.replace(/\D/g, '')}` : null;
-      console.log(
-        `[WA] 🚀 HdyBot SIAP & TERHUBUNG! Nomor WA Bot Aktif: ${this._botPhoneNumber ?? 'terhubung'} | Admin Utama: +6282233038659`,
-      );
+      console.log('[WA] HdyBot terhubung.');
       this.setState('connected');
     });
 
-    client.on('auth_failure', (msg: unknown) => {
-      console.error('[WA] ❌ Autentikasi WhatsApp gagal / sesi rusak, membersihkan sesi lama agar QR baru bersih:', msg);
-      try {
-        rmSync(authMarker, { force: true });
-        for (const entry of readdirSync(this.opts.authDir)) {
-          rmSync(join(this.opts.authDir, entry), { recursive: true, force: true });
-        }
-      } catch {
-        // abaikan
-      }
+    client.on('auth_failure', () => {
+      if (this.client !== client) return;
+      console.warn('[WA] Autentikasi gagal. Periksa sesi melalui akses privat VPS.');
       this.setState('session_expired');
     });
 
     client.on('disconnected', (reason: unknown) => {
-      console.warn('[WA] ⚠️ Koneksi WhatsApp terputus:', reason);
+      if (this.client !== client) return;
+      console.warn('[WA] Koneksi WhatsApp terputus.');
       if (String(reason ?? '').toUpperCase().includes('LOGOUT')) {
         try {
           rmSync(authMarker, { force: true });
@@ -620,7 +541,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         this.client = null;
       }
       void client.destroy().catch(() => undefined);
-      this.setState('disconnected');
+      if (this._state !== 'session_expired') this.setState(String(reason).toUpperCase().includes('LOGOUT') ? 'logged_out' : 'disconnected');
     });
 
     const extractMedia = async (msgObj: WWebMessageLike): Promise<InboundMediaPayload | undefined> => {
@@ -628,6 +549,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       try {
         const downloaded = await msgObj.downloadMedia();
         if (!downloaded?.data || !downloaded?.mimetype) return undefined;
+        if (downloaded.data.length > Math.ceil((this.opts.maxMediaBytes ?? 25 * 1024 * 1024) / 3) * 4) return undefined;
         const buf = Buffer.from(downloaded.data, 'base64');
         return {
           mimeType: downloaded.mimetype,
@@ -650,21 +572,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const text = String(m.body ?? '').trim();
       if (!text && !m.hasMedia) return;
 
-      // Abaikan pesan balasan otomatis dari HdyBot sendiri agar tidak memicu loop
-      if (
-        m.fromMe &&
-        (/^[🟢🔴🤖🫡⚠️📊📡🔐✅❌]/.test(text) || text.includes('[NOTIFIKASI:') || text.includes('HdyBot Nimbrung'))
-      ) {
-        return;
-      }
-
-      // Jika pesan dikirim dari perangkat bot sendiri (fromMe), proses bila diawali '.' atau instruksi nimbrung/berhenti eksplisit
-      const isExplicitBotControl =
-        text.startsWith('.') ||
-        /\b(bot\s+(ikut\s+)?nimbrung|hdybot\s+(ikut\s+)?nimbrung|bot\s+(ayo\s+|ikut\s+)?nongkrong|bot\s+berhenti|hdybot\s+berhenti|bot\s+diam)\b/i.test(
-          text,
-        );
-      if (m.fromMe && !isExplicitBotControl) return;
+      // Pesan keluar (termasuk isi relay) tidak boleh masuk kembali sebagai perintah.
+      if (m.fromMe) return;
 
       const rawChatId = m.fromMe ? String(m.to ?? m.from ?? '') : String(m.from ?? '');
       if (!rawChatId || rawChatId === 'status@broadcast') return;
@@ -717,7 +626,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       }
 
       let chatName: string | undefined;
-      let isGroupAdmin = Boolean(m.fromMe);
+      let isGroupAdmin = false;
       if (isGroup && typeof m.getChat === 'function') {
         try {
           const chat = await m.getChat();
@@ -767,6 +676,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         chatType: isGroup ? 'group' : 'private',
         chatName,
         senderJid,
+        participantJid: isGroup ? m.author : undefined,
         pushName: m._data?.notifyName,
         isGroupAdmin,
         mentionedJids: mentionedJids.length ? mentionedJids : undefined,
@@ -785,14 +695,14 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     client.on('message_create', (msgRaw: unknown) => {
       void handleRawMessage(msgRaw).catch((err) => {
-        console.warn('[WA] Gagal memproses message_create:', err instanceof Error ? err.message : err);
+        console.warn('[WA] Gagal memproses message_create:', err instanceof Error ? err.name : 'Error');
       });
     });
 
     try {
       await client.initialize();
     } catch (err) {
-      this.setState('disconnected');
+      if (!['logged_out', 'session_expired'].includes(this.state())) this.setState('disconnected');
       throw err;
     }
   }
@@ -825,13 +735,15 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const chatId = toWWebChatId(msg.chatJid);
       let sent: { id?: { _serialized?: string } } | undefined;
 
+      const options: Record<string, unknown> = { sendSeen: false, quotedMessageId: msg.quotedMessageId, mentions: msg.mentionedJids?.map(toWWebChatId) };
+      if (msg.media && !this.MessageMediaCtor) return { ok: false, error: 'media_unavailable' };
       if (msg.media && this.MessageMediaCtor) {
         const mediaObj = new this.MessageMediaCtor(
           msg.media.mimeType,
           msg.media.data.toString('base64'),
           msg.media.filename,
         );
-        const options: Record<string, unknown> = { sendSeen: false };
+        if (msg.media.asDocument) options.sendMediaAsDocument = true;
         if (msg.media.asSticker) {
           options.sendMediaAsSticker = true;
           options.stickerAuthor = 'HdyBot — Nursing Class A';
@@ -843,10 +755,11 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         }
         sent = await this.client.sendMessage(chatId, mediaObj, options);
       } else {
-        sent = await this.client.sendMessage(chatId, msg.text, { sendSeen: false });
+        sent = await this.client.sendMessage(chatId, msg.text, options);
       }
 
-      const serializedId = sent?.id?._serialized ?? msg.idempotencyKey;
+      const serializedId = sent?.id?._serialized;
+      if (!serializedId) return { ok: false, error: 'send_failed' };
       this.botSentIds.add(serializedId);
       if (this.botSentIds.size > 2000) {
         const first = this.botSentIds.values().next().value;
@@ -859,7 +772,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     } catch (e) {
       return {
         ok: false,
-        error: e instanceof Error ? e.message : 'send_failed',
+        error: 'send_failed',
       };
     }
   }

@@ -8,7 +8,7 @@ sudo ./install.sh
 ```
 Skrip `install.sh` akan otomatis:
 - Memasang Node.js 22 LTS, PM2, PostgreSQL, Redis, dan **Google Chrome Stable (`.deb` native)** (tanpa `ufw` & tanpa `fail2ban` agar IP VPS Anda tidak pernah terblokir).
-- Mengonfigurasi `/opt/hdybot/.env` dengan `WHATSAPP_PROVIDER=wwebjs`, `OWNER_WHATSAPP=+6282233038659`, dan `ADMIN_PASSWORD=hedyfake`.
+- Mengonfigurasi `/opt/hdybot/.env` dengan `WHATSAPP_PROVIDER=wwebjs`, `OWNER_WHATSAPP=+6282233038659`, dan `ADMIN_PASSWORD=<password admin dari konfigurasi>`.
 - Menjalankan migrasi Prisma, seed jadwal Semester 5A, pengujian, build, dan menyalakan service 24/7 serta menampilkan **QR Code WhatsApp** di terminal.
 
 ## 2. Menjalankan 24/7 Menggunakan PM2 (`start.js`) Agar Tetap Jalan Saat Keluar dari Server
@@ -30,5 +30,5 @@ pm2 logs hdybot --lines 100
 2. **Login Admin (`082233038659`)**:
    - Dari HP utama Anda (`082233038659`), kirim pesan apa saja (mis. `.dashboard` atau `Halo`) ke nomor WhatsApp bot.
    - Bot akan membalas: `🔐 Verifikasi Password Admin HdyBot — Silakan balas pesan ini dengan password admin Anda:`
-   - Balas dengan: `hedyfake`
+   - Balas dengan: `<password admin dari konfigurasi>`
    - Bot akan mengaktifkan sesi kontrol penuh Anda dan langsung menjalankan perintah Anda.

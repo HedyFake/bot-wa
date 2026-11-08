@@ -5,7 +5,7 @@
 | No | Kategori Fitur (30 Kategori Master Prompt) | Status | Bukti Implementasi & Pengujian |
 |---:|---|---|---|
 | 1 | WhatsApp Core (`wwebjs` + `qrcode-terminal` + `baileys` + `mock`) | **IMPLEMENTED & TESTED** | `src/whatsapp/adapters/wwebjs.ts`, `tests/integration-e2e.test.ts` |
-| 2 | Owner Private Control (`082233038659` + password `hedyfake`) | **IMPLEMENTED & TESTED** | `src/admin/authentication/authenticator.ts`, `tests/media-and-fun.test.ts` |
+| 2 | Owner Private Control (`082233038659` + password `<password admin dari konfigurasi>`) | **IMPLEMENTED & TESTED** | `src/admin/authentication/authenticator.ts`, `tests/media-and-fun.test.ts` |
 | 3 | Group Management (allowlist, pause, resume, source/target) | **IMPLEMENTED & TESTED** | `src/whatsapp/outbound/gate.ts`, `src/admin/commands/dispatcher.ts` |
 | 4 | AI Group Intelligence (klasifikasi, ekstraksi, deteksi injeksi) | **IMPLEMENTED & TESTED** | `src/ai/classification/group-intelligence.ts`, `tests/integration-e2e.test.ts` |
 | 5 | Academic Assistant (`.ask`, `.summarize`, `.flashcard`, `.quiz`) | **IMPLEMENTED & TESTED** | `src/modules/materials/knowledge-base.ts`, `src/admin/commands/dispatcher.ts` |
@@ -28,7 +28,7 @@
 | 22 | Gamification (XP opt-in, `.leaderboard`, `.privacy gamification on\|off`) | **IMPLEMENTED & TESTED** | `src/modules/academic/extended-modules.ts`, `tests/extended-modules.test.ts` |
 | 23 | Analytics (`.stats`, `.report week\|month\|semester`, `.activity`) | **IMPLEMENTED & TESTED** | `src/modules/fun/fun-utility-service.ts`, `tests/media-and-fun.test.ts` |
 | 24 | Backup and Restore (`scripts/backup.sh` AES-256 + `scripts/restore.sh`) | **IMPLEMENTED & TESTED** | `scripts/backup.sh`, `scripts/restore.sh`, `install.sh` |
-| 25 | Security and Permission (RBAC, password `hedyfake`, nonce, SSRF, path guard) | **IMPLEMENTED & TESTED** | `src/security/guards.ts`, `tests/admin-auth.test.ts`, `tests/media-and-fun.test.ts` |
+| 25 | Security and Permission (RBAC, password `<password admin dari konfigurasi>`, nonce, SSRF, path guard) | **IMPLEMENTED & TESTED** | `src/security/guards.ts`, `tests/admin-auth.test.ts`, `tests/media-and-fun.test.ts` |
 | 26 | Logging and Monitoring (Pino redaction + `.health`, `.status`, `.dashboard`) | **IMPLEMENTED & TESTED** | `src/observability/logger.ts`, `tests/logger.test.ts`, `tests/health.test.ts` |
 | 27 | Administration (`.admin pause`, `.admin resume`, `.audit`, `.logout`) | **IMPLEMENTED & TESTED** | `src/admin/commands/dispatcher.ts`, `tests/integration-e2e.test.ts` |
 | 28 | API Integration (NVIDIA API, Open-Meteo `.cuaca`, Wikipedia `.wiki` + fallback) | **IMPLEMENTED & TESTED** | `src/ai/nvidia/registry.ts`, `src/modules/fun/fun-utility-service.ts` |

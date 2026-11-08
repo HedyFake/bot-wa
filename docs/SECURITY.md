@@ -1,11 +1,11 @@
 # KEAMANAN & PRIVASI (`docs/SECURITY.md`)
 
-## 1. Autentikasi Admin Berlapis (Nomor Admin + Password Interaktif `hedyfake`)
+## 1. Autentikasi Admin Berlapis (Nomor Admin + Password Interaktif `<password admin dari konfigurasi>`)
 - **Nomor Admin Utama**: `082233038659` (`+6282233038659`).
 - **Nomor Bot**: Bebas/random dan dapat diganti kapan saja melalui scan QR Code tanpa mengubah kode.
 - **Verifikasi Password Chat Pribadi**:
   - Ketika admin (`082233038659`) menghubungi bot di chat pribadi, bot meminta password terlebih dahulu.
-  - Password (`hedyfake` secara default, dikonfigurasi lewat `ADMIN_PASSWORD`) disimpan dalam bentuk hash `scrypt` dengan salt acak dan diverifikasi menggunakan `timingSafeEqual`.
+  - Password (`<password admin dari konfigurasi>` secara default, dikonfigurasi lewat `ADMIN_PASSWORD`) disimpan dalam bentuk hash `scrypt` dengan salt acak dan diverifikasi menggunakan `timingSafeEqual`.
   - Percobaan password yang gagal dibatasi oleh *rate limiter* (`maxAuthFailuresPerWindow`).
   - Command admin **ditolak keras** bila dikirim dari dalam grup (`group_context_not_admin`).
 

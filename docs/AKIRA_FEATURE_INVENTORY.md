@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | A001 | `help`, `menu`, `allmenu` | Menampilkan daftar perintah bot | Perlu rewrite | Diimplementasikan di `.menu` & `.help` (Mega Command Menu terstruktur) |
 | A002 | `ping`, `runtime`, `info`, `ingfo` | Cek kecepatan respons, waktu aktif, dan info bot | Bisa dipakai (rewrite TS) | Diimplementasikan di `.ping`, `.runtime`, `.info`, `.about`, `.status`, `.health` |
-| A003 | `owner`, `creator`, `admin` | Menampilkan identitas pemilik bot | Bisa dipakai (rewrite TS) | Diimplementasikan di `.owner` (Hedy `082233038659`, password `hedyfake`) |
+| A003 | `owner`, `creator`, `admin` | Menampilkan identitas pemilik bot | Bisa dipakai (rewrite TS) | Diimplementasikan di `.owner` (Hedy `082233038659`, password `<password admin dari konfigurasi>`) |
 | A004 | `sticker`, `stiker`, `s`, `stickerwm` | Konversi gambar ke stiker WhatsApp WebP | Perlu rewrite (`sharp`) | Diimplementasikan di `MediaService.imageToSticker` (`.sticker`, `.stiker`, `.s`) |
 | A005 | `ttp`, `attp` | Membuat stiker dari teks berwarna | Perlu rewrite (`sharp` SVG) | Diimplementasikan di `MediaService.textToSticker` (`.ttp <teks>`) |
 | A006 | `toimg` | Mengubah stiker WebP menjadi gambar PNG | Perlu rewrite (`sharp`) | Diimplementasikan di `MediaService.stickerToPng` (`.toimg`) |

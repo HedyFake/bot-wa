@@ -4,7 +4,7 @@
 |---|---|---|---|---|
 | Login via QR Code Terminal (`qrcode-terminal`) | **DIDUKUNG & TERUJI** | Didukung (eksperimental) | Tidak (menggunakan token bisnis) | Simulasi instan |
 | Nomor Bot Dinamis / Bisa Ganti-Ganti | **DIDUKUNG PENUH** | Didukung | Terikat WABA bisnis | Simulasi |
-| Verifikasi Pengirim Admin (`082233038659`) + Password (`hedyfake`) | **DIDUKUNG & TERUJI** | Didukung | Didukung | **DIDUKUNG & TERUJI** |
+| Verifikasi Pengirim Admin (`082233038659`) + Password (`<password admin dari konfigurasi>`) | **DIDUKUNG & TERUJI** | Didukung | Didukung | **DIDUKUNG & TERUJI** |
 | Resolusi Nomor Asli dari `@lid` / `@c.us` (`getContact`) | **DIDUKUNG (`wwebjs.ts`)** | Parsial | N/A | N/A |
 | Terima Pesan Grup Sumber (`@g.us`) | **DIDUKUNG** | Didukung | Terbatas pada akun bisnis tertentu | **DIDUKUNG & TERUJI** |
 | Kirim Pengumuman ke Grup Utama | **DIDUKUNG (dengan OutboundGate)** | Didukung | Terbatas | **DIDUKUNG & TERUJI** |

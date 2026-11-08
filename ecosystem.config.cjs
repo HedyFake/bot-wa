@@ -16,7 +16,7 @@ module.exports = {
       exec_mode: 'fork',
       autorestart: true,
       watch: false,
-      max_restarts: 999999,
+      max_restarts: 8,
       min_uptime: '10s',
       restart_delay: 5000,
       kill_timeout: 20000,

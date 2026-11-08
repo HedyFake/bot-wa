@@ -16,6 +16,7 @@ export interface OutboundMediaPayload {
   data: Buffer;
   mimeType: string;
   filename?: string;
+  asDocument?: boolean;
   asSticker?: boolean;
   asVoice?: boolean;
   caption?: string;
@@ -31,6 +32,7 @@ export interface InboundMessage {
   chatName?: string;
   /** JID pengirim dari metadata provider yang terverifikasi — BUKAN push name. */
   senderJid: string;
+  participantJid?: string;
   /** Push name hanya untuk tampilan, tidak untuk otorisasi. */
   pushName?: string;
   /** Apakah pengirim merupakan admin di grup WhatsApp tersebut. */
@@ -56,6 +58,8 @@ export interface OutboundMessage {
   text: string;
   /** Kunci idempotensi agar retry tidak mengirim ganda. */
   idempotencyKey: string;
+  quotedMessageId?: string;
+  mentionedJids?: string[];
   /** Lampiran media opsional (stiker, gambar, QR, PDF, audio TTS). */
   media?: OutboundMediaPayload;
 }
