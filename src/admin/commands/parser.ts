@@ -78,6 +78,7 @@ export type CanonicalCommand =
   | 'notes'
   | 'materials'
   | 'materials.search'
+  | 'journal.search'
   | 'ask'
   | 'groupgen'
   | 'calendar'
@@ -91,6 +92,7 @@ export type CanonicalCommand =
   | 'media.effect'
   | 'media.quotemaker'
   | 'media.schedulecard'
+  | 'media.imagesearch'
   | 'media.qr'
   | 'media.ocr'
   | 'media.tts'
@@ -223,13 +225,18 @@ export function parseCommand(textInput: string): ParsedCommand {
       case 'tahunajaran':
         return build('dot', 'class.info', [head, ...rest], rawRest);
       case 'anggota':
+      case 'mahasiswa':
+      case 'nim':
         return build('dot', 'class.members', rest, rawRest);
       case 'ketuakelas':
+      case 'komting':
+      case 'wakilkomting':
       case 'sekretaris':
       case 'bendahara':
       case 'wali':
       case 'pengurus':
-        return build('dot', 'class.officers', [head], head);
+      case 'pjmk':
+        return build('dot', 'class.officers', [head, ...rest], rawRest || head);
       case 'rules':
       case 'aturan':
         return build('dot', 'class.rules');
@@ -261,6 +268,14 @@ export function parseCommand(textInput: string): ParsedCommand {
 
       case 'materi': return build('dot', 'materials', rest, rawRest);
       case 'carimateri': return build('dot', 'materials.search', rest, rawRest);
+      case 'jurnal':
+      case 'carijurnal':
+      case 'journal':
+      case 'scholar':
+      case 'googlescholar':
+      case 'pubmed':
+      case 'garuda':
+        return build('dot', 'journal.search', rest, rawRest);
       case 'ask':
       case 'tanya':
       case 'brainly':
@@ -317,6 +332,14 @@ export function parseCommand(textInput: string): ParsedCommand {
       case 'kartujadwal':
       case 'kartuucapan':
         return build('dot', 'media.schedulecard', [head, ...rest], rawRest);
+      case 'gambar':
+      case 'carigambar':
+      case 'img':
+      case 'image':
+      case 'foto':
+      case 'carifoto':
+      case 'pinterest':
+        return build('dot', 'media.imagesearch', rest, rawRest);
       case 'qr':
       case 'qrcode':
         return build('dot', 'media.qr', rest, rawRest);
@@ -432,7 +455,10 @@ export function parseCommand(textInput: string): ParsedCommand {
       case 'cancel': return build('dot', 'cancel', rest, rawRest);
       case 'pair': return build('dot', 'pair', rest, rawRest);
       case 'matkul': return build('dot', 'courses', rest, rawRest);
-      case 'dosen': return build('dot', 'lecturers', rest, rawRest);
+      case 'dosen':
+      case 'nomordosen':
+      case 'kontakdosen':
+        return build('dot', 'lecturers', rest, rawRest);
       case 'besok': return build('dot', 'schedule.tomorrow');
       case 'mingguini': return build('dot', 'schedule.week');
       case 'kuliahberikutnya': return build('dot', 'schedule.next');
@@ -542,8 +568,27 @@ export function parseCommand(textInput: string): ParsedCommand {
   }
   if (/\bjadwal(\s+hari\s+ini|\s+5a)?\b/i.test(low)) return build('natural', 'schedule');
   if (/tugas.*deadline.*dekat|deadline\s+terdekat/i.test(low)) return build('natural', 'tasks', ['terdekat'], 'terdekat');
-  if (/daftar\s+dosen/i.test(low)) return build('natural', 'lecturers');
+  if (/(daftar|nomor|kontak)\s+dosen/i.test(low)) {
+    const q = text.replace(/^(tampilkan\s+|lihat\s+|cek\s+)?(daftar|nomor|kontak)\s+dosen\s*/i, '').trim();
+    return build('natural', 'lecturers', q ? q.split(/\s+/) : [], q);
+  }
   if (/daftar\s+(mata\s+kuliah|matkul)/i.test(low)) return build('natural', 'courses');
+  if (/(daftar|struktur)\s+pengurus|siapa\s+(komting|pengurus)|daftar\s+pjmk/i.test(low)) {
+    return build('natural', 'class.officers');
+  }
+  if (/(daftar|nama)\s+(anggota|mahasiswa)|daftar\s+nim/i.test(low)) {
+    return build('natural', 'class.members');
+  }
+  const journalMatch = text.match(/^(?:bot\s+|hdybot\s+|tolong\s+)?(?:cari(?:kan)?\s+jurnal|jurnal\s+tentang|link\s+jurnal|pdf\s+jurnal)\s+(.+)$/i);
+  if (journalMatch?.[1]) {
+    const q = journalMatch[1].trim();
+    return build('natural', 'journal.search', q.split(/\s+/), q);
+  }
+  const imageMatch = text.match(/^(?:bot\s+|hdybot\s+|tolong\s+)?(?:cari(?:kan)?\s+(?:gambar|foto)|kirim(?:kan)?\s+(?:gambar|foto))\s+(.+)$/i);
+  if (imageMatch?.[1]) {
+    const q = imageMatch[1].trim();
+    return build('natural', 'media.imagesearch', q.split(/\s+/), q);
+  }
 
   return build('none', 'unknown', [], text);
 }

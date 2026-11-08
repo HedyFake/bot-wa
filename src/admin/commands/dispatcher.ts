@@ -227,9 +227,16 @@ export class CommandDispatcher {
       return aiReply;
     }
 
-    // 6. Evaluasi command titik eksplisit (diawali '.') di semua grup yang allow
+    // 6. Evaluasi command titik eksplisit (diawali '.') atau permintaan pencarian jurnal/gambar/data kelas di semua grup yang allow
     const parsedGroup = parseCommand(rawText);
-    if (parsedGroup.kind === 'dot' && parsedGroup.command !== 'unknown') {
+    const allowedNaturalInGroup =
+      parsedGroup.kind === 'natural' &&
+      (parsedGroup.command === 'journal.search' ||
+        parsedGroup.command === 'media.imagesearch' ||
+        parsedGroup.command === 'class.officers' ||
+        parsedGroup.command === 'class.members' ||
+        parsedGroup.command === 'lecturers');
+    if ((parsedGroup.kind === 'dot' || allowedNaturalInGroup) && parsedGroup.command !== 'unknown') {
       if (parsedGroup.adminOnly && (!isOwnerOrAdmin || parsedGroup.requiresConfirmation)) {
         this.recordAudit(msg.senderJid, parsedGroup.command, 'denied_group_context', msg.chatJid);
         return autoRelayedText;
@@ -321,6 +328,16 @@ export class CommandDispatcher {
         .map((t, i) => `${i + 1}. *${t.title}* (${t.course}) — Deadline: *${t.dueDateIso}*`)
         .join('\n');
       return `Halo *${senderName}*! 📝 Ini daftar tugas aktif *${config.CLASS_NAME}* yang perlu diperhatikan:\n${list}\n\nYuk cicil bareng-bareng biar nggak sistem kebut semalam! 💪`;
+    }
+
+    // Cek pertanyaan seputar pengurus kelas / komting / PJMK
+    if (/\b(pengurus|komting|bendahara|pjmk|pj\s+matkul)\b/i.test(lower)) {
+      return `Siap *${senderName}*! Ini data struktur pengurus & PJMK kita:\n\n${this.fun.formatClassOfficers(config.CLASS_NAME)}`;
+    }
+
+    // Cek pertanyaan seputar nomor / kontak dosen
+    if (/\b(nomor\s+dosen|kontak\s+dosen|wa\s+dosen)\b/i.test(lower)) {
+      return `Halo *${senderName}*! Ini daftar nomor dosen lengkap:\n\n${this.fun.formatLecturerContacts()}`;
     }
 
     // Cek sapaan
@@ -656,15 +673,17 @@ export class CommandDispatcher {
             `• \`.admin pause\` (Emergency Stop) | \`.admin resume\` | \`.audit\` | \`.backup\`\n\n` +
             `📚 *2. Jadwal, Dosen, Tugas, & Akademik Kelas 5A*\n` +
             `• \`.jadwal\` | \`.jadwal senin..jumat\` | \`.besok\` | \`.mingguini\` | \`.kuliahberikutnya\`\n` +
-            `• \`.matkul\` | \`.dosen [matkul]\` | \`.materi\` | \`.carimateri <kata>\`\n` +
+            `• \`.matkul\` | \`.dosen [nama/matkul]\` | \`.nomordosen\` | \`.materi\` | \`.carimateri <kata>\`\n` +
+            `• \`.jurnal <topik>\` | \`.carijurnal <topik>\` (Cari Jurnal AI di Google Scholar/PubMed + Link & PDF)\n` +
             `• \`.tugas\` | \`.tugas add <matkul>|<judul>|<YYYY-MM-DD>|<ket>\` | \`.tugas done <id>\`\n` +
             `• \`.reminder\` | \`.reminder add <YYYY-MM-DD HH:mm>|<judul>\` | \`.reminder delete <id>\`\n` +
             `• \`.announce draft <prioritas>|<judul>|<isi>\` | \`.note add <judul>|<isi>\` | \`.note list\`\n` +
-            `• \`.kelas\` | \`.anggota\` | \`.pengurus\` | \`.rules\` | \`.faq\` | \`.kalender\` | \`.countdown <YYYY-MM-DD>\`\n` +
-            `• \`.buatkelompok <jml> <nama1,nama2,...>\` | \`.suratizin <nama>|<matkul>|<tgl>|<alasan>\` | \`.notulensi\`\n\n` +
+            `• \`.kelas\` | \`.anggota [nama/nim]\` | \`.pengurus\` | \`.pjmk\` | \`.rules\` | \`.faq\` | \`.kalender\` | \`.countdown <YYYY-MM-DD>\`\n` +
+            `• \`.buatkelompok <jml> [nama1,nama2,...]\` | \`.suratizin <nama>|<matkul>|<tgl>|<alasan>\` | \`.notulensi\`\n\n` +
             `🧠 *3. AI Study Assistant (NVIDIA Nemotron)*\n` +
             `• \`.ask <pertanyaan>\` | \`.summarize <teks>\` | \`.flashcard <topik>\` | \`.quiz <topik>\` | \`.translate <bhs> <teks>\`\n\n` +
-            `🎨 *4. Media, Stiker, Gambar, QR Code, & PDF*\n` +
+            `🎨 *4. Media, Pencarian Gambar, Stiker, QR Code, & PDF*\n` +
+            `• \`.gambar <kata kunci>\` | \`.carigambar <kata kunci>\` | \`.img <kata kunci>\` (Cari & Kirim Gambar ke Grup/Chat)\n` +
             `• \`.sticker\` / \`.s\` (balas/kirim gambar jadi stiker WA) | \`.ttp <teks>\` (stiker teks) | \`.toimg\`\n` +
             `• \`.blur\` | \`.invert\` | \`.grayscale\` | \`.flip\` | \`.flop\` | \`.resize <w> <h>\` | \`.compress\`\n` +
             `• \`.quotemaker <kutipan>|<penulis>\` | \`.kartujadwal [hari]\` | \`.qr <teks/url>\`\n` +
@@ -686,32 +705,22 @@ export class CommandDispatcher {
           `🏥 *Profil Kelas — ${config.CLASS_NAME}*\n` +
             `• Program: *S1 Ilmu Keperawatan (${o.semester})*\n` +
             `• Tahun Ajaran: *${o.tahunAjaran}*\n` +
-            `• Ketua Kelas / Owner Bot: *${o.ketuaKelas}*\n` +
-            `• Sekretaris: ${o.sekretaris}\n` +
-            `• Bendahara: ${o.bendahara}\n` +
-            `• Wali Kelas: ${o.waliKelas}\n` +
+            `• KOMTING / Ketua Kelas: *${o.komting || o.ketuaKelas}*\n` +
+            `• Wakil Komting: ${o.wakilKetua}\n` +
+            `• Bendahara: *${o.bendahara}*\n` +
+            `• Total Anggota Kelas: *${this.fun.getClassMembers().length} Mahasiswa* (ketik \`.anggota\`)\n` +
+            `• Total Kontak Dosen: *${this.fun.getLecturerContacts().length} Dosen* (ketik \`.dosen\`)\n` +
             `• Total Mata Kuliah Aktif: *${schedule.listCourses().length} Matkul (${schedule.totalCourseCreditsSks()} SKS)*`,
         );
       }
 
       case 'class.officers': {
-        const o = this.fun.getClassOfficers();
-        return textOnly(
-          `👥 *Struktur Pengurus ${config.CLASS_NAME} (${o.semester})*\n` +
-            `• Ketua Kelas: *${o.ketuaKelas}*\n` +
-            `• Wakil Ketua: ${o.wakilKetua}\n` +
-            `• Sekretaris: ${o.sekretaris}\n` +
-            `• Bendahara: ${o.bendahara}\n` +
-            `• Dosen Wali: ${o.waliKelas}`,
-        );
+        return textOnly(this.fun.formatClassOfficers(config.CLASS_NAME));
       }
 
-      case 'class.members':
-        return textOnly(
-          `👩‍⚕️👨‍⚕️ *Anggota ${config.CLASS_NAME} (Semester 5A)*\n` +
-            `• Koordinator / Admin Utama: *${config.OWNER_NAME}* (\`${config.OWNER_WHATSAPP}\`)\n` +
-            `• Gunakan \`.buatkelompok <jumlah> <nama1, nama2, ...>\` untuk membagi anggota ke kelompok tugas/praktikum secara adil.`,
-        );
+      case 'class.members': {
+        return textOnly(this.fun.formatClassMembers(parsed.rawArgs || undefined, config.CLASS_NAME));
+      }
 
       case 'class.rules':
         return textOnly(
@@ -943,14 +952,17 @@ export class CommandDispatcher {
 
       case 'lecturers':
       case 'schedule.today_lecturers': {
-        const list = schedule.listLecturers(parsed.rawArgs || undefined);
-        if (!list.length) return textOnly('📭 Tidak ditemukan data dosen untuk kata kunci tersebut.');
-        const lines = list.map((l, i) => `${i + 1}. [${l.course_code}] ${l.raw_name} (${l.verification_status})`);
-        return textOnly(
-          `👩‍🏫 *Daftar Asosiasi Dosen Semester 5A*\n` +
-            lines.join('\n') +
-            `\n_Catatan: Daftar ini adalah tim dosen per mata kuliah dari data awal, bukan penugasan dosen per sesi._`,
-        );
+        const q = parsed.rawArgs || undefined;
+        const contactsText = this.fun.formatLecturerContacts(q);
+        const list = schedule.listLecturers(q);
+        if (!q) {
+          return textOnly(contactsText);
+        }
+        const assocLines = list.map((l, i) => `${i + 1}. [${l.course_code}] ${l.raw_name}`);
+        const assocBlock = assocLines.length
+          ? `\n\n📚 *Tim Dosen Pengampu Mata Kuliah Terkait:*\n${assocLines.join('\n')}`
+          : '';
+        return textOnly(`${contactsText}${assocBlock}`);
       }
 
       // ==================== TUGAS, REMINDER, PENGUMUMAN, CATATAN ====================
@@ -1117,6 +1129,105 @@ export class CommandDispatcher {
         );
       }
 
+      case 'journal.search': {
+        const rawQuery = parsed.rawArgs.replace(/^pdf\s+/i, '').trim() || msg.quoted?.text?.trim() || '';
+        if (!rawQuery) {
+          return textOnly(
+            '⚠️ Format: `.jurnal <topik penelitian/keperawatan>` atau `.carijurnal <topik>`\n' +
+              'Contoh: `.jurnal asuhan keperawatan gerontik hipertensi`',
+          );
+        }
+        const searchRes = await this.fun.searchAcademicJournals(rawQuery);
+        let aiSynthesis = '';
+        try {
+          const journalContext = searchRes.items
+            .map(
+              (it, idx) =>
+                `${idx + 1}. Judul: "${it.title}" | Penulis: ${it.authors} (${it.year}) | Jurnal: ${it.journalName} | Link: ${it.doiOrUrl}`,
+            )
+            .join('\n');
+          const out = await router.invoke({
+            task: 'short_summary',
+            modality: 'text',
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'Kamu adalah asisten riset ilmiah keperawatan S1 Semester 5A (Metodologi Penelitian). Berikan telaah singkat, kata kunci PICO/klinis, dan manfaat praktis dari daftar jurnal berikut dalam Bahasa Indonesia (maksimal 5 kalimat padat).',
+              },
+              {
+                role: 'user',
+                content: `Topik Pencarian Jurnal: "${rawQuery}"\nDaftar Jurnal Terindeks:\n${journalContext}`,
+              },
+            ],
+          });
+          if (out.text && out.text.trim()) {
+            aiSynthesis = out.text.trim();
+          }
+        } catch {
+          // Gunakan telaah default bila router offline
+        }
+        if (!aiSynthesis) {
+          aiSynthesis =
+            `Topik "${rawQuery}" relevan untuk telaah pustaka (Literature Review) dan penyusunan proposal Metodologi Penelitian Keperawatan Semester 5A. ` +
+            `Gunakan tautan DOI/PubMed/Google Scholar di bawah ini atau dokumen PDF terlampir untuk mengunduh naskah full-text.`;
+        }
+
+        const itemBlocks = searchRes.items
+          .map(
+            (it, idx) =>
+              `*${idx + 1}. ${it.title}*\n` +
+              `   • Penulis & Tahun: ${it.authors} (${it.year})\n` +
+              `   • Publikasi: _${it.journalName}_\n` +
+              `   • 🔗 Link Jurnal/DOI: ${it.doiOrUrl}` +
+              (it.pdfUrl ? `\n   • 📄 Direct Link PDF: ${it.pdfUrl}` : ''),
+          )
+          .join('\n\n');
+
+        const textReply =
+          `🎓 *PENCARIAN JURNAL ILMIAH AI & GOOGLE SCHOLAR*\n` +
+          `🔎 Topik: *${rawQuery}*\n\n` +
+          `🧠 *Telaah AI (${config.BOT_NAME}):*\n${aiSynthesis}\n\n` +
+          `📚 *Daftar Jurnal & Artikel Ilmiah Terindeks:*\n${itemBlocks}\n\n` +
+          `🌐 *Link Pencarian Langsung (Google Scholar & Repositori):*\n` +
+          `• 🔎 Google Scholar: ${searchRes.scholarUrl}\n` +
+          `• 📄 Google Scholar (Khusus File PDF): ${searchRes.scholarPdfUrl}\n` +
+          `• 🇮🇩 Garuda Kemdikbud: ${searchRes.garudaUrl}\n` +
+          `• 🏥 PubMed / NCBI: ${searchRes.pubmedUrl}\n\n` +
+          `📎 _Dokumen PDF ringkasan & daftar link jurnal juga dilampirkan langsung pada pesan ini!_`;
+
+        const pdfBodyLines = [
+          `Topik Pencarian: ${rawQuery}`,
+          `Telaah AI: ${aiSynthesis}`,
+          `--- DAFTAR JURNAL ILMIAH & LINK REFERENSI ---`,
+          ...searchRes.items.map(
+            (it, idx) =>
+              `${idx + 1}. ${it.title} (${it.authors}, ${it.year}) - ${it.journalName}. Link: ${it.doiOrUrl}${it.pdfUrl ? ` | PDF: ${it.pdfUrl}` : ''}`,
+          ),
+          `--- TAUTAN REPOSITORI ---`,
+          `Google Scholar: ${searchRes.scholarUrl}`,
+          `Google Scholar PDF: ${searchRes.scholarPdfUrl}`,
+          `Garuda Kemdikbud: ${searchRes.garudaUrl}`,
+          `PubMed NCBI: ${searchRes.pubmedUrl}`,
+        ];
+        const pdfBuf = await this.media.generatePdfDocument({
+          title: `KATALOG JURNAL AI: ${rawQuery.toUpperCase().slice(0, 42)}`,
+          subtitle: `${config.CLASS_NAME} (Semester 5A) — Hasil Pencarian Jurnal Ilmiah (${now.toISOString().slice(0, 10)})`,
+          bodyLines: pdfBodyLines,
+          watermark: 'REFERENSI JURNAL AKADEMIK — HDYBOT AI RESEARCH ASSISTANT',
+        });
+
+        return {
+          text: textReply,
+          media: {
+            data: pdfBuf,
+            mimeType: 'application/pdf',
+            filename: `jurnal-${rawQuery.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'riset'}.pdf`,
+            caption: `📄 Ringkasan & Link Jurnal Ilmiah: ${rawQuery}`,
+          },
+        };
+      }
+
       case 'ask': {
         if (!parsed.rawArgs) return textOnly('⚠️ Format: `.ask <pertanyaan materi keperawatan>`');
         return textOnly(this.kb.answerGroundedQuestion(parsed.rawArgs).formattedAnswer);
@@ -1125,13 +1236,19 @@ export class CommandDispatcher {
       case 'groupgen': {
         const count = Number(parsed.args[0] ?? '0');
         const namesRaw = parsed.args.slice(1).join(' ');
-        const names = namesRaw.split(',').map((s) => s.trim()).filter(Boolean);
-        if (!count || names.length < count) {
-          return textOnly('⚠️ Format: `.buatkelompok <jumlah_kelompok> <nama1, nama2, nama3, ...>`');
+        const customNames = namesRaw.split(',').map((s) => s.trim()).filter(Boolean);
+        const names =
+          customNames.length >= count && count > 0
+            ? customNames
+            : this.fun.getClassMembers().map((m) => `${m.name} (${m.nim})`);
+        if (!count || count < 1 || names.length < count) {
+          return textOnly(
+            '⚠️ Format: `.buatkelompok <jumlah_kelompok>` (otomatis membagi 36 anggota Nursing Class A) atau `.buatkelompok <jumlah> <nama1, nama2, ...>`',
+          );
         }
         const groups = this.groupGen.generateFairGroups(names, count);
         return textOnly(
-          `👥 *Hasil Pembagian Kelompok Adil (${groups.length} Kelompok)*\n` +
+          `👥 *Hasil Pembagian Kelompok Adil (${groups.length} Kelompok — Total ${names.length} Mahasiswa)*\n` +
             groups
               .map(
                 (g) =>
@@ -1307,6 +1424,90 @@ export class CommandDispatcher {
             mimeType: 'image/png',
             filename: 'jadwal-5a.png',
             caption: `📅 ${title}`,
+          },
+        };
+      }
+
+      case 'media.imagesearch': {
+        const query = parsed.rawArgs.trim() || msg.quoted?.text?.trim() || '';
+        if (!query) {
+          return textOnly(
+            '⚠️ Format: `.gambar <kata kunci>` atau `.carigambar <kata kunci>`\n' +
+              'Contoh: `.gambar anatomi jantung manusia` atau `cari gambar stetoskop medis`',
+          );
+        }
+        const imgSearch = await this.fun.searchWebImage(query);
+        const googleImagesLink = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`;
+
+        if (imgSearch.foundOnline && imgSearch.imageBuffer) {
+          try {
+            const normalizedPng = await this.media.normalizeSearchImage(imgSearch.imageBuffer);
+            const captionText =
+              `🖼️ *Hasil Pencarian Gambar — ${query}*\n` +
+              `• Judul: *${imgSearch.title}*\n` +
+              `• Sumber: ${imgSearch.sourceUrl}\n` +
+              `• Google Images: ${googleImagesLink}`;
+            return {
+              text: captionText,
+              media: {
+                data: normalizedPng,
+                mimeType: 'image/png',
+                filename: `gambar-${query.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 35) || 'search'}.png`,
+                caption: captionText,
+              },
+            };
+          } catch {
+            // Lanjut ke generator visual AI jika buffer eksternal gagal dinormalisasi
+          }
+        }
+
+        let visualPoints: string[] = [];
+        try {
+          const out = await router.invoke({
+            task: 'short_summary',
+            modality: 'text',
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'Tuliskan tepat 4 poin deskripsi visual dan fakta singkat tentang topik berikut dalam Bahasa Indonesia, pisahkan setiap poin dengan baris baru.',
+              },
+              {
+                role: 'user',
+                content: `Topik gambar/visual: ${query}`,
+              },
+            ],
+          });
+          if (out.text && out.text.trim()) {
+            visualPoints = out.text
+              .split(/\r?\n/)
+              .map((s) => s.replace(/^[-•*\d.)\s]+/, '').trim())
+              .filter(Boolean);
+          }
+        } catch {
+          // Gunakan poin deskripsi lokal
+        }
+
+        if (!visualPoints.length) {
+          visualPoints = [
+            `Topik Visual: ${query}`,
+            `Referensi Belajar & Dokumentasi Visual ${config.CLASS_NAME} (Semester 5A)`,
+            `Klik tautan Google Images pada caption untuk galeri foto resolusi penuh.`,
+          ];
+        }
+
+        const visualPng = await this.media.generateVisualSearchCard(query, visualPoints);
+        const captionText =
+          `🖼️ *Ilustrasi & Pencarian Gambar — ${query}*\n` +
+          `• Galeri Google Images: ${googleImagesLink}\n` +
+          `• Sumber Referensi: ${imgSearch.sourceUrl}`;
+        return {
+          text: captionText,
+          media: {
+            data: visualPng,
+            mimeType: 'image/png',
+            filename: `visual-${query.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 35) || 'card'}.png`,
+            caption: captionText,
           },
         };
       }

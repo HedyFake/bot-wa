@@ -145,6 +145,34 @@ export class MediaService {
     return sharp(Buffer.from(svg)).png().toBuffer();
   }
 
+  /** Normalisasi buffer gambar hasil pencarian web menjadi PNG yang siap dikirim via WhatsApp. */
+  async normalizeSearchImage(input: Buffer): Promise<Buffer> {
+    return sharp(input)
+      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .png()
+      .toBuffer();
+  }
+
+  /** Buat poster visual infografis PNG saat pencari gambar membutuhkan visualisasi langsung (.gambar <topik>). */
+  async generateVisualSearchCard(topic: string, summaryLines: string[]): Promise<Buffer> {
+    const safeLines = summaryLines.flatMap((l) => wrapLines(l, 56, 3)).slice(0, 7);
+    const rows = safeLines
+      .map(
+        (line, idx) =>
+          `<text x="60" y="${175 + idx * 44}" font-family="sans-serif" font-size="22" fill="#f1f5f9">• ${escapeXml(line)}</text>`,
+      )
+      .join('');
+    const svg = `<svg width="900" height="580" viewBox="0 0 900 580" xmlns="http://www.w3.org/2000/svg">
+      <rect width="900" height="580" fill="#0f172a"/>
+      <rect x="24" y="24" width="852" height="532" rx="24" fill="#1e293b" stroke="#38bdf8" stroke-width="4"/>
+      <rect x="48" y="48" width="804" height="76" rx="14" fill="#0284c7" fill-opacity="0.25"/>
+      <text x="68" y="96" font-family="sans-serif" font-size="28" font-weight="bold" fill="#38bdf8">ILUSTRASI &amp; INFO VISUAL: ${escapeXml(topic.toUpperCase().slice(0, 34))}</text>
+      ${rows}
+      <text x="60" y="530" font-family="sans-serif" font-size="18" fill="#94a3b8">HdyBot AI Image Generator &amp; Search • Nursing Class A (Semester 5A)</text>
+    </svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+  }
+
   /** Buat gambar PNG QR Code dari teks atau tautan (.qr <teks>). */
   async generateQrCodePng(text: string): Promise<Buffer> {
     return QRCode.toBuffer(text, {

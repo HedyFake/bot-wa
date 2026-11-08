@@ -360,5 +360,89 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       (s) => s.chatJid === 'nursing-class-a@g.us' && s.text.includes('INFORMASI PENTING AKADEMIK — NURSING CLASS A'),
     );
     expect(sentToClassA).toBeDefined();
-  });
+
+    // 6. Verifikasi Pengurus Kelas, 36 Anggota Kelas + NIM, dan 23 Nomor Dosen Lengkap
+    const officersReply = await dispatcher.handleInbound({
+      providerMessageId: 'grp-officers-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: '.pengurus',
+      receivedAt: new Date(),
+    });
+    expect(officersReply).toContain('Hedi webiyanto');
+    expect(officersReply).toContain('Claudia, Velsy');
+    expect(officersReply).toContain('sesilia, Suci');
+    expect(officersReply).toContain('Gracia, Dina');
+    expect(officersReply).toContain('Ester, Meri');
+    expect(officersReply).toContain('Meita, Regina');
+    expect(officersReply).toContain('Revalina, Alfina');
+    expect(officersReply).toContain('Inneke, Fitri');
+    expect(officersReply).toContain('rika, Imel');
+
+    const membersReply = await dispatcher.handleInbound({
+      providerMessageId: 'grp-members-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: '.anggota',
+      receivedAt: new Date(),
+    });
+    expect(membersReply).toContain('36 Mahasiswa');
+    expect(membersReply).toContain('Ayu Wulandari');
+    expect(membersReply).toContain('2024030003');
+    expect(membersReply).toContain('Mochammad Hedy Wibianto');
+    expect(membersReply).toContain('2024030025');
+    expect(membersReply).toContain('Chlaudya Rumlety');
+    expect(membersReply).toContain('2024030115');
+
+    const lecturersReply = await dispatcher.handleInbound({
+      providerMessageId: 'grp-lecturers-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: '.dosen',
+      receivedAt: new Date(),
+    });
+    expect(lecturersReply).toContain('23 Dosen');
+    expect(lecturersReply).toContain('Aditya Nuraminudin Aziz');
+    expect(lecturersReply).toContain('08563303549');
+    expect(lecturersReply).toContain('Gilang Akbar Shobirin');
+    expect(lecturersReply).toContain('082226608763');
+
+    // 7. Verifikasi pencarian jurnal AI (.jurnal) dengan output link + PDF, serta pencarian gambar (.gambar) ke grup
+    const journalReply = await dispatcher.handleInbound({
+      providerMessageId: 'grp-journal-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: '.jurnal asuhan keperawatan gerontik hipertensi',
+      receivedAt: new Date(),
+    });
+    expect(journalReply).toContain('PENCARIAN JURNAL ILMIAH AI & GOOGLE SCHOLAR');
+    expect(journalReply).toContain('https://scholar.google.com/scholar');
+    const sentJournalPdf = wa.sent.find(
+      (s) => s.chatJid === 'nursing-class-a@g.us' && s.media?.mimeType === 'application/pdf',
+    );
+    expect(sentJournalPdf).toBeDefined();
+
+    const imageReply = await dispatcher.handleInbound({
+      providerMessageId: 'grp-image-1',
+      chatJid: 'nursing-class-a@g.us',
+      chatType: 'group',
+      chatName: 'Nursing Class A',
+      senderJid: '628111222333@s.whatsapp.net',
+      text: '.gambar anatomi jantung manusia',
+      receivedAt: new Date(),
+    });
+    expect(imageReply).toContain('anatomi jantung manusia');
+    const sentImage = wa.sent.find(
+      (s) => s.chatJid === 'nursing-class-a@g.us' && s.media?.mimeType === 'image/png',
+    );
+    expect(sentImage).toBeDefined();
+  }, 20000);
 });

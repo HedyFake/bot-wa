@@ -53,6 +53,29 @@ export interface ActiveQuizSession {
   hint: string;
 }
 
+export interface ClassMemberEntry {
+  no: number;
+  name: string;
+  nim: string;
+}
+
+export interface LecturerContactEntry {
+  no: number;
+  name: string;
+  phone: string;
+  waLink: string;
+}
+
+export interface AcademicJournalItem {
+  title: string;
+  authors: string;
+  year: string;
+  journalName: string;
+  doiOrUrl: string;
+  pdfUrl?: string;
+  snippet: string;
+}
+
 export interface PersistedBotState {
   assignments: AssignmentItem[];
   reminders: CustomReminderItem[];
@@ -62,6 +85,7 @@ export interface PersistedBotState {
   commandUsage: Record<string, number>;
   messageCountByChat: Record<string, number>;
   classOfficers: {
+    komting: string;
     ketuaKelas: string;
     wakilKetua: string;
     sekretaris: string;
@@ -69,8 +93,82 @@ export interface PersistedBotState {
     waliKelas: string;
     semester: string;
     tahunAjaran: string;
+    pjMatkul: {
+      dewasa: string;
+      anak: string;
+      menjelangAjal: string;
+      keperawatanAgregat: string;
+      entrepreneurship: string;
+      metopen: string;
+      gerontik: string;
+    };
   };
 }
+
+export const CLASS_MEMBERS_5A: ClassMemberEntry[] = [
+  { no: 1, name: 'Ayu Wulandari', nim: '2024030003' },
+  { no: 2, name: 'Elsa Syabina Fairus Ciinta', nim: '2024030006' },
+  { no: 3, name: 'Gracia Prisilia Reyaan', nim: '2024030007' },
+  { no: 4, name: 'Velsy Meliana Adu', nim: '2024030008' },
+  { no: 5, name: 'Juni Mardiani Putri Rahayu', nim: '2024030014' },
+  { no: 6, name: 'Nadyra', nim: '2024030015' },
+  { no: 7, name: 'Nailus Zulfatil Jannah', nim: '2024030016' },
+  { no: 8, name: 'Mayang Aprilidia', nim: '2024030017' },
+  { no: 9, name: 'Oktovina Fawan', nim: '2024030018' },
+  { no: 10, name: 'Aula Dina Ramadani', nim: '2024030019' },
+  { no: 11, name: 'Lukas Klaudio Rekubun', nim: '2024030020' },
+  { no: 12, name: 'Nur Suci Madubun', nim: '2024030021' },
+  { no: 13, name: 'Alda Santika', nim: '2024030022' },
+  { no: 14, name: 'Fania', nim: '2024030023' },
+  { no: 15, name: 'Dafina Nabilatus Syarifah', nim: '2024030024' },
+  { no: 16, name: 'Mochammad Hedy Wibianto', nim: '2024030025' },
+  { no: 17, name: 'Ester Kladit', nim: '2024030026' },
+  { no: 18, name: 'Elsa Agnesia', nim: '2024030027' },
+  { no: 19, name: 'Sesilia Fransiska Teniwut', nim: '2024030028' },
+  { no: 20, name: 'Amilia Lailatur Rafiqah', nim: '2024030030' },
+  { no: 21, name: 'Nathania Vada Christina', nim: '2024030031' },
+  { no: 22, name: 'Meri Yanti Bame', nim: '2024030032' },
+  { no: 23, name: 'Inneke Larnibun', nim: '2024030033' },
+  { no: 24, name: 'Uyaynah', nim: '2024030034' },
+  { no: 25, name: 'Alfina Febriyanti', nim: '2024030035' },
+  { no: 26, name: 'Regina Manafe', nim: '2024030036' },
+  { no: 27, name: 'Hidayatullah', nim: '2024030037' },
+  { no: 28, name: 'Mohammad Kelvin Ardiansyah', nim: '2024030038' },
+  { no: 29, name: 'Nur Aisyah Fitriani', nim: '2024030039' },
+  { no: 30, name: 'Fitriyatul Jannah', nim: '2024030040' },
+  { no: 31, name: 'Ruqoyyatul Ainiyah', nim: '2024030042' },
+  { no: 32, name: 'Elza Dwi Azizah', nim: '2024030043' },
+  { no: 33, name: 'Revalina Esti Lessyl', nim: '2024030044' },
+  { no: 34, name: 'Meita Liana Saputri', nim: '2024030045' },
+  { no: 35, name: 'Mochamad Avan Aji Santoso', nim: '2024030078' },
+  { no: 36, name: 'Chlaudya Rumlety', nim: '2024030115' },
+];
+
+export const LECTURER_CONTACTS_5A: LecturerContactEntry[] = [
+  { no: 1, name: 'Aditya Nuraminudin Aziz', phone: '08563303549', waLink: 'https://wa.me/628563303549' },
+  { no: 2, name: 'Asri Kusyani', phone: '08563065019', waLink: 'https://wa.me/628563065019' },
+  { no: 3, name: 'Dwi Uswatun Sholikhah', phone: '085748219895', waLink: 'https://wa.me/6285748219895' },
+  { no: 4, name: 'Eliza Zihni Zatihulwani', phone: '082143111282', waLink: 'https://wa.me/6282143111282' },
+  { no: 5, name: 'Enny Puspita', phone: '081259014672', waLink: 'https://wa.me/6281259014672' },
+  { no: 6, name: 'Fahrur Rozi', phone: '082244469345', waLink: 'https://wa.me/6282244469345' },
+  { no: 7, name: 'Gevi Melliya Sari', phone: '081334045258', waLink: 'https://wa.me/6281334045258' },
+  { no: 8, name: 'Karisma Dwi Ana', phone: '081231350810', waLink: 'https://wa.me/6281231350810' },
+  { no: 9, name: 'Nanang Bagus Sasmito', phone: '085648519579', waLink: 'https://wa.me/6285648519579' },
+  { no: 10, name: 'Roni Setiawan', phone: '085855530887', waLink: 'https://wa.me/6285855530887' },
+  { no: 11, name: 'Sylvie Puspita', phone: '082257726413', waLink: 'https://wa.me/6282257726413' },
+  { no: 12, name: 'Vendi Kurniawan', phone: '081333316162', waLink: 'https://wa.me/6281333316162' },
+  { no: 13, name: 'Yusiana Vidhiaastutik', phone: '081335929003', waLink: 'https://wa.me/6281335929003' },
+  { no: 14, name: 'Prawito', phone: '081334660715', waLink: 'https://wa.me/6281334660715' },
+  { no: 15, name: 'Elly Rustanty', phone: '085604076288', waLink: 'https://wa.me/6285604076288' },
+  { no: 16, name: 'Dr. Hany Puspita A.', phone: '08159605000', waLink: 'https://wa.me/628159605000' },
+  { no: 17, name: 'Dr. Darsni', phone: '085732425704', waLink: 'https://wa.me/6285732425704' },
+  { no: 18, name: "Fakhrun Nisa' F.", phone: '085731564038', waLink: 'https://wa.me/6285731564038' },
+  { no: 19, name: 'Kusuma Wijaya Ridi Putra', phone: '081331251929', waLink: 'https://wa.me/6281331251929' },
+  { no: 20, name: 'Alfi Rahmatillah Nur Fithriah', phone: '081371709986', waLink: 'https://wa.me/6281371709986' },
+  { no: 21, name: 'Diah Pitaloka Putri', phone: '085850866665', waLink: 'https://wa.me/6285850866665' },
+  { no: 22, name: 'Zerly Agrisdian', phone: '082334380031', waLink: 'https://wa.me/6282334380031' },
+  { no: 23, name: 'Gilang Akbar Shobirin', phone: '082226608763', waLink: 'https://wa.me/628226608763' },
+];
 
 const DEFAULT_STATE: PersistedBotState = {
   assignments: [
@@ -79,9 +177,9 @@ const DEFAULT_STATE: PersistedBotState = {
       course: 'Metodologi Penelitian',
       title: 'Proposal Bab 1–3 Latar Belakang & Rumusan Masalah',
       dueDateIso: '2026-11-14',
-      description: 'Kumpulkan draft PDF melalui PJ Mata Kuliah sebelum pukul 14:00 WIB.',
+      description: 'Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.',
       status: 'open',
-      pic: 'Hedy',
+      pic: 'Inneke, Fitri',
       createdBy: 'seed',
       createdAt: '2026-11-06T08:00:00.000Z',
     },
@@ -90,9 +188,9 @@ const DEFAULT_STATE: PersistedBotState = {
       course: 'Keperawatan Gerontik',
       title: 'Asuhan Keperawatan Lansia (Studi Kasus Kelompok)',
       dueDateIso: '2026-11-18',
-      description: 'Presentasi kelompok sesuai pembagian kelompok Semester 5A.',
+      description: 'Presentasi kelompok sesuai pembagian kelompok Semester 5A (PJ: Rika, Imel).',
       status: 'open',
-      pic: 'PJ Gerontik',
+      pic: 'Rika, Imel',
       createdBy: 'seed',
       createdAt: '2026-11-06T08:00:00.000Z',
     },
@@ -104,13 +202,23 @@ const DEFAULT_STATE: PersistedBotState = {
   commandUsage: {},
   messageCountByChat: {},
   classOfficers: {
-    ketuaKelas: 'Hedy (Koordinator Utama / Owner HdyBot)',
-    wakilKetua: 'Pengurus Nursing Class A (perlu verifikasi)',
+    komting: 'Hedi webiyanto',
+    ketuaKelas: 'Hedi webiyanto (Mochammad Hedy Wibianto — 2024030025)',
+    wakilKetua: '-',
     sekretaris: 'Sekretaris Kelas 5A (dibantu HdyBot Digital Secretary)',
-    bendahara: 'Bendahara Kelas 5A (perlu verifikasi)',
-    waliKelas: 'Dosen Wali Semester 5A (perlu verifikasi dokumen akademik)',
+    bendahara: 'Claudia, Velsy',
+    waliKelas: 'Dosen Wali Semester 5A',
     semester: 'Semester 5A',
     tahunAjaran: '2026/2027 Ganjil',
+    pjMatkul: {
+      dewasa: 'sesilia, Suci',
+      anak: 'Gracia, Dina',
+      menjelangAjal: 'Ester, Meri',
+      keperawatanAgregat: 'Meita, Regina',
+      entrepreneurship: 'Revalina, Alfina',
+      metopen: 'Inneke, Fitri',
+      gerontik: 'rika, Imel',
+    },
   },
 };
 
@@ -220,10 +328,23 @@ export class FunAndUtilityService {
     if (this.persistPath && existsSync(this.persistPath)) {
       try {
         const raw = JSON.parse(readFileSync(this.persistPath, 'utf8')) as Partial<PersistedBotState>;
+        const isLegacyPlaceholder =
+          !raw.classOfficers?.komting ||
+          raw.classOfficers?.bendahara?.includes('perlu verifikasi') ||
+          raw.classOfficers?.wakilKetua?.includes('perlu verifikasi');
         return {
           ...structuredClone(DEFAULT_STATE),
           ...raw,
-          classOfficers: { ...DEFAULT_STATE.classOfficers, ...(raw.classOfficers ?? {}) },
+          classOfficers: isLegacyPlaceholder
+            ? structuredClone(DEFAULT_STATE.classOfficers)
+            : {
+                ...DEFAULT_STATE.classOfficers,
+                ...(raw.classOfficers ?? {}),
+                pjMatkul: {
+                  ...DEFAULT_STATE.classOfficers.pjMatkul,
+                  ...(raw.classOfficers?.pjMatkul ?? {}),
+                },
+              },
         };
       } catch {
         return structuredClone(DEFAULT_STATE);
@@ -410,6 +531,77 @@ export class FunAndUtilityService {
 
   getClassOfficers() {
     return this.state.classOfficers;
+  }
+
+  formatClassOfficers(className = 'Nursing Class A'): string {
+    const o = this.state.classOfficers;
+    const pj = o.pjMatkul;
+    return (
+      `👥 *PENGURUS KELAS — ${className.toUpperCase()} (${o.semester})*\n` +
+      `• *KOMTING:* ${o.komting || 'Hedi webiyanto'}\n` +
+      `• *WAKIL KOMTING:* ${o.wakilKetua === '-' ? '' : o.wakilKetua}\n` +
+      `• *BENDAHARA:* ${o.bendahara}\n\n` +
+      `📚 *PJ MATA KULIAH (PJMK SEMESTER 5A):*\n` +
+      `• *DEWASA:* ${pj.dewasa}\n` +
+      `• *ANAK:* ${pj.anak}\n` +
+      `• *MENJELANG AJAL:* ${pj.menjelangAjal}\n` +
+      `• *KEPERAWATAN AGREGAT:* ${pj.keperawatanAgregat}\n` +
+      `• *ENTREPRENEURSHIP:* ${pj.entrepreneurship}\n` +
+      `• *METOPEN:* ${pj.metopen}\n` +
+      `• *GERONTIK:* ${pj.gerontik}`
+    );
+  }
+
+  getClassMembers(query?: string): ClassMemberEntry[] {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return [...CLASS_MEMBERS_5A];
+    return CLASS_MEMBERS_5A.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        m.nim.toLowerCase().includes(q) ||
+        String(m.no) === q,
+    );
+  }
+
+  formatClassMembers(query?: string, className = 'Nursing Class A'): string {
+    const list = this.getClassMembers(query);
+    if (!list.length) {
+      return `⚠️ Tidak ditemukan anggota kelas dengan kata kunci: *${query}*. Ketik \`.anggota\` untuk melihat seluruh 36 mahasiswa.`;
+    }
+    const rows = list.map((m) => `${m.no}. *${m.name}* — \`${m.nim}\``).join('\n');
+    return (
+      `👩‍⚕️👨‍⚕️ *DAFTAR ANGGOTA KELAS — ${className.toUpperCase()} (Semester 5A)*\n` +
+      `Total Terdaftar: *${CLASS_MEMBERS_5A.length} Mahasiswa*${query ? ` (Filter: "${query}" — ${list.length} hasil)` : ''}\n\n` +
+      `${rows}\n\n` +
+      `💡 _Tips: Ketik \`.anggota <nama/NIM>\` untuk mencari mahasiswa tertentu, atau \`.buatkelompok <jumlah>\` untuk langsung membagi seluruh 36 anggota kelas ke kelompok secara adil!_`
+    );
+  }
+
+  getLecturerContacts(query?: string): LecturerContactEntry[] {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return [...LECTURER_CONTACTS_5A];
+    return LECTURER_CONTACTS_5A.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.phone.includes(q) ||
+        String(d.no) === q,
+    );
+  }
+
+  formatLecturerContacts(query?: string): string {
+    const list = this.getLecturerContacts(query);
+    if (!list.length) {
+      return `📭 Tidak ditemukan nomor dosen dengan kata kunci: *${query}*. Ketik \`.dosen\` atau \`.nomordosen\` untuk daftar lengkap 23 dosen.`;
+    }
+    const rows = list
+      .map((d) => `${d.no}. *${d.name}* — \`${d.phone}\` (${d.waLink})`)
+      .join('\n');
+    return (
+      `👩‍🏫👨‍🏫 *DAFTAR LENGKAP NAMA & NOMOR DOSEN (NURSING CLASS A — 5A)*\n` +
+      `Total Kontak Dosen: *${LECTURER_CONTACTS_5A.length} Dosen*${query ? ` (Filter: "${query}" — ${list.length} hasil)` : ''}\n\n` +
+      `${rows}\n\n` +
+      `💡 _Ketik \`.dosen <nama>\` untuk mencari nomor dosen tertentu._`
+    );
   }
 
   // ==================== 5. UTILITAS MATEMATIKA, KONVERSI, WAKTU, URL ====================
@@ -636,6 +828,237 @@ export class FunAndUtilityService {
       `📖 *Pencarian Ensiklopedia — ${query}*\n` +
       `Artikel langsung belum ditemukan atau koneksi sedang offline. Gunakan \`.ask ${query}\` untuk penjelasan konsep akademik keperawatan.`
     );
+  }
+
+  /**
+   * Cari jurnal ilmiah & keperawatan dari repositori akademik (EuropePMC/PubMed, Crossref)
+   * serta hasilkan link langsung Google Scholar, Garuda Kemdikbud, dan PubMed + link PDF.
+   */
+  async searchAcademicJournals(queryRaw: string): Promise<{
+    query: string;
+    items: AcademicJournalItem[];
+    scholarUrl: string;
+    scholarPdfUrl: string;
+    garudaUrl: string;
+    pubmedUrl: string;
+  }> {
+    const query = queryRaw.trim() || 'Keperawatan Klinis';
+    const scholarUrl = `https://scholar.google.com/scholar?hl=id&q=${encodeURIComponent(query)}`;
+    const scholarPdfUrl = `https://scholar.google.com/scholar?hl=id&q=${encodeURIComponent(`${query} filetype:pdf`)}`;
+    const garudaUrl = `https://garuda.kemdikbud.go.id/documents?q=${encodeURIComponent(query)}`;
+    const pubmedUrl = `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(query)}`;
+    const items: AcademicJournalItem[] = [];
+
+    // 1. Coba EuropePMC (PubMed Central Open Access + direct PDF)
+    try {
+      const epmcUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=4`;
+      if (validateSafeExternalUrl(epmcUrl).ok) {
+        const res = await fetch(epmcUrl, {
+          headers: { 'User-Agent': 'HdyBot-NursingClassA/1.0' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            resultList?: {
+              result?: Array<{
+                title?: string;
+                authorString?: string;
+                pubYear?: string;
+                journalTitle?: string;
+                doi?: string;
+                pmcid?: string;
+                pmid?: string;
+              }>;
+            };
+          };
+          for (const r of data.resultList?.result ?? []) {
+            if (!r.title) continue;
+            const doiLink = r.doi
+              ? `https://doi.org/${r.doi}`
+              : r.pmcid
+                ? `https://europepmc.org/article/PMC/${r.pmcid}`
+                : r.pmid
+                  ? `https://pubmed.ncbi.nlm.nih.gov/${r.pmid}/`
+                  : scholarUrl;
+            const pdfUrl = r.pmcid ? `https://europepmc.org/articles/${r.pmcid}?pdf=render` : undefined;
+            items.push({
+              title: r.title.replace(/<[^>]+>/g, '').trim(),
+              authors: r.authorString || 'Tim Peneliti Akademik',
+              year: r.pubYear || 'Terbaru',
+              journalName: r.journalTitle || 'PubMed / EuropePMC Journal',
+              doiOrUrl: doiLink,
+              pdfUrl,
+              snippet: `Jurnal terindeks ilmiah terkait "${query}" (${r.journalTitle ?? 'Biomedical & Nursing Repository'}).`,
+            });
+            if (items.length >= 4) break;
+          }
+        }
+      }
+    } catch {
+      // Lanjut ke Crossref bila EuropePMC timeout
+    }
+
+    // 2. Coba Crossref API bila hasil masih kurang dari 4
+    if (items.length < 4) {
+      try {
+        const crUrl = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=4`;
+        if (validateSafeExternalUrl(crUrl).ok) {
+          const res = await fetch(crUrl, {
+            headers: { 'User-Agent': 'HdyBot-NursingClassA/1.0 (mailto:wibyjoe12@gmail.com)' },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              message?: {
+                items?: Array<{
+                  title?: string[];
+                  author?: Array<{ given?: string; family?: string }>;
+                  'container-title'?: string[];
+                  DOI?: string;
+                  URL?: string;
+                  published?: { 'date-parts'?: number[][] };
+                  link?: Array<{ URL?: string; 'content-type'?: string }>;
+                }>;
+              };
+            };
+            for (const w of data.message?.items ?? []) {
+              const title = w.title?.[0]?.trim();
+              if (!title || items.some((x) => x.title.toLowerCase() === title.toLowerCase())) continue;
+              const authors =
+                w.author
+                  ?.slice(0, 3)
+                  .map((a) => [a.given, a.family].filter(Boolean).join(' '))
+                  .join(', ') || 'Peneliti Ilmiah';
+              const year = String(w.published?.['date-parts']?.[0]?.[0] ?? 'Terbaru');
+              const journalName = w['container-title']?.[0] || 'International Academic Journal';
+              const doiOrUrl = w.DOI ? `https://doi.org/${w.DOI}` : (w.URL ?? scholarUrl);
+              const pdfLink = w.link?.find((l) => l['content-type']?.includes('pdf'))?.URL;
+              items.push({
+                title,
+                authors,
+                year,
+                journalName,
+                doiOrUrl,
+                pdfUrl: pdfLink,
+                snippet: `Publikasi ilmiah terindeks DOI (${journalName}, ${year}) mengenai ${query}.`,
+              });
+              if (items.length >= 5) break;
+            }
+          }
+        }
+      } catch {
+        // Fallback ke referensi kurasi akademik
+      }
+    }
+
+    // 3. Fallback kurasi akademik apabila jaringan offline / tidak ada hasil
+    if (items.length === 0) {
+      items.push(
+        {
+          title: `Studi Literatur & Evidence-Based Nursing: ${query}`,
+          authors: 'Tim Peneliti Keperawatan Indonesia',
+          year: '2024–2026',
+          journalName: 'Google Scholar & Garuda Kemdikbud Repository',
+          doiOrUrl: scholarUrl,
+          pdfUrl: scholarPdfUrl,
+          snippet: `Kumpulan artikel jurnal ilmiah full-text PDF mengenai "${query}" untuk referensi tugas & Metodologi Penelitian Semester 5A.`,
+        },
+        {
+          title: `Systematic Review & Clinical Nursing Intervention on ${query}`,
+          authors: 'International Nursing Research Group',
+          year: '2024–2026',
+          journalName: 'PubMed / NCBI Nursing & Health Sciences',
+          doiOrUrl: pubmedUrl,
+          pdfUrl: scholarPdfUrl,
+          snippet: `Tinjauan sistematis intervensi asuhan keperawatan dan manajemen klinis berbasis bukti terkait "${query}".`,
+        },
+      );
+    }
+
+    return {
+      query,
+      items,
+      scholarUrl,
+      scholarPdfUrl,
+      garudaUrl,
+      pubmedUrl,
+    };
+  }
+
+  /**
+   * Cari gambar dari repositori publik aman (Wikimedia Commons / Wikipedia API)
+   * dan unduh buffer gambarnya agar dapat dikirim langsung ke grup atau chat.
+   */
+  async searchWebImage(queryRaw: string): Promise<{
+    foundOnline: boolean;
+    title: string;
+    sourceUrl: string;
+    imageBuffer?: Buffer;
+    mimeType?: string;
+  }> {
+    const query = queryRaw.trim() || 'Keperawatan';
+    const candidateEndpoints = [
+      `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(`filetype:bitmap ${query}`)}&gsrlimit=5&prop=imageinfo&iiprop=url|mime&iiurlwidth=800&format=json`,
+      `https://id.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=4&prop=pageimages|info&piprop=thumbnail|original&pithumbsize=800&inprop=url&format=json`,
+      `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=4&prop=pageimages|info&piprop=thumbnail|original&pithumbsize=800&inprop=url&format=json`,
+    ];
+
+    for (const apiUrl of candidateEndpoints) {
+      try {
+        if (!validateSafeExternalUrl(apiUrl).ok) continue;
+        const res = await fetch(apiUrl, {
+          headers: { 'User-Agent': 'HdyBot-NursingClassA/1.0 (https://shj.ac.id)' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) continue;
+        const data = (await res.json()) as {
+          query?: {
+            pages?: Record<
+              string,
+              {
+                title?: string;
+                fullurl?: string;
+                thumbnail?: { source?: string };
+                original?: { source?: string };
+                imageinfo?: Array<{ thumburl?: string; url?: string; descriptionurl?: string; mime?: string }>;
+              }
+            >;
+          };
+        };
+        const pages = Object.values(data.query?.pages ?? {});
+        for (const p of pages) {
+          const imgInfo = p.imageinfo?.[0];
+          const imgUrl = imgInfo?.thumburl ?? imgInfo?.url ?? p.thumbnail?.source ?? p.original?.source;
+          if (!imgUrl || !/\.(png|jpe?g|webp)$/i.test(imgUrl.split('?')[0] ?? '')) continue;
+          if (!validateSafeExternalUrl(imgUrl).ok) continue;
+
+          const imgRes = await fetch(imgUrl, {
+            headers: { 'User-Agent': 'HdyBot-NursingClassA/1.0' },
+            signal: AbortSignal.timeout(6000),
+          });
+          if (!imgRes.ok) continue;
+          const arrBuf = await imgRes.arrayBuffer();
+          const buf = Buffer.from(arrBuf);
+          if (buf.byteLength < 512) continue;
+
+          return {
+            foundOnline: true,
+            title: (p.title ?? query).replace(/^File:/i, ''),
+            sourceUrl: imgInfo?.descriptionurl ?? p.fullurl ?? imgUrl,
+            imageBuffer: buf,
+            mimeType: imgRes.headers.get('content-type') ?? imgInfo?.mime ?? 'image/jpeg',
+          };
+        }
+      } catch {
+        // Coba endpoint berikutnya
+      }
+    }
+
+    return {
+      foundOnline: false,
+      title: query,
+      sourceUrl: `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`,
+    };
   }
 
   // ==================== 7. HIBURAN AMAN, QUOTES, GAME, & KREATIVITAS TEKS AKIRA ====================
