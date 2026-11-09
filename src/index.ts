@@ -171,7 +171,7 @@ async function main() {
   async function connect() {
     try { await whatsapp.connect(); } catch {
       log.warn("Koneksi WhatsApp gagal");
-      if (!['session_expired', 'logged_out'].includes(whatsapp.state())) onState('disconnected');
+      if (!reconnectTimer && !['session_expired', 'logged_out'].includes(whatsapp.state())) onState('disconnected');
     }
   }
   void connect();

@@ -130,6 +130,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   private MessageMediaCtor: (new (mimetype: string, data: string, filename?: string) => unknown) | null = null;
   private connectingPromise: Promise<void> | null = null;
   private qrCount = 0;
+  private qrOnly = false;
   private client: {
     info?: { wid?: { user?: string; _serialized?: string }; pushname?: string };
     pupPage?: {
@@ -140,6 +141,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     inject?: () => Promise<void>;
     attachEventListeners?: () => Promise<void>;
     getChatById?: (chatId: unknown) => Promise<unknown>;
+    requestPairingCode: (phone: string, notify: boolean, interval: number) => Promise<string>;
     initialize: () => Promise<void>;
     destroy: () => Promise<void>;
     sendMessage: (
@@ -229,13 +231,13 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     );
     const matchedUserAgent = buildMatchedUserAgent(executablePath);
     const rawPairingPhone = (this.opts.pairingPhone ?? process.env.WHATSAPP_PAIRING_PHONE ?? '').replace(/\D/g, '');
-    const normalizedPairingPhone = rawPairingPhone.startsWith('0')
+    const normalizedPairingPhone = this.qrOnly ? '' : rawPairingPhone.startsWith('0')
       ? `62${rawPairingPhone.slice(1)}`
       : rawPairingPhone;
 
     console.log(
       `[WA] Memulai whatsapp-web.js (browser: ${executablePath ?? 'puppeteer-bundled'}${
-        normalizedPairingPhone ? `, mode: Pairing Code` : ', mode: QR Code Live'
+        normalizedPairingPhone ? ', mode: QR lalu kode telepon' : ', mode: QR Code Live'
       })...`,
     );
 
@@ -244,7 +246,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       clientId: 'hdybot',
     }) as { logout?: () => Promise<void> };
     // LocalAuth.logout() menghapus profil Chromium. Arsipkan/ganti sesi hanya melalui tindakan owner.
-    localAuth.logout = async () => { this.setState('logged_out'); };
+    localAuth.logout = async () => {}; // Status logout berasal dari event disconnected milik client aktif.
 
     const clientOptions: Record<string, unknown> = {
       authStrategy: localAuth,
@@ -276,15 +278,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       },
     };
 
-    if (normalizedPairingPhone.length >= 9) {
-      clientOptions.pairWithPhoneNumber = {
-        phoneNumber: normalizedPairingPhone,
-        showNotification: true,
-        intervalMs: 180000,
-      };
-    }
-
     const client = new Client(clientOptions);
+    let phoneRequested = false;
+    let authenticated = false;
     this.client = client;
     this.qrCount = 0;
 
@@ -349,7 +345,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
             await page
               .exposeFunction('onAuthAppStateChangedEvent', async (state: unknown) => {
-                if (state === 'UNPAIRED_IDLE' && !normalizedPairingPhone) {
+                if (state === 'UNPAIRED_IDLE' && !phoneRequested) {
                   try {
                     await page.evaluate(() => {
                       const w = window as unknown as {
@@ -437,10 +433,42 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     let pairingAvailable!: () => void;
     const firstEvent = new Promise<void>(resolve => { pairingAvailable = resolve; });
     const stopStartupTimer = () => { clearTimeout(startupTimer); pairingAvailable(); };
+    let phoneTimer: ReturnType<typeof setTimeout> | undefined;
+    let syncTimer: ReturnType<typeof setTimeout> | undefined;
+    let end!: () => void;
+    const ended = new Promise<void>(resolve => { end = resolve; });
+    const restartClient = (reason: string) => {
+      if (this.client !== client) return;
+      this.client = null;
+      clearTimeout(phoneTimer);
+      clearTimeout(syncTimer);
+      stopStartupTimer();
+      console.warn('[WA]', reason);
+      void client.destroy().catch(() => undefined).finally(() => {
+        end();
+        if (this._state === 'connecting') this.setState('disconnected');
+      });
+    };
+    const retryWithQr = () => {
+      if (this.client !== client || authenticated) return;
+      this.qrOnly = true;
+      restartClient('Kode telepon gagal atau tidak muncul dalam 25 detik. Menghubungkan ulang dalam mode QR.');
+    };
+    const syncing = () => {
+      if (syncTimer || this.client !== client || this._state !== 'connecting') return;
+      stopStartupTimer();
+      this.writeStateFile('syncing');
+      syncTimer = setTimeout(() => restartClient('Sinkronisasi tidak selesai dalam enam menit. Memulai ulang Chrome.'), 360_000);
+    };
     client.on('qr', (qrRaw: unknown) => {
       if (this.client !== client) return;
       const qr = String(qrRaw ?? '').trim();
-      if (!qr) return;
+      if (!qr || authenticated) return;
+      if (syncTimer) {
+        clearTimeout(syncTimer);
+        syncTimer = undefined;
+        this.writeStateFile('connecting');
+      }
       this.qrCount += 1;
       const nowSec = Math.floor(Date.now() / 1000);
       const timeLabel = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false });
@@ -467,6 +495,11 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
             renameSync(QR_CACHE_FILE + '.tmp', QR_CACHE_FILE);
             stopStartupTimer();
             writeFileSync(QR_CACHE_TS_FILE, String(nowSec), { encoding: 'utf8', mode: 0o600 });
+            if (normalizedPairingPhone && !phoneRequested) {
+              phoneRequested = true;
+              phoneTimer = setTimeout(retryWithQr, 25_000);
+              void Promise.resolve().then(() => client.requestPairingCode(normalizedPairingPhone, true, 180_000)).catch(retryWithQr);
+            }
           } catch {
             console.error('[WA] Gagal menulis QR ke direktori WHATSAPP_AUTH_DIR.');
           }
@@ -480,6 +513,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     client.on('code', (codeRaw: unknown) => {
       if (this.client !== client) return;
       const raw = String(codeRaw ?? '').trim();
+      if (authenticated || !/^[a-z0-9]{8}$/i.test(raw)) return;
+      clearTimeout(phoneTimer);
       const formatted = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
       const banner = [
         '',
@@ -495,7 +530,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       ].join('\n');
 
       try {
-        writeFileSync(PAIRING_CODE_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o600 });
+        writeFileSync(PAIRING_CODE_CACHE_FILE + '.tmp', banner, { encoding: 'utf8', mode: 0o600 });
+        renameSync(PAIRING_CODE_CACHE_FILE + '.tmp', PAIRING_CODE_CACHE_FILE);
+        rmSync(QR_CACHE_FILE, {force:true});
         stopStartupTimer();
       } catch {
         console.error('[WA] Gagal menulis kode ke direktori WHATSAPP_AUTH_DIR.');
@@ -503,16 +540,22 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('loading_screen', (percent: unknown, message: unknown) => {
+      if (this.client !== client || this._state !== 'connecting') return;
+      if (!this.qrCount || authenticated) syncing();
       console.log(`[WA] ⏳ Menautkan & menyinkronkan perangkat WhatsApp: ${String(percent ?? 0)}% (${String(message ?? 'WhatsApp')})...`);
     });
 
     client.on('authenticated', () => {
-      if (this.client !== client) return;
+      if (this.client !== client || authenticated) return;
+      authenticated = true;
+      clearTimeout(phoneTimer);
+      stopStartupTimer();
       try {
         rmSync(QR_CACHE_FILE, { force: true });
         rmSync(QR_CACHE_TS_FILE, { force: true });
         rmSync(PAIRING_CODE_CACHE_FILE, { force: true });
         writeFileSync(authMarker, new Date().toISOString(), { encoding: 'utf8', mode: 0o600 });
+        syncing();
       } catch {
         // abaikan
       }
@@ -520,7 +563,10 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('ready', () => {
-      if (this.client !== client) return;
+      if (this.client !== client || this._state === 'connected') return;
+      authenticated = true;
+      clearTimeout(phoneTimer);
+      clearTimeout(syncTimer);
       stopStartupTimer();
       try {
         rmSync(QR_CACHE_FILE, { force: true });
@@ -538,6 +584,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     client.on('auth_failure', () => {
       if (this.client !== client) return;
+      clearTimeout(phoneTimer);
+      clearTimeout(syncTimer);
+      end();
       stopStartupTimer();
       console.warn('[WA] Autentikasi gagal. Periksa sesi melalui akses privat VPS.');
       this.setState('session_expired');
@@ -545,6 +594,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     client.on('disconnected', (reason: unknown) => {
       if (this.client !== client) return;
+      clearTimeout(phoneTimer);
+      clearTimeout(syncTimer);
+      end();
       stopStartupTimer();
       console.warn('[WA] Koneksi WhatsApp terputus.');
       if (String(reason ?? '').toUpperCase().includes('LOGOUT')) {
@@ -730,7 +782,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const startupDeadline = new Promise<never>((_, reject) => {
         startupTimer = setTimeout(() => reject(new Error('startup_timeout')), 120_000);
       });
-      await Promise.race([Promise.all([client.initialize(), firstEvent]), startupDeadline]);
+      await Promise.race([Promise.all([client.initialize(), firstEvent]), startupDeadline, ended]);
     } catch (err) {
       const detail = String(err);
       const reason = /timeout|timed out/i.test(detail) ? 'Waktu startup Chrome atau WhatsApp Web habis.'
@@ -739,6 +791,13 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         : /launch|executable|shared librar/i.test(detail) ? 'Chrome gagal dijalankan. Periksa executable dan pustaka sistem.'
         : 'Inisialisasi WhatsApp Web gagal (' + (err instanceof Error ? err.name : 'provider') + ').';
       console.warn('[WA]', reason);
+      if (err instanceof TypeError) {
+        const method = err.message.match(/(?:reading ['"]|\.)([A-Za-z_$][\w$]{0,50})(?:['"]\)| is not a function)/)?.[1];
+        const line = err.stack?.match(/(?:Client|LocalAuth)\.js:\d+:\d+/)?.[0];
+        console.warn('[WA] Detail TypeError:', method ?? 'fungsi tidak teridentifikasi', line ?? 'lokasi tidak tersedia');
+      }
+      clearTimeout(phoneTimer);
+      clearTimeout(syncTimer);
       if (this.client === client) this.client = null;
       await client.destroy().catch(() => undefined);
       if (!['logged_out', 'session_expired'].includes(this.state())) this.setState('disconnected');
@@ -820,11 +879,14 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
   private setState(s: ConnectionState): void {
     this._state = s;
+    this.writeStateFile(s);
+    for (const h of this.stateHandlers) h(s);
+  }
+  private writeStateFile(s: ConnectionState | 'syncing'): void {
     const path = join(this.opts.authDir, 'connection-state');
     try {
       writeFileSync(path + '.tmp', process.pid + ' ' + s + '\n', { mode: 0o600 });
       renameSync(path + '.tmp', path);
     } catch { console.warn('[WA] Direktori status koneksi tidak dapat ditulis.'); }
-    for (const h of this.stateHandlers) h(s);
   }
 }

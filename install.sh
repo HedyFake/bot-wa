@@ -66,8 +66,23 @@ if [[ -f /etc/os-release ]]; then
 fi
 
 case "${1:-}" in
-  --qr)
+  --qr|--watch-pairing)
     pairing_dir="$DATA_DIR/whatsapp-auth"
+    if [[ "$1" == --qr ]]; then
+      pid="$(systemctl show "$APP_NAME" --property=MainPID --value)"
+      state="$(cat "$pairing_dir/connection-state" 2>/dev/null || true)"
+      if [[ "$pid" != 0 && "$state" == "$pid connected" ]]; then
+        c_ok "WhatsApp sudah terhubung. Coba .menu melalui WhatsApp."
+        exit 0
+      fi
+      if grep -Eq '^WHATSAPP_PAIRING_PHONE=.+$' "$APP_DIR/.env" || [[ "$state" == "$pid logged_out" || "$state" == "$pid session_expired" ]] || ! systemctl is-active --quiet "$APP_NAME"; then
+        sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env"
+        systemctl reset-failed "$APP_NAME"
+        systemctl restart "$APP_NAME"
+        c_info "Mode QR aktif. Memulai Chrome dengan sesi yang tersimpan."
+      fi
+    fi
+    last_phase=""
     declare -A seen
     until_pairing=$((SECONDS + 150))
     while true; do
@@ -77,8 +92,13 @@ case "${1:-}" in
         c_ok "WhatsApp sudah terhubung. Coba .menu melalui WhatsApp."
         exit 0
       fi
+      if [[ "$state" == "$pid syncing" && "$last_phase" != "$state" ]]; then
+        c_info "WhatsApp sedang menyinkronkan perangkat. Tunggu sampai sesi siap."
+        until_pairing=$((SECONDS + 390))
+      fi
+      last_phase="$state"
       if ! systemctl is-active --quiet "$APP_NAME" || [[ "$state" == "$pid session_expired" || "$state" == "$pid logged_out" ]]; then
-        die "WhatsApp belum tersambung. Periksa sudo ./install.sh --status dan sudo ./install.sh --logs."
+        die "WhatsApp belum tersambung ($state). Untuk logged_out/session_expired berulang, gunakan sudo bash install.sh --reset-wa untuk mengarsipkan sesi lama dan menautkan ulang."
       fi
       for file in "$pairing_dir/pairing-qr.txt" "$pairing_dir/pairing-code.txt"; do
         stamp="$(stat -c '%i:%y' "$file" 2>/dev/null)" || continue
@@ -101,7 +121,14 @@ case "${1:-}" in
   --logs)
     exec journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
   --status)
-    systemctl --no-pager status "$APP_NAME" hdybot-backup.timer || true
+    pid="$(systemctl show "$APP_NAME" --property=MainPID --value)"
+    state="$(cat "$DATA_DIR/whatsapp-auth/connection-state" 2>/dev/null || true)"
+    if [[ "$pid" != 0 && "$state" == "$pid "* ]]; then
+      c_info "Koneksi WhatsApp: ${state#* }"
+    else
+      c_info "Status koneksi WhatsApp belum tersedia untuk proses aktif."
+    fi
+    systemctl --full --no-pager status "$APP_NAME" hdybot-backup.timer || true
     exit 0 ;;
   --cli)
     exec sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm run -s cli" ;;
@@ -129,6 +156,12 @@ case "${1:-}" in
   --pair)
     PAIR_PHONE="${2:-}"
     [[ "$PAIR_PHONE" =~ ^\+?[0-9]{8,15}$ ]] || die "Masukkan nomor WA Bot! Contoh: sudo ./install.sh --pair 081234567890"
+    pid="$(systemctl show "$APP_NAME" --property=MainPID --value)"
+    state="$(cat "$DATA_DIR/whatsapp-auth/connection-state" 2>/dev/null || true)"
+    if [[ "$pid" != 0 && ( "$state" == "$pid connecting" || "$state" == "$pid syncing" || "$state" == "$pid connected" ) ]] && grep -Fxq "WHATSAPP_PAIRING_PHONE=$PAIR_PHONE" "$APP_DIR/.env"; then
+      c_info "Memantau sesi yang sudah berjalan untuk nomor ini."
+      exec bash "$0" --watch-pairing
+    fi
     systemctl stop "$APP_NAME" 2>/dev/null || true
     archive_session
     rm -rf "${APP_DIR}/.wwebjs_cache" /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt 2>/dev/null || true
@@ -138,8 +171,8 @@ case "${1:-}" in
     fi
     systemctl reset-failed "$APP_NAME" 2>/dev/null || true
     systemctl start "$APP_NAME"
-    c_ok "Meminta Kode Pairing 8-Digit untuk nomor ${PAIR_PHONE} (tunggu 5-12 detik)..."
-    exec bash "$0" --qr ;;
+    c_info "Meminta kode telepon. Jika kode tidak tersedia, bot akan menampilkan QR."
+    exec bash "$0" --watch-pairing ;;
   --uninstall-service)
     systemctl disable --now "$APP_NAME" hdybot-watchdog.timer hdybot-backup.timer 2>/dev/null || true
     rm -f /etc/systemd/system/hdybot*.service /etc/systemd/system/hdybot*.timer
@@ -377,4 +410,4 @@ echo "==================================================================="
 echo
 echo "📲 Menunggu QR Code dari whatsapp-web.js (biasanya 5-10 detik saat Chrome headless start)..."
 echo "   (Tekan Ctrl+C kapan saja untuk keluar dari tampilan log; bot tetap jalan 24/7 di background)"
-exec bash "$0" --qr
+exec bash "$0" --watch-pairing

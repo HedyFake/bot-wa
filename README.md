@@ -99,7 +99,9 @@ chmod +x install.sh
 sudo ./install.sh
 ```
 
-Saat WhatsApp memerlukan pairing, jalankan `sudo bash install.sh --qr` di konsol privat VPS. Jika sesi sudah siap, perintah menampilkan “WhatsApp sudah terhubung”. Jika tidak ada QR, kode pairing, atau koneksi siap dalam 150 detik, konsol menampilkan log startup terakhir. Baca log lanjutan dengan `sudo bash install.sh --logs`. Saat memperbarui instalasi systemd, jalankan `sudo bash install.sh` dari direktori source yang sudah diperbarui agar service memuat build baru dan memakai sesi yang tersimpan.
+Untuk memperbarui instalasi systemd, jalankan `sudo bash install.sh` dari direktori source terbaru. Untuk memilih QR, jalankan `sudo bash install.sh --qr` di konsol privat VPS. Jika sesi belum terhubung dan masih memakai nomor pairing, perintah ini beralih ke QR dengan sesi yang tersimpan. Scan lewat WhatsApp → Perangkat tertaut → Tautkan perangkat. Jika sudah terhubung, konsol langsung memberi tahu.
+
+Untuk kode telepon, gunakan `sudo bash install.sh --pair 08xxxxxxxxxx`. Bot menyiapkan QR terlebih dahulu, kemudian meminta kode telepon. Jika permintaan kode gagal atau tidak menghasilkan kode dalam 25 detik, Chrome menyambung kembali dalam mode QR. Setelah scan atau pemulihan sesi, tunggu pesan sinkronisasi hingga WhatsApp siap. Bila status `logged_out` muncul kembali sesudah memilih QR, `sudo bash install.sh --reset-wa` mengarsipkan sesi lama dalam backup terenkripsi sebelum membuat sesi baru. Lihat log melalui `sudo bash install.sh --logs`.
 
 ---
 

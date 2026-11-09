@@ -7,6 +7,7 @@ import { WWebJsWhatsAppProvider } from '../src/whatsapp/adapters/wwebjs.js';
 
 let client: EventEmitter;
 let emitQr = true;
+const phone = vi.fn(async () => { client.emit('code', 'ABCD1234'); return 'ABCD1234'; });
 vi.mock('whatsapp-web.js', () => ({
   default: {
     MessageMedia: class {},
@@ -14,6 +15,7 @@ vi.mock('whatsapp-web.js', () => ({
     Client: class extends EventEmitter {
       constructor() { super(); client = this; }
       async initialize() { if (emitQr) this.emit('qr', 'pairing-fixture'); }
+      requestPairingCode = phone;
       async destroy() {}
     },
   },
@@ -48,6 +50,37 @@ it('menampilkan QR privat lalu menandai sesi siap dan memproses teks tanpa penca
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+it('menghasilkan kode setelah QR pertama dan menandai sinkronisasi sebelum ready', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hdybot-code-'));
+  try {
+    const provider = new WWebJsWhatsAppProvider({authDir:dir,pairingPhone:'081234567890'});
+    const ready = vi.fn();
+    provider.onStateChange(ready);
+    await provider.connect();
+    expect(phone).toHaveBeenCalledWith('6281234567890', true, 180000);
+    expect(readFileSync(join(dir,'pairing-code.txt'),'utf8')).toContain('ABCD-1234');
+    client.emit('authenticated'); client.emit('authenticated');
+    expect(readFileSync(join(dir,'connection-state'),'utf8')).toContain('syncing');
+    client.emit('ready'); client.emit('ready');
+    expect(ready.mock.calls.filter(([s])=>s==='connected')).toHaveLength(1);
+    await provider.disconnect();
+  } finally { rmSync(dir,{recursive:true,force:true}); }
+});
+
+it('memulai ulang dengan QR jika permintaan kode telepon gagal', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hdybot-code-fail-'));
+  try {
+    phone.mockClear().mockRejectedValueOnce(new TypeError('pairing unavailable'));
+    const provider = new WWebJsWhatsAppProvider({authDir:dir,pairingPhone:'081234567890'});
+    await provider.connect();
+    await vi.waitFor(()=>expect(provider.state()).toBe('disconnected'));
+    await provider.connect();
+    expect(phone).toHaveBeenCalledTimes(1);
+    expect(readFileSync(join(dir,'pairing-qr.txt'),'utf8')).toContain('█');
+    await provider.disconnect();
+  } finally { rmSync(dir,{recursive:true,force:true}); }
+});
+
 it('mendeteksi startup tanpa QR atau ready meski initialize selesai', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'hdybot-qr-timeout-'));
   emitQr = false;
@@ -60,4 +93,22 @@ it('mendeteksi startup tanpa QR atau ready meski initialize selesai', async () =
     await pending;
     expect(provider.state()).toBe('disconnected');
   } finally { vi.useRealTimers(); emitQr = true; rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('memberi waktu untuk sinkronisasi sesi tersimpan yang melampaui timeout QR', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hdybot-sync-'));
+  emitQr = false;
+  vi.useFakeTimers();
+  try {
+    const provider = new WWebJsWhatsAppProvider({authDir:dir});
+    const connecting = provider.connect();
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0));
+    client.emit('loading_screen', 25, 'WhatsApp');
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(readFileSync(join(dir,'connection-state'),'utf8')).toContain('syncing');
+    client.emit('authenticated'); client.emit('ready');
+    await connecting;
+    expect(provider.state()).toBe('connected');
+    await provider.disconnect();
+  } finally { vi.useRealTimers(); emitQr = true; rmSync(dir,{recursive:true,force:true}); }
 });
