@@ -10,6 +10,13 @@ const catalog: [string, string[]][] = [
   ['🔐 Administrasi', ['health', 'status', 'dashboard', 'runtime', 'ping', 'ai status', 'groups', 'backup', 'audit', 'logs [jumlah]', 'errors [today]', 'relay list', 'tugas antrean', 'tugas grup', 'tugas tujuan <id> <grup>', 'tugas tolak <id>', 'tugas deadline <id> <tanggal>', 'db status', 'drive status', 'drive sync', 'whatsapp status', 'scheduler status', 'storage', 'queue']],
 ];
 
+catalog[1]![1].push('jadwal senin','jadwal export csv');
+catalog[2]![1].push('drive files','askep <topik>','pengkajian <topik>','penunjang','ukom','kampus','kuisukom','highalert','safety','berita','ppni','mtb','ebook','imt <kg> <cm>','gcs E4 V5 M6','balance <masuk> <keluar>','tetesan 500 ml 6 jam 20 tetes/ml');
+catalog[3]![1].push('privacy gamification on');
+catalog[4]![1].push('blur','resize <lebar> <tinggi>');
+catalog[5]![1].push('quotes [tema]','apakah <pertanyaan>','hilih <teks>');
+catalog[6]![1].push('ai models','ai model <alias>','ai auto on','ai test <pesan>','groups sources','groups add <JID> <nama>','groups pause <JID>','groups resume <JID>','nimbrung status','filter status','filter review','digest today','broadcast preview <ID>','broadcast send <ID>','reminder pause','reminder resume','admin pause','admin resume');
+
 for (const entry of commandRegistry) {
   const name = entry.names[0]!;
   if (catalog.some(([, usages]) => usages.some(u => parseCommand('.' + u).command === entry.command))) continue;
@@ -18,27 +25,29 @@ for (const entry of commandRegistry) {
   catalog[page]![1].push(name);
 }
 
+const pages = catalog.map(([title, usages]) => ({
+  title, entries: usages.map(usage => ({usage, parsed:parseCommand('.' + usage)})),
+}));
+
 export function menuPage(page: string | undefined, admin: boolean, help = false, driveAllowed = false, scheduleWritable = false): string {
-  const sections = catalog.map(([title, entries]) => ({
-    title,
-    entries: (title.startsWith('🔐') && !admin ? [] : entries).filter(entry => {
-      const cmd = parseCommand('.' + entry);
-      if (['schedule.add','schedule.edit','schedule.delete','schedule.reset'].includes(cmd.command) && !scheduleWritable) return false;
-      if (['download', 'document.ask', 'document.summary'].includes(cmd.command) && !driveAllowed) return false;
-      return cmd.command !== 'unknown' && (!cmd.adminOnly || admin);
+  const sections = pages.filter(section => admin || !section.title.startsWith('🔐')).map(({title,entries}) => ({
+    title, entries: entries.filter(({parsed}) => {
+      if (['schedule.add','schedule.edit','schedule.delete','schedule.reset'].includes(parsed.command) && !scheduleWritable) return false;
+      if (['download','document.ask','document.summary','drive.files'].includes(parsed.command) && !driveAllowed) return false;
+      return parsed.command !== 'unknown' && (!parsed.adminOnly || admin);
     }),
   })).filter(section => section.entries.length);
   if (help && page) {
-    const query = parseCommand('.' + page.replace(/^\./, ''));
-    const entry = sections.flatMap(section => section.entries)
-      .find(usage => { const p = parseCommand('.' + usage); return p.command === query.command && (p.command !== 'nursing' || p.args[0] === query.args[0]); });
-    return entry ? '💡 *Cara menggunakan*\n.' + entry : 'Petunjuk perintah ini belum tersedia.';
+    const query = parseCommand('.' + page.replace(/^\./,''));
+    const matches = sections.flatMap(section => section.entries).filter(({parsed}) => parsed.command === query.command);
+    const specific = matches.find(({parsed}) => query.args[0] && query.args[0] === parsed.args[0]);
+    const entry = specific ?? (query.command === 'nursing' ? undefined : matches[0]);
+    return entry ? '💡 *Cara menggunakan*\n\n.' + entry.usage : 'Petunjuk perintah ini belum tersedia. Ketik .menu untuk melihat daftar.';
   }
   const index = Number(page ?? 1) - 1;
   if (!Number.isInteger(index) || !sections[index]) return 'Pilih halaman 1–' + sections.length + ' melalui .menu <halaman>.';
   const section = sections[index]!;
-  return ['🤖 *HDYBOT — NURSING CLASS A*', section.title, '━━━━━━━━━━━━━━━━━━━━',
-    ...section.entries.map(entry => '• .' + entry), '', 'Halaman ' + (index + 1) + '/' + sections.length,
-    index + 1 < sections.length ? 'Lanjut dengan .menu ' + (index + 2) : 'Kembali melalui .menu 1',
-    'Gunakan .help <perintah> untuk melihat cara pakai.'].join('\n');
+  return ['*' + section.title + '*','', ...section.entries.map(({usage}) => '• .' + usage), '',
+    'Halaman ' + (index + 1) + '/' + sections.length + ' · ' + (index + 1 < sections.length ? '.menu ' + (index + 2) : '.menu 1'),
+    'Cara pakai: .help <perintah>'].join('\n');
 }

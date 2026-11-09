@@ -9,9 +9,9 @@ function addressedText(input: string) {
 
 export function greeting(input: string) {
   const text = addressedText(input).replace(/[!.?]+$/, '').trim();
-  if (/^(halo|hai|hi|hei|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam))$/i.test(text) || /^(halo|hai|hei)\s+@?(bot|hdybot)[!.?]*$/i.test(input.trim())) return 'Halo! Ada yang bisa kubantu?';
+  if (/^(halo|hai|hi|hei|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam))$/i.test(text) || /^(halo|hai|hei)\s+@?(bot|hdybot)[!.?]*$/i.test(input.trim())) return 'Halo! 👋 Ada yang bisa kubantu?';
   if (/^assalamualaikum$/i.test(text)) return 'Waalaikumsalam! Ada yang bisa kubantu?';
-  if (/^(makasih|terima kasih|thanks)$/i.test(text)) return 'Sama-sama!';
+  if (/^(makasih|terima kasih|thanks)$/i.test(text)) return 'Sama-sama 😊';
 }
 
 export function directIntent(input: string) {

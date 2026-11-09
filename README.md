@@ -45,6 +45,8 @@ Contoh: `.menu`, `@HdyBot jadwal besok?`, `.keperawatan`, `.sdki nyeri akut`, da
 
 ### Model AI otomatis
 
+Menu menampilkan perintah yang tersedia di chat tersebut. Gunakan `.help game riwayat` untuk petunjuk subperintah. Bantuan juga mendukung alias seperti `.help hitung`. Katalog di bawah memuat contoh masukan dan balasan setiap handler.
+
 Sapaan seperti `HdyBot halo`, `HdyBot menu`, dan `HdyBot tugas hari ini` mendapat jawaban lokal. Permintaan AI atau pencarian seperti `.ask` dan `.music` yang masih diproses setelah 1,5 detik menampilkan satu pemberitahuan sebelum hasil. Untuk memeriksa keterlambatan di VPS, jalankan `sudo journalctl -u hdybot -g 'Balasan WhatsApp lambat' -n 10 --no-pager`. Kolom `inboundAgeMs` mengukur usia pesan sejak waktu yang tercatat di WhatsApp hingga dispatcher menerimanya. Kolom `handledMs` mengukur waktu pemrosesan sampai pengiriman balasan selesai di sisi bot. Log ini hanya memuat jenis chat dan waktu, maksimal satu per menit untuk balasan lambat.
 
 Isi `NVIDIA_API_KEY` pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
@@ -80,7 +82,7 @@ Gunakan `.setpjmk <jid>` dan `.setkelasa <jid>` dari DM admin. Saat ada pratinja
 
 ### 📦 Prasyarat Sistem
 - **OS**: Ubuntu Server 22.04 / 24.04 LTS (direkomendasikan untuk produksi 24/7) atau Windows/macOS untuk pengembangan.
-- **Runtime**: Node.js `>= 20.11.0` LTS.
+- **Runtime**: Node.js 20 mulai 20.19, atau Node.js mulai 22.12. Installer Ubuntu memakai Node.js 22.
 - **Browser Headless WA**: Google Chrome Stable (`/usr/bin/google-chrome-stable`) — dipasang otomatis oleh `install.sh`.
 - **Database**: PostgreSQL untuk produksi (jadwal, audit, indeks dan worker pengingat). Mode mock tanpa DATABASE_URL membaca seed kelas. State lokal di `data/runtime/bot-state.json` menyimpan tugas, catatan, permainan, dan persetujuan relay.
 
@@ -3256,9 +3258,8 @@ Pengguna · Alias: `.ingfo`
 Pengguna · Alias: `.allmenu`
 
 ~~~~text
-🤖 *HDYBOT — NURSING CLASS A*
-📚 Informasi kelas
-━━━━━━━━━━━━━━━━━━━━
+*📚 Informasi kelas*
+
 • .kelas
 • .anggota [nama]
 • .pengurus
@@ -3268,9 +3269,8 @@ Pengguna · Alias: `.allmenu`
 • .dosen [nama]
 • .kalender
 
-Halaman 1/7
-Lanjut dengan .menu 2
-Gunakan .help <perintah> untuk melihat cara pakai.
+Halaman 1/7 · .menu 2
+Cara pakai: .help <perintah>
 ~~~~
 
 **.help calc**
@@ -3279,6 +3279,7 @@ Pengguna
 
 ~~~~text
 💡 *Cara menggunakan*
+
 .calc <rumus>
 ~~~~
 
@@ -3894,9 +3895,8 @@ DM admin terverifikasi · Alias: `.admin off`, `.maintenance resume`, `.maintena
 Pengguna · Alias: `.maintenance menu`
 
 ~~~~text
-🤖 *HDYBOT — NURSING CLASS A*
-📚 Informasi kelas
-━━━━━━━━━━━━━━━━━━━━
+*📚 Informasi kelas*
+
 • .kelas
 • .anggota [nama]
 • .pengurus
@@ -3906,9 +3906,8 @@ Pengguna · Alias: `.maintenance menu`
 • .dosen [nama]
 • .kalender
 
-Halaman 1/7
-Lanjut dengan .menu 2
-Gunakan .help <perintah> untuk melihat cara pakai.
+Halaman 1/7 · .menu 2
+Cara pakai: .help <perintah>
 ~~~~
 
 **.admin status**

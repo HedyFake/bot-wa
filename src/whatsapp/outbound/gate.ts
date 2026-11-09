@@ -15,7 +15,8 @@ export class InboundDeduper {
   checkAndMark(chatJid: string, providerMessageId: string): boolean {
     const now = this.now();
     for (const [k, exp] of this.seen) {
-      if (now >= exp) this.seen.delete(k);
+      if (now < exp) break;
+      this.seen.delete(k);
     }
     const key = `${chatJid}|${providerMessageId}`;
     if (this.seen.has(key)) return false;
@@ -49,6 +50,7 @@ export class OutboundGate {
   private readonly allowedGroups = new Set<string>();
   private readonly pausedGroups = new Set<string>();
   private readonly sentKeys = new Map<string, SendResult>();
+  private readonly pending = new Map<string, Promise<SendResult>>();
 
   constructor(opts: OutboundGateOptions) {
     this.provider = opts.provider;
@@ -95,12 +97,13 @@ export class OutboundGate {
   }
 
   async send(msg: OutboundMessage, opts?: { isAdminPrivateReply?: boolean }): Promise<SendResult> {
-    const prev = this.sentKeys.get(msg.idempotencyKey);
+    const key = JSON.stringify([msg.chatJid,msg.idempotencyKey]);
+    const prev = this.sentKeys.get(key);
     if (prev) return prev;
 
     const isGroup = msg.chatJid.endsWith('@g.us');
 
-    if (this.emergencyStopped && !opts?.isAdminPrivateReply) {
+    if (this.emergencyStopped && (isGroup || !opts?.isAdminPrivateReply)) {
       return { ok: false, error: 'emergency_stop_active' };
     }
     if (isGroup) {
@@ -112,18 +115,16 @@ export class OutboundGate {
       if (this.pausedGroups.has(msg.chatJid)) {
         return { ok: false, error: 'group_paused' };
       }
-      if (!this.outboundEnabled) {
-        return { ok: false, error: 'outbound_disabled' };
-      }
-      if (this.dryRun) {
-        const res: SendResult = { ok: true, dryRun: true, providerMessageId: `dryrun-${msg.idempotencyKey}` };
-        this.remember(msg.idempotencyKey, res);
-        return res;
-      }
     }
-
-    const res = await this.provider.send(msg);
-    if (res.ok) this.remember(msg.idempotencyKey, res);
-    return res;
+    if (this.dryRun) return { ok: true, dryRun: true, providerMessageId: `dryrun-${msg.idempotencyKey}` };
+    if (!this.outboundEnabled && (isGroup || !opts?.isAdminPrivateReply)) return { ok: false, error: 'outbound_disabled' };
+    const existing = this.pending.get(key);
+    if (existing) return existing;
+    const sending = this.provider.send(msg).then(result => {
+      if (result.ok) this.remember(key,result);
+      return result;
+    }).finally(() => this.pending.delete(key));
+    this.pending.set(key,sending);
+    return sending;
   }
 }

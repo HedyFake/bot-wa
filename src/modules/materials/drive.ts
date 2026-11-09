@@ -1,4 +1,5 @@
-import { GoogleAuth } from 'google-auth-library';
+import { JWT } from 'google-auth-library';
+import { createReadStream } from 'node:fs';
 import type { OutboundMediaPayload } from '../../whatsapp/adapters/types.js';
 
 const base = 'https://www.googleapis.com/drive/v3/files';
@@ -29,9 +30,12 @@ export class DriveCatalog {
 
   constructor(private root: string, private token: () => Promise<string>, private request = fetch, private persist?: (files: CatalogFile[]) => Promise<void>) {}
   static serviceAccount(root: string, keyFile: string, persist?: (files: CatalogFile[]) => Promise<void>) {
-    const auth = new GoogleAuth({ keyFile, scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
+    const auth = new JWT({ scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
+    let loaded: Promise<void> | undefined;
     return new DriveCatalog(root, async () => {
-      const token = await auth.getAccessToken();
+      loaded ??= auth.fromStream(createReadStream(keyFile)).catch(error => { loaded = undefined; throw error; });
+      await loaded;
+      const { token } = await auth.getAccessToken();
       if (!token) throw new Error('Autentikasi Drive gagal.');
       return token;
     }, fetch, persist);

@@ -5,7 +5,7 @@
   "description": "HdyBot — Nursing Class A Assistant (AI WhatsApp class assistant)",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -42,9 +42,9 @@
     "pino": "^9.6.0",
     "qrcode": "1.5",
     "qrcode-terminal": "^0.12.0",
-    "sharp": "^0.34.5",
-    "whatsapp-web.js": "^1.26.0",
-    "zod": "^3.24.1"
+    "sharp": "0.35.5",
+    "whatsapp-web.js": "1.34.7",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -52,7 +52,7 @@
     "prisma": "^6.19.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^3.0.0"
+    "vitest": "4.1.12"
   },
   "allowScripts": {
     "@prisma/client@6.19.3": true,

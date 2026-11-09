@@ -1,5 +1,6 @@
 import { isModelAlias, modelAliases } from '../../ai/nvidia/registry.js';
 import { taskCard, taskList, parseDeadline } from '../../modules/academic/assignment-format.js';
+import { whatsappText } from '../../whatsapp/format.js';
 import { DeadlineNotifier, deadlineEnd, noticeBody, noticeCurrent } from '../../modules/academic/deadline-notices.js';
 import { extractTask, mightBeTask } from '../../modules/academic/task-intake.js';
 import { WEEKDAYS } from '../../database/seed-schema.js';
@@ -196,11 +197,11 @@ export class CommandDispatcher {
         this.fun.saveRelay(draft);
         const preview = ['Hedy, boleh saya kirim pesan ini sekarang?', 'Dari ' + sourceName + ' (' + draft.source + ')', 'Ke ' + draft.target, '', draft.text, '', '.relay kirim ' + id, '.relay tolak ' + id, 'Atau kutip pesan ini dan balas ya atau tidak.'].join('\n');
         const res = await outbound.send({ chatJid: e164ToJid(config.OWNER_WHATSAPP), text: preview, idempotencyKey: 'relay-preview:' + id }, { isAdminPrivateReply: true });
-        if (res.ok) {
+        if (res.ok && !res.dryRun) {
           const current = this.fun.relayDrafts().find(d => d.id === id)!;
           this.fun.saveRelay({ ...current, previewId: res.providerMessageId });
         }
-        this.recordAudit(msg.senderJid, 'relay.preview', res.ok ? 'pending' : 'failed', id);
+        this.recordAudit(msg.senderJid, 'relay.preview', res.dryRun ? 'simulated' : res.ok ? 'pending' : 'failed', id);
       }
       return null;
     }
@@ -425,89 +426,25 @@ export class CommandDispatcher {
   }
 
   private buildSmartNongkrongReply(msg: InboundMessage, rawText: string, justJoined: boolean): string {
-    const { config, schedule } = this.deps;
+    const { schedule, auth } = this.deps;
     const now = this.now();
-    const senderName = msg.pushName?.trim() || msg.senderJid.split('@')[0] || 'Teman 5A';
-    const lower = rawText.toLowerCase();
-
-    if (justJoined) {
-      return (
-        `Halo Bos *${senderName}* & teman-teman *${config.CLASS_NAME}*! 👋✨\n` +
-        `Siap, *${config.BOT_NAME} (Bot AI)* sekarang *AKTIF NONGKRONG* dan siap saling balas pesan bareng semua member di grup ini! 🗣️🤖\n` +
-        `Mau ngobrol santai, bahas kuliah Semester 5A, tanya jadwal, cek tugas, atau diskusi praktikum? Langsung aja chat di sini ya! _(Ketik *"bot berhenti"* kapan saja untuk kembali ke Mode Hening)_`
-      );
+    if (justJoined) return 'Aku ikut ngobrol, ya 👋';
+    if (/\b(jadwal besok|besok kuliah|kuliah besok|matkul besok)\b/i.test(rawText)) {
+      const day = schedule.getTomorrow(now);
+      return schedule.formatDayText(day.weekdayLabel,day.sessions,day.dateIso);
     }
-
-    // Cek pertanyaan seputar jadwal besok
-    if (/\b(jadwal\s+besok|besok\s+kuliah|kuliah\s+besok|matkul\s+besok)\b/i.test(lower)) {
-      const tmr = schedule.getTomorrow(now);
-      return (
-        `Halo *${senderName}*! 📅 Ini info jadwal kuliah besok untuk *${config.CLASS_NAME}*:\n` +
-        `${schedule.formatDayText(tmr.weekdayLabel, tmr.sessions, tmr.dateIso)}\n\n` +
-        `Jangan lupa siapkan materi dan istirahat yang cukup ya! Ada lagi yang mau ditanyain? 😊`
-      );
+    if (/\b(jadwal hari ini|hari ini kuliah|kuliah hari ini|jadwal kuliah|ada kuliah)\b/i.test(rawText)) {
+      const day = schedule.getToday(now);
+      return schedule.formatDayText(day.weekdayLabel,day.sessions,day.dateIso);
     }
-
-    // Cek pertanyaan seputar jadwal hari ini / kuliah
-    if (/\b(jadwal\s+hari\s+ini|hari\s+ini\s+kuliah|kuliah\s+hari\s+ini|jadwal\s+kuliah|ada\s+kuliah)\b/i.test(lower)) {
-      const today = schedule.getToday(now);
-      const next = schedule.getNextSession(now);
-      return (
-        `Siap *${senderName}*! 📚 Ini jadwal kuliah *${config.CLASS_NAME}* hari ini:\n` +
-        `${schedule.formatDayText(today.weekdayLabel, today.sessions, today.dateIso)}` +
-        (next
-          ? `\n\n⏭️ *Sesi Terdekat Berikutnya:* *${next.session.courseName}* (${next.session.weekdayLabel}, ${next.session.startTime}–${next.session.endTime} WIB)`
-          : '')
-      );
+    if (/\b(tugas|deadline|kumpul kapan)\b/i.test(rawText)) {
+      const actor = auth.evaluate(msg);
+      const tasks = this.fun.visibleAssignments(msg.chatJid,actor.isOwner && actor.allowed,'open',now);
+      return tasks.length ? taskList(tasks) : '📑 Belum ada tugas aktif yang tercatat di chat ini.';
     }
-
-    // Cek pertanyaan seputar tugas / PR / deadline
-    if (/\b(tugas|pr\b|deadline|kumpul\s+kapan|ada\s+tugas)\b/i.test(lower)) {
-      const openTasks = this.fun.visibleAssignments(msg.chatJid,this.deps.auth.evaluate(msg).isOwner && this.deps.auth.evaluate(msg).allowed,'open',now);
-      if (!openTasks.length) {
-        return `Halo *${senderName}*! 🎉 Saat ini belum ada daftar tugas aktif yang tercatat di antrean *${config.CLASS_NAME}*. Kalau ada tugas baru dari dosen/PJMK, bisa langsung catat pakai \`.tugas add\` atau kabari di grup ya!`;
-      }
-      const list = openTasks
-        .slice(0, 4)
-        .map((t, i) => `${i + 1}. *${t.title}* (${t.course}) — Deadline: *${t.dueDateIso}*`)
-        .join('\n');
-      return `Halo *${senderName}*! 📝 Ini daftar tugas aktif *${config.CLASS_NAME}* yang perlu diperhatikan:\n${list}\n\nYuk cicil bareng-bareng biar nggak sistem kebut semalam! 💪`;
-    }
-
-    // Cek pertanyaan seputar pengurus kelas / komting / PJMK
-    if (/\b(pengurus|komting|bendahara|pjmk|pj\s+matkul)\b/i.test(lower)) {
-      return `Siap *${senderName}*! Ini data struktur pengurus & PJMK kita:\n\n${this.fun.formatClassOfficers(config.CLASS_NAME)}`;
-    }
-
-    // Cek pertanyaan seputar nomor / kontak dosen
-    if (/\b(nomor\s+dosen|kontak\s+dosen|wa\s+dosen)\b/i.test(lower)) {
-      return `Halo *${senderName}*! Ini daftar nomor dosen lengkap:\n\n${this.fun.formatLecturerContacts()}`;
-    }
-
-    // Cek sapaan
-    if (/\b(halo|hai|hi\b|pagi|siang|sore|malam|assalamualaikum|p\b|woi|halo\s+semua|apa\s+kabar)\b/i.test(lower)) {
-      if (lower.includes('assalamualaikum')) {
-        return `Waalaikumsalam warahmatullahi wabarakatuh *${senderName}*! 🙏✨ Gimana kabarnya hari ini? Lagi sibuk kuliah atau lagi santai nongkrong nih?`;
-      }
-      return `Halo juga *${senderName}*! 👋✨ Senang bisa ngobrol bareng di grup *${config.CLASS_NAME}*. Gimana aktivitas hari ini, lancar kan? Lagi bahas topik seru apa nih kita? 😄`;
-    }
-
-    // Cek obrolan nongkrong / makan / ngopi / kantin / capek / ngantuk
-    if (/\b(ngopi|kopi|kantin|lapar|makan|jajan|nongkrong|gabut|ngantuk|capek|lelah|rebahan)\b/i.test(lower)) {
-      return `Waduh *${senderName}*, relate banget! ☕🍜 Habis padat mikirin materi dan praktikum Semester 5A memang paling pas istirahat sejenak, ngopi, atau cari cemilan biar fokus lagi. Yang lain gimana nih, tim kantin atau tim rebahan? 😄`;
-    }
-
-    // Cek obrolan akademik / praktikum / metopen / askep / ujian
-    if (/\b(praktikum|lab|metopen|metodologi|skripsi|askep|pasien|dinas|ujian|uts|uas|kuis|materi|kelompok|presentasi|dosen)\b/i.test(lower)) {
-      return `Mantap *${senderName}*! 🩺📚 Topik penting buat *${config.CLASS_NAME}* nih: _"${rawText.slice(0, 120)}"_. Semangat terus persiapannya ya teman-teman Semester 5A! Kalau butuh rangkuman materi (\`.ask\`), bagi kelompok (\`.kelompok\`), atau cek jadwal (\`.jadwal\`), panggil aja aku! 💪✨`;
-    }
-
-    // Cek ucapan terima kasih / pujian
-    if (/\b(makasih|terima\s+kasih|thanks|thank\s+you|mantap|keren|oke\s+bot|sip\s+bot|bagus)\b/i.test(lower)) {
-      return `Sama-sama *${senderName}*! 🤗✨ Senang bisa bantu dan nongkrong bareng teman-teman *${config.CLASS_NAME}*. Kalau ada yang mau diobrolin lagi, gas terus ya! 🚀`;
-    }
-
-    return 'Aku belum bisa menjawab pesan itu karena layanan AI sedang sibuk atau belum tersedia. Coba lagi sebentar. Untuk info kelas, ketik .jadwal atau .tugas.';
+    if (/\b(pengurus|komting|bendahara|pjmk)\b/i.test(rawText)) return this.fun.formatClassOfficers(this.deps.config.CLASS_NAME);
+    if (/\b(nomor dosen|kontak dosen|wa dosen)\b/i.test(rawText)) return this.fun.formatLecturerContacts();
+    return 'Aku belum bisa menjawab karena layanan AI sedang sibuk atau belum tersedia. Coba lagi sebentar.';
   }
 
   private async generateAiNimbrungReply(
@@ -548,7 +485,7 @@ export class CommandDispatcher {
             content:
               `Kamu adalah ${config.BOT_NAME}, asisten AI cerdas dan teman nongkrong yang seru di grup WhatsApp "${config.CLASS_NAME}" (Semester 5A Keperawatan). ` +
               'Balas langsung kepada orang yang berbicara dengan bahasa Indonesia yang natural. Berikan hanya isi jawaban. Hindari judul, banner, label kualitas, notifikasi, dan footer. ' +
-              `Sapa member yang mengirim pesan dengan namanya (${senderName}). ` +
+              `Gunakan nama ${senderName} jika wajar. Satu paragraf untuk jawaban singkat. Jika ada beberapa langkah, pisahkan dengan baris kosong. Pakai emoji seperlunya. ` +
               `Info Jadwal Hari Ini (${todaySchedule.weekdayLabel}): ${todayBrief}. ` +
               `Jika member bertanya soal kuliah/tugas/kesehatan/keperawatan, berikan jawaban yang jelas dan membantu. Jika member mengajak bercanda atau ngobrol santai, balas dengan asik dan natural agar obrolan grup hidup!`,
           },
@@ -559,7 +496,7 @@ export class CommandDispatcher {
               `Pesan Baru dari Member: ${senderName}\n` +
               `Isi Pesan: "${rawText}"\n` +
               (justJoined
-                ? 'Owner/Admin baru saja mengaktifkan Mode Nongkrong di grup. Sapa Bos/Admin dan seluruh member grup dengan antusias, beritahu bahwa Bot AI sekarang aktif nongkrong dan siap saling balas pesan dengan semua member, lalu tanggapi pesannya!'
+                ? 'Kamu baru diajak bergabung dalam obrolan. Sapa pengirim singkat dan tanggapi pesannya.'
                 : `Balas pesan dari ${senderName} secara langsung, mengalir, ramah, dan nyambung dengan konteks obrolan grup:`),
           },
         ],
@@ -578,7 +515,7 @@ export class CommandDispatcher {
     this.recordGroupTurn(msg.chatJid, 'user', senderName, rawText);
     this.recordGroupTurn(msg.chatJid, 'assistant', config.BOT_NAME, aiResponseText);
 
-    return aiResponseText.split('\n').filter(line => !/NOTIFIKASI:\s*BOT AI|^\s*🤖\s*\*?HdyBot Nimbrung|^\s*🏷️.*(?:Notif|Filter AI)/i.test(line)).join('\n').trim() || 'Aku di sini. Ada yang mau kamu tanyakan?';
+    return whatsappText(aiResponseText.split('\n').filter(line => !/NOTIFIKASI:\s*BOT AI|^\s*🤖\s*\*?HdyBot Nimbrung|^\s*🏷️.*(?:Notif|Filter AI)/i.test(line)).join('\n')) || 'Aku di sini. Ada yang mau kamu tanyakan?';
   }
 
   async handleInbound(msg: InboundMessage): Promise<string | null> {
@@ -746,7 +683,7 @@ export class CommandDispatcher {
         media,
         idempotencyKey: `reply-${msg.providerMessageId}`,
       },
-      { isAdminPrivateReply: true },
+      { isAdminPrivateReply: this.deps.auth.evaluate(msg).isAdmin },
     );
   }
 
@@ -775,7 +712,7 @@ export class CommandDispatcher {
     msg: InboundMessage,
     actorJid = msg.senderJid,
   ): Promise<{ text: string; media?: OutboundMediaPayload } | null> {
-    const textOnly = (text: string) => ({ text: text.replace(/\*\*([^*\n]+)\*\*/g, '*$1*').replace(/^#{1,4}\s+(.+)$/gm, '*$1*').replace(/\n{3,}/g, '\n\n').trim() });
+    const textOnly = (text: string) => ({ text: whatsappText(text) });
     const now = this.now();
     const { config, schedule, router, intelligence, confirmations, outbound } = this.deps;
 

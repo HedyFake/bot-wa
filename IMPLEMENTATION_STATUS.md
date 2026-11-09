@@ -63,4 +63,12 @@ Pada 9 November 2026, seluruh 91 tes di 16 file lulus. Typecheck, build, dan pem
 
 ## Pekerjaan tersisa
 
+### Audit menu, balasan, dan dependensi · 10 November 2026
+
+Katalog memeriksa bahwa setiap handler kanonis muncul pada menu dengan izin dan integrasi lengkap. Sebanyak 146 handler dan 291 nama perintah melewati 570 eksekusi dispatcher dengan WhatsApp mock. Build, typecheck, dan 101 tes di 19 file lulus. Chrome headless menghasilkan QR asli menggunakan profil sementara kosong. Penautan HP dan pengiriman pesan di VPS pengguna belum diuji dalam audit ini.
+
+Uji lokal memproses 100 pesan sapaan, menu, jadwal, dan tugas dengan median 0,3 ms dan persentil ke-95 1,2 ms tanpa panggilan AI. Angka ini mencakup dispatcher dan pengiriman mock. Waktu jaringan WhatsApp, NVIDIA, dan penyimpanan VPS tidak tercakup.
+
+Sharp, Zod, dan Vitest diperbarui. Lockfile mematok whatsapp-web.js 1.34.7 yang diuji dengan Chrome. Pemeriksaan npm atas dependensi produksi masih melaporkan 14 temuan tinggi dan 5 sedang pada paket langsung atau turunannya, antara lain melalui Puppeteer, archiver, dan Prisma. Perbaikan otomatis npm juga mencoba menurunkan versi whatsapp-web.js dan Puppeteer. Versi tersebut tidak dipakai. File kredensial Drive, chat Drive yang diizinkan, kredensial SoundCloud, dan folder musik lokal belum tersedia pada konfigurasi lokal yang diuji.
+
 Uji staging untuk akun WhatsApp dan folder Drive yang telah dibagikan, verifikasi pemulihan PostgreSQL dan systemd di VPS, lengkapi RBAC untuk jabatan kelas, lengkapi bank permainan dan indeks dokumen secara inkremental. Uji mock yang lulus tidak menutup butir tersebut.

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { mock } from 'node:test';
 import { parseCommand, commandRegistry } from '../dist/admin/commands/parser.js';
+import { menuPage } from '../dist/admin/commands/menu.js';
 import { CommandDispatcher } from '../dist/admin/commands/dispatcher.js';
 import { AdminAuthenticator } from '../dist/admin/authentication/authenticator.js';
 import { ConfirmationManager } from '../dist/admin/authorization/confirmation.js';
@@ -250,6 +251,15 @@ buffer.push('</details>','');
 const sourceParser = await readFile('src/admin/commands/parser.ts','utf8');
 const canonical = [...sourceParser.split('export interface ParsedCommand')[0].matchAll(/\| '([^']+)'/g)].map(m=>m[1]).filter(n=>n!=='unknown');
 assert.deepEqual(canonical.filter(c=>!covered.has(c)),[],'Handler tanpa contoh');
+const visible = new Set();
+for (let page = 1; page <= 7; page++) {
+  for (const row of menuPage(String(page),true,false,true,true).split('\n').filter(s => s.startsWith('• .'))) {
+    const parsed = parseCommand(row.slice(2));
+    assert.notEqual(parsed.command,'unknown',row);
+    visible.add(parsed.command);
+  }
+}
+assert.deepEqual(canonical.filter(c=>!visible.has(c)),[],'Handler tanpa entri menu');
 const parserHeads = [...sourceParser.split('switch (head)')[1].split('// Padanan bahasa alami')[0].matchAll(/case '([^']+)':/g)].map(m=>m[1]);
 assert.deepEqual([...commandRegistry.flatMap(r=>r.names),...parserHeads].filter(n=>!heads.has(n)),[],'Nama tanpa uji dispatcher');
 const readme=(await readFile('README.md','utf8')).replace(/\r\n/g,'\n');
