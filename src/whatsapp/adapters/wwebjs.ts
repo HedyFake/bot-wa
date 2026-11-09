@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { e164ToJid, normalizeE164 } from '../../security/phone.js';
 import type {
   ConnectionState,
   InboundMediaPayload,
@@ -171,7 +172,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       this.client = null;
     }
 
-    this.setState('connecting');
     mkdirSync(this.opts.authDir, { recursive: true, mode: 0o700 });
     // Chromium memegang lock profilnya sendiri. Jangan hentikan proses lain.
 
@@ -179,6 +179,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const QR_CACHE_TS_FILE = join(this.opts.authDir, 'pairing-qr.ts');
     const PAIRING_CODE_CACHE_FILE = join(this.opts.authDir, 'pairing-code.txt');
     const authMarker = join(resolve(this.opts.authDir), '.hdybot-authenticated');
+
+    for (const file of [QR_CACHE_FILE, QR_CACHE_TS_FILE, PAIRING_CODE_CACHE_FILE]) rmSync(file, { force: true });
+    this.setState('connecting');
 
     const wwebPkg = 'whatsapp-web.js';
     type WWebClientInstance = NonNullable<WWebJsWhatsAppProvider['client']> & {
@@ -370,7 +373,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
             !msg.includes('Target closed') &&
             !msg.includes('Session closed')
           ) {
-            console.warn('[WA] Peringatan saat inject halaman WA Web (diabaikan):', msg);
+            throw err;
           }
         } finally {
           isInjecting = false;
@@ -390,7 +393,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         try {
           await origAttach();
         } catch (err) {
-          console.warn('[WA] Peringatan saat attachEventListeners (diabaikan):', err);
+          throw err;
         } finally {
           isAttaching = false;
         }
@@ -430,7 +433,12 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       };
     }
 
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
+    let pairingAvailable!: () => void;
+    const firstEvent = new Promise<void>(resolve => { pairingAvailable = resolve; });
+    const stopStartupTimer = () => { clearTimeout(startupTimer); pairingAvailable(); };
     client.on('qr', (qrRaw: unknown) => {
+      if (this.client !== client) return;
       const qr = String(qrRaw ?? '').trim();
       if (!qr) return;
       this.qrCount += 1;
@@ -455,10 +463,12 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           ].join('\n');
 
           try {
-            writeFileSync(QR_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o600 });
+            writeFileSync(QR_CACHE_FILE + '.tmp', banner, { encoding: 'utf8', mode: 0o600 });
+            renameSync(QR_CACHE_FILE + '.tmp', QR_CACHE_FILE);
+            stopStartupTimer();
             writeFileSync(QR_CACHE_TS_FILE, String(nowSec), { encoding: 'utf8', mode: 0o600 });
           } catch {
-            // abaikan bila /tmp tidak dapat ditulis
+            console.error('[WA] Gagal menulis QR ke direktori WHATSAPP_AUTH_DIR.');
           }
         });
 
@@ -468,6 +478,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('code', (codeRaw: unknown) => {
+      if (this.client !== client) return;
       const raw = String(codeRaw ?? '').trim();
       const formatted = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
       const banner = [
@@ -485,8 +496,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
       try {
         writeFileSync(PAIRING_CODE_CACHE_FILE, banner, { encoding: 'utf8', mode: 0o600 });
+        stopStartupTimer();
       } catch {
-        // abaikan
+        console.error('[WA] Gagal menulis kode ke direktori WHATSAPP_AUTH_DIR.');
       }
     });
 
@@ -495,6 +507,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('authenticated', () => {
+      if (this.client !== client) return;
       try {
         rmSync(QR_CACHE_FILE, { force: true });
         rmSync(QR_CACHE_TS_FILE, { force: true });
@@ -507,6 +520,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     client.on('ready', () => {
+      if (this.client !== client) return;
+      stopStartupTimer();
       try {
         rmSync(QR_CACHE_FILE, { force: true });
         rmSync(QR_CACHE_TS_FILE, { force: true });
@@ -523,12 +538,14 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
     client.on('auth_failure', () => {
       if (this.client !== client) return;
+      stopStartupTimer();
       console.warn('[WA] Autentikasi gagal. Periksa sesi melalui akses privat VPS.');
       this.setState('session_expired');
     });
 
     client.on('disconnected', (reason: unknown) => {
       if (this.client !== client) return;
+      stopStartupTimer();
       console.warn('[WA] Koneksi WhatsApp terputus.');
       if (String(reason ?? '').toUpperCase().includes('LOGOUT')) {
         try {
@@ -581,23 +598,16 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const isGroup = rawChatId.endsWith('@g.us');
       let senderJid = isGroup ? String(m.author ?? m.from ?? '') : String(m.from ?? '');
       const isLidSender = senderJid.endsWith('@lid');
+      const phone = normalizeE164(senderJid);
+      if (phone) senderJid = e164ToJid(phone);
 
-      if (typeof m.getContact === 'function') {
+      if (isLidSender && typeof m.getContact === 'function') {
         try {
           const contact = await m.getContact();
           const contactNumberDigits = (contact?.number ?? '').replace(/\D/g, '');
           const contactUserDigits = (contact?.id?.user ?? '').replace(/\D/g, '');
-          if (isLidSender) {
-            // Untuk pengirim @lid, hanya ganti ke @s.whatsapp.net bila contact.number berisi nomor telepon asli
-            // yang berbeda dari ID LID internal.
-            if (contactNumberDigits.length >= 8 && contactNumberDigits !== contactUserDigits) {
-              senderJid = `${contactNumberDigits}@s.whatsapp.net`;
-            }
-          } else {
-            const digits = contactNumberDigits || contactUserDigits;
-            if (digits.length >= 8) {
-              senderJid = `${digits}@s.whatsapp.net`;
-            }
+          if (contactNumberDigits.length >= 8 && contactNumberDigits !== contactUserDigits) {
+            senderJid = `${contactNumberDigits}@s.whatsapp.net`;
           }
         } catch {
           // Gunakan senderJid apa adanya jika getContact gagal
@@ -700,10 +710,24 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     try {
-      await client.initialize();
+      const startupDeadline = new Promise<never>((_, reject) => {
+        startupTimer = setTimeout(() => reject(new Error('startup_timeout')), 120_000);
+      });
+      await Promise.race([Promise.all([client.initialize(), firstEvent]), startupDeadline]);
     } catch (err) {
+      const detail = String(err);
+      const reason = /timeout|timed out/i.test(detail) ? 'Waktu startup Chrome atau WhatsApp Web habis.'
+        : /SingletonLock|profile.*in use|browser is already running/i.test(detail) ? 'Profil Chrome sedang dipakai proses lain.'
+        : /EACCES|permission denied/i.test(detail) ? 'Izin direktori Chrome atau sesi ditolak.'
+        : /launch|executable|shared librar/i.test(detail) ? 'Chrome gagal dijalankan. Periksa executable dan pustaka sistem.'
+        : 'Inisialisasi WhatsApp Web gagal (' + (err instanceof Error ? err.name : 'provider') + ').';
+      console.warn('[WA]', reason);
+      if (this.client === client) this.client = null;
+      await client.destroy().catch(() => undefined);
       if (!['logged_out', 'session_expired'].includes(this.state())) this.setState('disconnected');
       throw err;
+    } finally {
+      stopStartupTimer();
     }
   }
 
@@ -779,6 +803,11 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
   private setState(s: ConnectionState): void {
     this._state = s;
+    const path = join(this.opts.authDir, 'connection-state');
+    try {
+      writeFileSync(path + '.tmp', process.pid + ' ' + s + '\n', { mode: 0o600 });
+      renameSync(path + '.tmp', path);
+    } catch { console.warn('[WA] Direktori status koneksi tidak dapat ditulis.'); }
     for (const h of this.stateHandlers) h(s);
   }
 }

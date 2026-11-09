@@ -68,16 +68,36 @@ fi
 case "${1:-}" in
   --qr)
     pairing_dir="$DATA_DIR/whatsapp-auth"
-    while systemctl is-active --quiet "$APP_NAME"; do
+    declare -A seen
+    until_pairing=$((SECONDS + 150))
+    while true; do
+      pid="$(systemctl show "$APP_NAME" --property=MainPID --value)"
+      state="$(cat "$pairing_dir/connection-state" 2>/dev/null || true)"
+      if [[ "$pid" != 0 && "$state" == "$pid connected" ]]; then
+        c_ok "WhatsApp sudah terhubung. Coba .menu melalui WhatsApp."
+        exit 0
+      fi
+      if ! systemctl is-active --quiet "$APP_NAME" || [[ "$state" == "$pid session_expired" || "$state" == "$pid logged_out" ]]; then
+        die "WhatsApp belum tersambung. Periksa sudo ./install.sh --status dan sudo ./install.sh --logs."
+      fi
       for file in "$pairing_dir/pairing-qr.txt" "$pairing_dir/pairing-code.txt"; do
-        if [[ -f "$file" && "$(stat -c %Y "$file")" != "${seen:-}" ]]; then
-          seen="$(stat -c %Y "$file")"
-          cat "$file"
+        stamp="$(stat -c '%i:%y' "$file" 2>/dev/null)" || continue
+        modified="$(stat -c %Y "$file" 2>/dev/null)" || continue
+        max_age=60
+        [[ "$file" == *pairing-code.txt ]] && max_age=180
+        if [[ "$state" == "$pid connecting" && "$stamp" != "${seen[$file]:-}" ]] && (( $(date +%s) - modified < max_age )); then
+          cat "$file" || continue
+          seen[$file]="$stamp"
+          until_pairing=$((SECONDS + 180))
         fi
       done
+      if (( SECONDS >= until_pairing )); then
+        journalctl -u "$APP_NAME" -n 25 --no-pager -o cat
+        die "Belum ada QR/kode baru atau koneksi siap. Periksa pesan startup di atas. Sesi tetap disimpan."
+      fi
       sleep 1
     done
-    exit 0 ;;
+    ;;
   --logs)
     exec journalctl -u "$APP_NAME" -f -n 80 -o cat ;;
   --status)
@@ -238,6 +258,8 @@ else
   DB_PASS="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')"
   c_ok ".env diperbarui (WHATSAPP_PROVIDER=wwebjs & PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable)"
 fi
+grep -q '^WHATSAPP_AUTH_DIR=' "$ENV_FILE" || echo "WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth" >> "$ENV_FILE"
+grep -q '^WHATSAPP_PROVIDER=' "$ENV_FILE" || echo 'WHATSAPP_PROVIDER=wwebjs' >> "$ENV_FILE"
 if [[ -f "$SRC_DIR/.env" ]]; then
   SRC_NV_KEY="$(grep -E '^NVIDIA_API_KEY=' "$SRC_DIR/.env" 2>/dev/null | head -n1 | cut -d= -f2- || true)"
   if [[ -n "$SRC_NV_KEY" ]]; then
@@ -331,7 +353,9 @@ EOF
 rm -f /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt
 systemctl daemon-reload
 systemctl reset-failed hdybot.service postgresql.service redis-server.service 2>/dev/null || true
-systemctl enable --now hdybot.service hdybot-backup.timer
+systemctl enable hdybot.service
+systemctl restart hdybot.service
+systemctl enable --now hdybot-backup.timer
 sleep 3
 
 if systemctl is-active --quiet hdybot; then

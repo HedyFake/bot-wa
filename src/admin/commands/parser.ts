@@ -520,9 +520,8 @@ export function parseCommand(textInput: string): ParsedCommand {
   if (/tampilkan\s+dashboard|dashboard\s+hari\s+ini/i.test(low)) return build('natural', 'dashboard');
   if (/status\s+koneksi(\s+whatsapp|\s+nvidia)?|periksa\s+status/i.test(low)) return build('natural', 'status');
   if (/model\s+apa\s+yang\s+(sedang\s+)?dipakai|status\s+(model|ai)/i.test(low)) return build('natural', 'ai.status');
-  if (/ganti\s+model.*lightning/i.test(low)) return build('natural', 'ai.model', ['lightning'], 'lightning');
-  if (/ganti\s+model.*super[- ]?vl/i.test(low)) return build('natural', 'ai.model', ['super-vl'], 'super-vl');
-  if (/ganti\s+model.*ultra/i.test(low)) return build('natural', 'ai.model', ['ultra'], 'ultra');
+  const model = low.match(/ganti\s+model.*?\b(lightning|super[- ]?vl|ultra|deepseek|mistral|kimi|minimax)\b/i)?.[1]?.replace(/^super[- ]?vl$/, 'super-vl');
+  if (model) return build('natural', 'ai.model', [model], model);
   if (/ringkas\s+informasi\s+penting|ringkasan\s+hari\s+ini/i.test(low)) return build('natural', 'digest', ['today'], 'today');
   if (/pesan\s+yang\s+menunggu\s+persetujuan|antrean\s+review/i.test(low)) return build('natural', 'pending');
   if (/matikan\s+sementara\s+pengiriman|hentikan\s+outbound|emergency\s+stop/i.test(low)) return build('natural', 'emergency.stop');

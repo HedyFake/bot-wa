@@ -130,7 +130,6 @@ async function main() {
 
   whatsapp.onMessage(async (msg) => {
     try {
-      await schedule.refresh().catch(() => monitor.record('Database','warning','Jadwal belum dapat dimuat'));
       await dispatcher.handleInbound(msg);
     } catch (e) {
       log.error({ err: e instanceof Error ? e.name : 'unknown' }, 'gagal memproses pesan masuk');
@@ -182,7 +181,10 @@ async function main() {
   const syncDrive = () => void drive?.sync().catch(() => monitor.record('Drive', 'error', 'Sinkronisasi gagal'));
   syncDrive();
   const syncTimer = setInterval(syncDrive, 15 * 60_000);
+  const refreshSchedule = () => void schedule.refresh().catch(() => monitor.record('Database','warning','Jadwal belum dapat dimuat'));
+  refreshSchedule();
   const jobTimer = setInterval(() => {
+    refreshSchedule();
     if (whatsapp.state() === 'connected' && config.OUTBOUND_ENABLED && !config.DRY_RUN) {
       void dispatcher.tickDeadlines().catch(() => monitor.record('Scheduler','error','Pemberitahuan deadline gagal'));
       void worker?.tick().catch(() => monitor.record('Scheduler', 'error', 'Pemrosesan antrean gagal'));

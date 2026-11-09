@@ -1,4 +1,8 @@
-export type ModelAlias = 'lightning' | 'super-vl' | 'ultra';
+export const modelAliases = ['deepseek', 'super-vl', 'mistral', 'ultra', 'kimi', 'minimax', 'lightning'] as const;
+export type ModelAlias = typeof modelAliases[number];
+export function isModelAlias(value: string): value is ModelAlias {
+  return modelAliases.some(alias => alias === value);
+}
 export type InputModality = 'text' | 'image' | 'video';
 
 export interface ModelSpec {
@@ -14,6 +18,10 @@ export interface ModelSpec {
 }
 
 export const DEFAULT_MODEL_IDS: Record<ModelAlias, string> = {
+  deepseek: 'deepseek-ai/deepseek-v4.1-flash',
+  mistral: 'mistralai/mistral-large-4-1t-a52b',
+  kimi: 'moonshotai/kimi-k3.1-pro',
+  minimax: 'minimaxai/minimax-m3.1-flash',
   ultra: 'nvidia/nemotron-3-ultra-550b-a55b',
   'super-vl': 'nvidia/nemotron-3.5-super-vl-120b-a12b',
   lightning: 'nvidia/nemotron-3.5-lightning-30b-a3b',
@@ -21,7 +29,14 @@ export const DEFAULT_MODEL_IDS: Record<ModelAlias, string> = {
 
 export function createModelRegistry(overrides?: Partial<Record<ModelAlias, string>>): Record<ModelAlias, ModelSpec> {
   const ids = { ...DEFAULT_MODEL_IDS, ...overrides };
+  const model = (alias: ModelAlias, lane: ModelSpec['lane'], modalities: ModelSpec['modalities']): ModelSpec => ({
+    alias, lane, modalities, modelId: ids[alias], defaultTemperature: 0.6, topP: 0.95, maxTokens: 4096, supportsTools: false,
+  });
   return {
+    deepseek: model('deepseek','fast',['text']),
+    mistral: model('mistral','vision',['text','image']),
+    kimi: model('kimi','reasoning',['text','image','video']),
+    minimax: model('minimax','fast',['text','image']),
     lightning: {
       alias: 'lightning',
       modelId: ids.lightning,
@@ -110,12 +125,6 @@ export function sanitizeModelContent(raw: unknown): string {
   return raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
-const LIVE_NVIDIA_FALLBACK_MODELS = [
-  'meta/llama-3.1-70b-instruct',
-  'nvidia/llama-3.1-nemotron-70b-instruct',
-  'meta/llama-3.1-8b-instruct',
-];
-
 /**
  * OpenAI-compatible HTTP transport ke `https://integrate.api.nvidia.com/v1`.
  * Memakai `fetch` bawaan Node 20+ sehingga ringan dan bebas dependency berat.
@@ -135,55 +144,40 @@ export class HttpNvidiaTransport implements NvidiaTransport {
 
   async complete(req: NvidiaCompletionRequest, signal?: AbortSignal): Promise<NvidiaCompletionResult> {
     const url = `${this.opts.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const candidateModels = this.opts.fetchImpl
-      ? [req.model]
-      : [req.model, ...LIVE_NVIDIA_FALLBACK_MODELS.filter((m) => m !== req.model)];
-
-    let lastStatus = 500;
-    for (let i = 0; i < candidateModels.length; i++) {
-      const modelName = candidateModels[i]!;
-      let res: Response;
-      try {
-        res = await this.f(url, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${this.opts.apiKey}`,
-          },
-          body: JSON.stringify({ ...req, model: modelName, stream: false }),
-          signal,
-        });
-      } catch (e) {
-        const isAbort = e instanceof Error && (e.name === 'AbortError' || /timeout|aborted/i.test(e.message));
-        throw new NvidiaProviderError(isAbort ? 'request_timeout' : 'network_error', undefined, isAbort);
-      }
-
-      if (!res.ok) {
-        lastStatus = res.status;
-        // Jika model blueprint mengembalikan 404/400/422 di endpoint live NVIDIA, coba model live berikutnya
-        if ((res.status === 404 || res.status === 400 || res.status === 422) && i < candidateModels.length - 1) {
-          continue;
-        }
-        throw new NvidiaProviderError(`http_${res.status}`, res.status, res.status === 408 || res.status === 504);
-      }
-
-      const body = (await res.json()) as {
-        choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
-      // Sengaja abaikan `reasoning_content` agar tidak pernah bocor ke user/log.
-      const text = sanitizeModelContent(body.choices?.[0]?.message?.content);
-      if (!text) {
-        throw new NvidiaProviderError('empty_content', 502, false);
-      }
-      return {
-        content: text,
-        promptTokens: body.usage?.prompt_tokens,
-        completionTokens: body.usage?.completion_tokens,
-      };
+    let res: Response;
+    try {
+      res = await this.f(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${this.opts.apiKey}`,
+        },
+        body: JSON.stringify({ ...req, stream: false }),
+        signal,
+      });
+    } catch (e) {
+      const isAbort = e instanceof Error && (e.name === 'AbortError' || /timeout|aborted/i.test(e.message));
+      throw new NvidiaProviderError(isAbort ? 'request_timeout' : 'network_error', undefined, isAbort);
     }
 
-    throw new NvidiaProviderError(`http_${lastStatus}`, lastStatus, false);
+    if (!res.ok) {
+      throw new NvidiaProviderError(`http_${res.status}`, res.status, res.status === 408 || res.status === 504);
+    }
+
+    const body = (await res.json()) as {
+      choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    // Sengaja abaikan `reasoning_content` agar tidak pernah bocor ke user/log.
+    const text = sanitizeModelContent(body.choices?.[0]?.message?.content);
+    if (!text) {
+      throw new NvidiaProviderError('empty_content', 502, false);
+    }
+    return {
+      content: text,
+      promptTokens: body.usage?.prompt_tokens,
+      completionTokens: body.usage?.completion_tokens,
+    };
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {

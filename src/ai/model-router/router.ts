@@ -4,18 +4,20 @@ import {
   createModelRegistry,
   type InputModality,
   type ModelAlias,
+  modelAliases,
   type ModelSpec,
   NvidiaProviderError,
   type NvidiaTransport,
 } from '../nvidia/registry.js';
 
-export type RouterMode = 'auto' | 'off' | 'safe' | 'pinned:lightning' | 'pinned:super-vl' | 'pinned:ultra';
+export type RouterMode = 'auto' | 'off' | 'safe' | `pinned:${ModelAlias}`;
 
 export type TaskKind =
   | 'classification'
   | 'date_extraction'
   | 'intent_detection'
   | 'short_summary'
+  | 'coding'
   | 'faq'
   | 'reformat_announcement'
   | 'vision_schedule'
@@ -32,6 +34,7 @@ export interface RouteRequest {
   complexity?: 'low' | 'medium' | 'high';
   contextChars?: number;
   requiresTools?: boolean;
+  responseBudgetMs?: number;
   messages: ChatMessage[];
 }
 
@@ -79,6 +82,7 @@ export class ModelRouter {
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
   private readonly unhealthy = new Set<ModelAlias>();
+  private readonly retryAfter = new Map<ModelAlias, number>();
   private authHalted = false;
   private inFlight = 0;
   private lastError?: string;
@@ -126,53 +130,34 @@ export class ModelRouter {
   }
 
   /** Pilih model + daftar fallback yang kompatibel modalitas. */
-  decide(req: Omit<RouteRequest, 'messages'>): RouteDecision {
+  decide(req: Omit<RouteRequest, 'messages'>, preferred?: ModelAlias): RouteDecision {
+    for (const [alias, time] of this.retryAfter) {
+      if (time <= this.now()) this.retryAfter.delete(alias);
+    }
     const mode = this.getEffectiveMode();
     if (mode === 'off') throw new Error('ai_disabled');
 
     const isMultimodal = req.modality === 'image' || req.modality === 'video' || VISION_TASKS.has(req.task);
 
-    // Aturan keras: input gambar/video WAJIB ke model yang mendukung vision (super-vl).
-    if (isMultimodal) {
-      const spec = this.registry['super-vl'];
-      if (this.unhealthy.has('super-vl')) {
-        throw new Error('vision_model_unavailable');
-      }
-      return {
-        alias: 'super-vl',
-        spec,
-        reason: 'multimodal_requires_super_vl',
-        temperature: spec.visionTemperature ?? 0.6,
-        // Tidak ada model lain yang mendukung vision -> fallback kosong (jangan klaim text model bisa vision!)
-        fallbacks: [],
-      };
-    }
+    const modality = isMultimodal && req.modality === 'text' ? 'image' : req.modality;
+    let primary: ModelAlias;
+    if (preferred) primary = preferred;
+    else if (mode.startsWith('pinned:')) primary = mode.slice(7) as ModelAlias;
+    else if (isMultimodal) primary = 'super-vl';
+    else if (req.task === 'long_document_analysis' || (req.contextChars ?? 0) > 16000) primary = 'kimi';
+    else if (req.task === 'coding') primary = 'minimax';
+    else if (req.task === 'reformat_announcement') primary = 'mistral';
+    else if (ULTRA_TASKS.has(req.task) || req.complexity === 'high') primary = 'ultra';
+    else primary = req.task === 'faq' ? 'super-vl' : 'deepseek';
 
-    let primary: ModelAlias = 'lightning';
-    let reason = 'default_fast_lane';
-
-    if (mode.startsWith('pinned:')) {
-      primary = mode.slice('pinned:'.length) as ModelAlias;
-      reason = `admin_pinned_${primary}`;
-    } else if (
-      ULTRA_TASKS.has(req.task) ||
-      req.complexity === 'high' ||
-      (req.contextChars ?? 0) > 16_000
-    ) {
-      primary = 'ultra';
-      reason = 'complex_reasoning_lane';
-    }
-
-    const candidates: ModelAlias[] =
-      primary === 'ultra'
-        ? ['ultra', 'lightning', 'super-vl']
-        : primary === 'lightning'
-          ? ['lightning', 'ultra', 'super-vl']
-          : ['super-vl', 'ultra', 'lightning'];
-
-    const healthy = candidates.filter((a) => !this.unhealthy.has(a));
+    let reason = mode.startsWith('pinned:') ? 'admin_' + mode : 'auto_' + req.task;
+    const order: ModelAlias[] = isMultimodal ? ['super-vl','mistral','kimi','minimax']
+      : ['kimi','ultra','minimax'].includes(primary) ? ['ultra','minimax','kimi','super-vl','deepseek','mistral']
+      : ['deepseek','super-vl','mistral','ultra','kimi','minimax'];
+    const healthy = [...new Set([primary, ...order])].filter(alias =>
+      this.registry[alias].modalities.includes(modality) && !this.unhealthy.has(alias) && !this.retryAfter.has(alias));
     const chosen = healthy[0];
-    if (!chosen) throw new Error('no_healthy_model_available');
+    if (!chosen) throw new Error(isMultimodal ? 'vision_model_unavailable' : 'no_healthy_model_available');
     if (chosen !== primary) reason = `${reason}->fallback_healthy_${chosen}`;
 
     const spec = this.registry[chosen];
@@ -182,7 +167,7 @@ export class ModelRouter {
       alias: chosen,
       spec,
       reason,
-      temperature: spec.defaultTemperature,
+      temperature: isMultimodal ? spec.visionTemperature ?? spec.defaultTemperature : spec.defaultTemperature,
       fallbacks,
     };
   }
@@ -195,17 +180,22 @@ export class ModelRouter {
 
   /** Jalankan permintaan ke NVIDIA dengan retry terbatas dan fallback kompatibel. */
   async invoke(req: RouteRequest): Promise<{ text: string; alias: ModelAlias; modelId: string; routeReason: string }> {
-    if (this.inFlight >= 3) throw new Error('ai_busy');
-    this.inFlight++;
-    try { return await this.invokeAvailable(req); } finally { this.inFlight--; }
+    return this.invokePreferred(req);
   }
 
-  private async invokeAvailable(req: RouteRequest) {
+  private async invokePreferred(req: RouteRequest, preferred?: ModelAlias) {
+    if (this.inFlight >= 3) throw new Error('ai_busy');
+    this.inFlight++;
+    try { return await this.invokeAvailable(req, preferred); } finally { this.inFlight--; }
+  }
+
+  private async invokeAvailable(req: RouteRequest, preferred?: ModelAlias) {
     if (this.authHalted) throw new Error('nvidia_auth_halted');
     if (!this.opts.transport) throw new Error('nvidia_transport_not_configured');
 
-    const decision = this.decide(req);
+    const decision = this.decide(req, preferred);
     const chain: ModelAlias[] = [decision.alias, ...decision.fallbacks];
+    const deadline = this.now() + (req.responseBudgetMs ?? this.timeoutMs);
     let lastErr: unknown;
 
     for (let idx = 0; idx < chain.length; idx++) {
@@ -219,7 +209,10 @@ export class ModelRouter {
       for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
         const t0 = this.now();
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+        const remaining = deadline - t0;
+        if (remaining <= 0) throw new Error('response_timeout');
+        const attemptBudget = idx < chain.length - 1 ? Math.ceil(remaining * 0.6) : remaining;
+        const timer = setTimeout(() => ctrl.abort(), Math.min(this.timeoutMs, attemptBudget));
         try {
           const res = await this.opts.transport.complete(
             {
@@ -264,14 +257,20 @@ export class ModelRouter {
             errorCode: code,
           });
 
-          // 401/403: stop total agar tidak terus memukul API dengan key salah.
-          if (pErr.statusCode === 401 || pErr.statusCode === 403) {
+          if (ctrl.signal.aborted) {
+            this.retryAfter.set(alias, this.now() + 60_000);
+            break;
+          }
+          // Kredensial salah menghentikan semua model. Izin dan ketersediaan diperiksa per model.
+          if (pErr.statusCode === 401) {
             this.authHalted = true;
             throw new Error(`nvidia_auth_error_${pErr.statusCode}`);
           }
-          // 400/422: masalah skema/parameter, atau 404 model tidak tersedia -> tandai model unhealthy & pindah fallback.
-          if (pErr.statusCode === 400 || pErr.statusCode === 422 || pErr.statusCode === 404) {
-            this.unhealthy.add(alias);
+          if (pErr.statusCode === 403 || pErr.statusCode === 404) {
+            this.retryAfter.set(alias, this.now() + 3600_000);
+            break;
+          }
+          if (pErr.statusCode === 400 || pErr.statusCode === 422) {
             break;
           }
           // Retry hanya untuk timeout / 429 / 5xx.
@@ -293,15 +292,9 @@ export class ModelRouter {
 
     // Eskalasi satu kali ke Ultra jika belum memakai Ultra dan modalitas teks.
     if (first.alias !== 'ultra' && req.modality === 'text' && !this.unhealthy.has('ultra')) {
-      const prevMode = this.mode;
-      this.setMode('pinned:ultra', 60_000);
-      try {
-        const second = await this.invoke(req);
-        const parsed2 = this.tryParseSchema(second.text, schema);
-        if (parsed2.ok) return { data: parsed2.data, alias: second.alias, modelId: second.modelId };
-      } finally {
-        this.mode = prevMode;
-      }
+      const second = await this.invokePreferred(req, 'ultra');
+      const parsed2 = this.tryParseSchema(second.text, schema);
+      if (parsed2.ok) return { data: parsed2.data, alias: second.alias, modelId: second.modelId };
     }
     throw new Error('structured_output_validation_failed');
   }
@@ -322,29 +315,14 @@ export class ModelRouter {
 
   status(): RouterStatus {
     const mode = this.getEffectiveMode();
+    const unavailable = new Set([...this.unhealthy, ...[...this.retryAfter].filter(([,time]) => time > this.now()).map(([alias]) => alias)]);
     return {
       mode,
       pinnedUntil: this.pinnedUntilMs ? new Date(this.pinnedUntilMs).toISOString() : undefined,
       fallbackEnabled: this.fallbackEnabled,
       authHalted: this.authHalted,
-      unhealthyAliases: [...this.unhealthy],
-      models: {
-        lightning: {
-          modelId: this.registry.lightning.modelId,
-          lane: this.registry.lightning.lane,
-          healthy: !this.unhealthy.has('lightning'),
-        },
-        'super-vl': {
-          modelId: this.registry['super-vl'].modelId,
-          lane: this.registry['super-vl'].lane,
-          healthy: !this.unhealthy.has('super-vl'),
-        },
-        ultra: {
-          modelId: this.registry.ultra.modelId,
-          lane: this.registry.ultra.lane,
-          healthy: !this.unhealthy.has('ultra'),
-        },
-      },
+      unhealthyAliases: [...unavailable],
+      models: Object.fromEntries(modelAliases.map(alias => [alias, { modelId: this.registry[alias].modelId, lane: this.registry[alias].lane, healthy: !unavailable.has(alias) }])) as RouterStatus['models'],
       totalCalls: this.callCount,
       lastError: this.lastError,
     };

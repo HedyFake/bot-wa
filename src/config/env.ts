@@ -64,7 +64,7 @@ export const EnvSchema = z.object({
   NVIDIA_MODEL_LIGHTNING: z.string().default('nvidia/nemotron-3.5-lightning-30b-a3b'),
   NVIDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   AI_DEFAULT_MODEL: z.string().optional(),
-  AI_ROUTER_MODE: z.enum(['auto', 'off', 'safe', 'pinned:lightning', 'pinned:super-vl', 'pinned:ultra']).default('auto'),
+  AI_ROUTER_MODE: z.enum(['auto', 'off', 'safe', 'pinned:lightning', 'pinned:super-vl', 'pinned:ultra', 'pinned:deepseek', 'pinned:mistral', 'pinned:kimi', 'pinned:minimax']).default('auto'),
   AI_FALLBACK_ENABLED: bool(true),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
 

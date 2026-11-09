@@ -1,6 +1,6 @@
 # 🤖🩺 HdyBot — Nursing Class A Assistant (Semester 5A)
 
-Versi revisi 9 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Menu .keperawatan memakai Perawat.org, dan .music mencari SoundCloud. Untuk fitur aktif, batas pengujian, konfigurasi Drive, dan pemulihan, lihat [laporan implementasi](IMPLEMENTATION_STATUS.md) dan [audit proyek](PROJECT_AUDIT.md). Installer memakai systemd dan membuat password unik pada instalasi baru. QR hanya ditampilkan lewat akses lokal privat.
+Versi revisi 10 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Menu .keperawatan memakai Perawat.org, dan .music mencari SoundCloud. Untuk fitur aktif, batas pengujian, konfigurasi Drive, dan pemulihan, lihat [laporan implementasi](IMPLEMENTATION_STATUS.md) dan [audit proyek](PROJECT_AUDIT.md). Installer memakai systemd dan membuat password unik pada instalasi baru. QR hanya ditampilkan lewat akses lokal privat.
 
 > **Asisten AI WhatsApp Akademik, Sekretaris Kelas Digital, & Pengelola Informasi Grup Cerdas (24/7 Daemon)**  
 > Dirancang khusus untuk **Nursing Class A (S1 Ilmu Keperawatan — Semester 5A)** dengan pusat kendali penuh melalui WhatsApp pribadi **Hedy (`082233038659`)** dan ditenagai oleh **NVIDIA Nemotron Auto-Router AI**.
@@ -43,6 +43,21 @@ Admin yang terdaftar membuka sesi lewat DM untuk perintah terbatas dan menguncin
 
 Contoh: `.menu`, `@HdyBot jadwal besok?`, `.keperawatan`, `.sdki nyeri akut`, dan `.music fals`. Balasan nongkrong berbentuk percakapan biasa. Pengaturan grup disimpan per JID.
 
+### Model AI otomatis
+
+Isi `NVIDIA_API_KEY` pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
+
+| Model utama | Pemakaian di WhatsApp |
+| --- | --- |
+| DeepSeek V4.1 Flash | Klasifikasi intent dan ringkasan singkat |
+| Nemotron Super-VL | Pertanyaan singkat dan tangkapan layar. Kirim gambar dengan caption `.ask jelaskan tabel ini`, atau kutip gambar dengan perintah itu. |
+| Mistral Large 4 | Penyuntingan dengan `.rapikan` dan draf tulisan |
+| Nemotron Ultra | Penalaran kompleks, misalnya `.ask jelaskan perbedaan dua konsep` |
+| Kimi K3.1 Pro | Teks dokumen Drive yang dapat diekstrak, riset, dan konteks panjang |
+| MiniMax M3.1 Flash | Permintaan coding, misalnya `.ask debug skrip Python ini ...` |
+
+Pada 10 November 2026, NVIDIA menampilkan Kimi K3.1 Pro sebagai preview tanpa akses API publik. Jika endpoint menolak Kimi, bot meneruskan tugas teks panjang ke Ultra dan dapat mencoba Kimi lagi setelah satu jam. Lightning tetap tersedia untuk konfigurasi lama dan pemilihan manual. Command lokal seperti `.jadwal` dan `.tugas` tetap memakai data bot.
+
 ### Tugas, tenggat, dan pengingat H−3 sampai hari H
 
 HdyBot memeriksa pesan penugasan atau tenggat di grup kelas, grup PJMK, dan grup sumber yang admin daftarkan melalui `.groups add <JID> <nama>`, serta DM Hedy yang sudah terautentikasi. NVIDIA membedakan pengumuman dari obrolan. Tugas hasil deteksi masuk ke antrean privat. Jika tanggal, dosen, atau PJ tidak disebutkan, bot menandainya belum tercatat. Pesan biasa tidak memicu pengumuman ke grup.
@@ -82,7 +97,7 @@ chmod +x install.sh
 sudo ./install.sh
 ```
 
-Saat WhatsApp memerlukan pairing, lihat QR di konsol privat dengan `sudo ./install.sh --qr`.
+Saat WhatsApp memerlukan pairing, jalankan `sudo bash install.sh --qr` di konsol privat VPS. Jika sesi sudah siap, perintah menampilkan “WhatsApp sudah terhubung”. Jika tidak ada QR, kode pairing, atau koneksi siap dalam 150 detik, konsol menampilkan log startup terakhir. Baca log lanjutan dengan `sudo bash install.sh --logs`. Saat memperbarui instalasi systemd, jalankan `sudo bash install.sh` dari direktori source yang sudah diperbarui agar service memuat build baru dan memakai sesi yang tersimpan.
 
 ---
 
@@ -148,7 +163,7 @@ pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup
 
-# Lihat QR Code WhatsApp & log secara live
+# Lihat log aktivitas
 pm2 logs hdybot --lines 100
 ```
 
@@ -157,7 +172,7 @@ pm2 logs hdybot --lines 100
 | 💻 Perintah PM2 | 📖 Fungsi |
 | :--- | :--- |
 | `pm2 start start.js --name hdybot` | Menjalankan HdyBot 24/7 di background |
-| `pm2 logs hdybot --lines 100` | Menampilkan QR Code WhatsApp & log aktivitas bot |
+| `pm2 logs hdybot --lines 100` | Menampilkan log aktivitas bot |
 | `pm2 status` | Melihat status hidup/mati, uptime, dan pemakaian RAM |
 | `pm2 restart hdybot` | Me-restart bot setelah update kode atau `.env` |
 | `pm2 stop hdybot` | Menghentikan bot sementara |
@@ -169,7 +184,7 @@ pm2 logs hdybot --lines 100
 | 💻 Perintah `install.sh` | 📖 Fungsi Operasional |
 | :--- | :--- |
 | `sudo ./install.sh` | Instalasi penuh + build + aktifkan daemon 24/7 + tampilkan QR Code |
-| `sudo ./install.sh --qr` | Menampilkan QR Code WhatsApp aktif yang masih segar (< 18 detik, bebas expired) |
+| `sudo ./install.sh --qr` | Menampilkan QR atau kode pairing terbaru, status tersambung, atau diagnostik startup |
 | `sudo ./install.sh --reset-wa` | Menghapus sesi WA lama, lockfile Chrome, & cache lama lalu menampilkan QR baru yang bersih |
 | `sudo ./install.sh --pair 08xxxxxxxxxx` | Menautkan nomor WA Bot menggunakan **Kode Pairing 8-Digit** (tanpa scan kamera QR) |
 | `sudo ./install.sh --status` | Memeriksa status service `hdybot.service` di systemd |
@@ -1816,7 +1831,7 @@ Pengguna · Alias: `.ringkas`
 
 ~~~~text
 📝 *Ringkasan Materi (HdyBot Study Assistant)*
-• *Poin Inti:* Belajar bersama. Catat hasil diskusi.
+• *Poin Inti:* Contoh respons NVIDIA untuk pengujian format.
 • *Panjang Asli:* 37 karakter (2 kalimat)
 _Label: Hasil ringkasan bantu belajar._
 ~~~~
@@ -3215,7 +3230,7 @@ Pengguna
 • Asisten AI Akademik & Sekretaris Kelas Digital untuk *Nursing Class A (Semester 5A)*
 • Owner & Admin Utama: *Hedy* (`<nomor owner>`)
 • Nomor Bot: *Dinamis / Bisa Ganti-Ganti via QR Code*
-• Mesin AI: *NVIDIA Nemotron Auto-Router* (Lightning 30B, Super-VL 120B, Ultra 550B)
+• Mesin AI: *NVIDIA Build Auto-Router*
 • Zona Waktu: *Asia/Jakarta*
 ~~~~
 
@@ -3228,7 +3243,7 @@ Pengguna · Alias: `.ingfo`
 • Asisten AI Akademik & Sekretaris Kelas Digital untuk *Nursing Class A (Semester 5A)*
 • Owner & Admin Utama: *Hedy* (`<nomor owner>`)
 • Nomor Bot: *Dinamis / Bisa Ganti-Ganti via QR Code*
-• Mesin AI: *NVIDIA Nemotron Auto-Router* (Lightning 30B, Super-VL 120B, Ultra 550B)
+• Mesin AI: *NVIDIA Build Auto-Router*
 • Zona Waktu: *Asia/Jakarta*
 ~~~~
 
@@ -3307,7 +3322,7 @@ DM admin terverifikasi
 📊 *DASHBOARD HDYBOT — Halo Hedy*
 • WhatsApp (mock): *connected*
 • NVIDIA AI: *Belum diisi* | Mode: *auto*
-• Model aktif: Lightning=nvidia/nemotron-3.5-lightning-30b-a3b, Super-VL=nvidia/nemotron-3.5-super-vl-120b-a12b, Ultra=nvidia/nemotron-3-ultra-550b-a55b
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning
 • Grup sumber aktif: *1*
 • Pesan diproses hari ini: *1* (Penting: *1*)
 • Menunggu review Hedy: *1*
@@ -3430,13 +3445,17 @@ Worker pengingat belum terhubung ke database.
 DM admin terverifikasi · Alias: `.ai status`
 
 ~~~~text
-🧠 *NVIDIA Nemotron Router Status*
+🧠 *NVIDIA Build · Model AI*
 • Kredensial: belum dikonfigurasi
 • Mode: *auto*
 • Fallback: ON | Total Panggilan: 0
-• *lightning* (fast): `nvidia/nemotron-3.5-lightning-30b-a3b` [diizinkan router]
-• *super-vl* (vision): `nvidia/nemotron-3.5-super-vl-120b-a12b` [diizinkan router]
-• *ultra* (reasoning): `nvidia/nemotron-3-ultra-550b-a55b` [diizinkan router]
+• *deepseek* · deepseek-ai/deepseek-v4.1-flash
+• *super-vl* · nvidia/nemotron-3.5-super-vl-120b-a12b
+• *mistral* · mistralai/mistral-large-4-1t-a52b
+• *ultra* · nvidia/nemotron-3-ultra-550b-a55b
+• *kimi* · moonshotai/kimi-k3.1-pro
+• *minimax* · minimaxai/minimax-m3.1-flash
+• *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
 ~~~~
 
 **.ai models**
@@ -3444,13 +3463,17 @@ DM admin terverifikasi · Alias: `.ai status`
 DM admin terverifikasi
 
 ~~~~text
-🧠 *NVIDIA Nemotron Router Status*
+🧠 *NVIDIA Build · Model AI*
 • Kredensial: belum dikonfigurasi
 • Mode: *auto*
 • Fallback: ON | Total Panggilan: 0
-• *lightning* (fast): `nvidia/nemotron-3.5-lightning-30b-a3b` [diizinkan router]
-• *super-vl* (vision): `nvidia/nemotron-3.5-super-vl-120b-a12b` [diizinkan router]
-• *ultra* (reasoning): `nvidia/nemotron-3-ultra-550b-a55b` [diizinkan router]
+• *deepseek* · deepseek-ai/deepseek-v4.1-flash
+• *super-vl* · nvidia/nemotron-3.5-super-vl-120b-a12b
+• *mistral* · mistralai/mistral-large-4-1t-a52b
+• *ultra* · nvidia/nemotron-3-ultra-550b-a55b
+• *kimi* · moonshotai/kimi-k3.1-pro
+• *minimax* · minimaxai/minimax-m3.1-flash
+• *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
 ~~~~
 
 **.ai model lightning**
@@ -3482,7 +3505,7 @@ DM admin terverifikasi
 DM admin terverifikasi
 
 ~~~~text
-🧪 *Hasil Uji NVIDIA (lightning — nvidia/nemotron-3.5-lightning-30b-a3b):*
+🧪 *Hasil Uji NVIDIA (super-vl — nvidia/nemotron-3.5-super-vl-120b-a12b):*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
@@ -3910,7 +3933,7 @@ DM admin terverifikasi · Alias: `.maintenance overview`
 📊 *DASHBOARD HDYBOT — Halo Hedy*
 • WhatsApp (mock): *connected*
 • NVIDIA AI: *Belum diisi* | Mode: *auto*
-• Model aktif: Lightning=nvidia/nemotron-3.5-lightning-30b-a3b, Super-VL=nvidia/nemotron-3.5-super-vl-120b-a12b, Ultra=nvidia/nemotron-3-ultra-550b-a55b
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning
 • Grup sumber aktif: *1*
 • Pesan diproses hari ini: *1* (Penting: *1*)
 • Menunggu review Hedy: *1*
@@ -3990,7 +4013,7 @@ DM admin terverifikasi · Alias: `.maintenance`
 📊 *DASHBOARD HDYBOT — Halo Hedy*
 • WhatsApp (mock): *connected*
 • NVIDIA AI: *Belum diisi* | Mode: *auto*
-• Model aktif: Lightning=nvidia/nemotron-3.5-lightning-30b-a3b, Super-VL=nvidia/nemotron-3.5-super-vl-120b-a12b, Ultra=nvidia/nemotron-3-ultra-550b-a55b
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning
 • Grup sumber aktif: *1*
 • Pesan diproses hari ini: *1* (Penting: *1*)
 • Menunggu review Hedy: *1*
