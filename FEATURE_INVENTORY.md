@@ -1,6 +1,6 @@
 # Inventaris fitur HdyBot
 
-Inventaris statis perintah titik dari parser dan dispatcher aktif. Kolom status menyatakan keberadaan jalur kode. Uji perilaku yang telah dijalankan tercantum di IMPLEMENTATION_STATUS.md. Alias bahasa alami ada di akhir parser. Semua baris merujuk ke src/admin/commands/parser.ts dan src/admin/commands/dispatcher.ts. Pengiriman melewati OutboundGate. Beberapa subperintah melakukan validasi tambahan terhadap izin, sesi, atau konfigurasi provider.
+Katalog dengan alias dan contoh balasan dari handler terbaru tersedia di [README](README.md#katalog-perintah-dan-contoh-balasan). Inventaris statis perintah titik dari parser dan dispatcher aktif. Kolom status menyatakan keberadaan jalur kode. Uji perilaku yang telah dijalankan tercantum di IMPLEMENTATION_STATUS.md. Alias bahasa alami ada di akhir parser. Semua baris merujuk ke src/admin/commands/parser.ts dan src/admin/commands/dispatcher.ts. Pengiriman melewati OutboundGate. Beberapa subperintah melakukan validasi tambahan terhadap izin, sesi, atau konfigurasi provider.
 
 | Perintah internal | Perintah dan alias | Akses | Panggilan langsung | Data utama | Status statis |
 |---|---|---|---|---|---|
@@ -26,7 +26,7 @@ Inventaris statis perintah titik dari parser dan dispatcher aktif. Kolom status 
 | class.rules | .rules, .aturan | Pengguna | Dispatcher | Memori / eksternal | Handler ditemukan |
 | class.faq | .faq | Pengguna | Dispatcher | Memori / eksternal | Handler ditemukan |
 | user.profile | .profile, .me | Pengguna | this.deps.auth.evaluate | Memori / eksternal | Handler ditemukan |
-| priority | .priority | Admin privat | Dispatcher | Memori / eksternal | Handler khusus belum ditemukan |
+| priority | .priority | Admin privat | Dispatcher | Memori / eksternal | Handler tersedia · diuji via dispatcher |
 | pending | .pending, .admin review | Admin privat | intelligence.listPendingReviews | Memori / eksternal | Handler ditemukan |
 | approve | .approve, .admin approve | Admin privat | intelligence.approve | Memori / eksternal | Handler ditemukan |
 | reject | .reject, .admin reject | Admin privat | intelligence.reject | Memori / eksternal | Handler ditemukan |
@@ -108,10 +108,10 @@ Inventaris statis perintah titik dari parser dan dispatcher aktif. Kolom status 
 | schedule.today_lecturers | .dosenhariini | Pengguna | this.fun.formatLecturerContacts, schedule.listLecturers | State layanan lokal | Handler ditemukan |
 | schedule.today_rooms | .ruanganhariini | Pengguna | schedule.getToday | Seed kelas | Handler ditemukan |
 | schedule.check_date | .cekjadwal | Pengguna | schedule.getToday | Seed kelas | Handler ditemukan |
-| schedule.add | .tambahjadwal, .jadwal add, .jadwal tambah | Admin privat | Dispatcher | Memori / eksternal | Handler khusus belum ditemukan |
-| schedule.edit | .editjadwal, .jadwal edit, .jadwal ubah | Admin privat | Dispatcher | Memori / eksternal | Handler khusus belum ditemukan |
-| schedule.delete | .hapusjadwal, .jadwal delete, .jadwal hapus | Admin privat | Dispatcher | Memori / eksternal | Handler khusus belum ditemukan |
-| schedule.reset | .resetjadwal, .jadwal reset | Admin privat | Dispatcher | Memori / eksternal | Handler khusus belum ditemukan |
+| schedule.add | .tambahjadwal, .jadwal add, .jadwal tambah | Admin privat | ScheduleDatabase, ConfirmationManager | PostgreSQL | Handler tersedia · uji transaksi |
+| schedule.edit | .editjadwal, .jadwal edit, .jadwal ubah | Admin privat | ScheduleDatabase, ConfirmationManager | PostgreSQL | Handler tersedia · uji transaksi |
+| schedule.delete | .hapusjadwal, .jadwal delete, .jadwal hapus | Admin privat | ScheduleDatabase, ConfirmationManager | PostgreSQL | Handler tersedia · uji transaksi |
+| schedule.reset | .resetjadwal, .jadwal reset | Admin privat | ScheduleDatabase, ConfirmationManager | PostgreSQL | Handler tersedia · uji transaksi |
 | ai.status | .ai | Admin privat | router.status | Memori / eksternal | Handler ditemukan |
 | groups | .groups, .group, .source, .target | Admin privat | intelligence.listSources, outbound.listAllowedGroups | Memori / eksternal | Handler ditemukan |
 | group.nimbrung | .nimbrung, .nongkrong, .diam, .hening, .berhentinimbrung | Admin grup / owner | intelligence.getPrimaryGroupJid, this.fun.setNimbrung, outbound.registerAllowedGroup, outbound.send | State layanan lokal | Handler ditemukan |
@@ -120,7 +120,7 @@ Inventaris statis perintah titik dari parser dan dispatcher aktif. Kolom status 
 | group.classify | .cekpesan, .klasifikasi | Pengguna | intelligence.evaluateMessage | Memori / eksternal | Handler ditemukan |
 | filter.status | .filter, .monitor | Admin privat | intelligence.stats | Memori / eksternal | Handler ditemukan |
 | digest | .digest | Admin privat | intelligence.stats | Memori / eksternal | Handler ditemukan |
-| broadcast.preview | .broadcast | Admin privat | Dispatcher | Memori / eksternal | Handler khusus belum ditemukan |
+| broadcast.preview | .broadcast | Admin privat | Dispatcher | Memori / eksternal | Handler tersedia · diuji via dispatcher |
 | schedule | .schedule, .jadwal | Pengguna | schedule.getToday, schedule.formatDayText | Seed kelas | Handler ditemukan |
 | reminders | .reminders, .reminder | Pengguna | this.deps.worker.command, this.fun.addReminder, this.fun.deleteReminder, this.fun.snoozeReminder, this.fun.listReminders | Reminder / BotSetting | Handler ditemukan |
 | ai.models | .ai models | Admin privat | router.status | Memori / eksternal | Handler ditemukan |

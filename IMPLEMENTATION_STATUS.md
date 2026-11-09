@@ -5,7 +5,7 @@ Diperbarui 9 November 2026. Proyek menggunakan source lama TypeScript, whatsapp-
 | Tahap | Status | Hasil dan batas pembuktian |
 |---|---|---|
 | 0 · Audit | PARTIAL | Modul aktif, jalur perintah, data, installer, dan risiko dipetakan di PROJECT_AUDIT.md, FEATURE_INVENTORY.md, ARCHITECTURE_MAP.md. Arsip Akira bukan runtime produksi. |
-| 1 · Preserve & repair | PARTIAL | Identitas admin, password, sesi WhatsApp, pemeriksaan database, relay, dan beberapa rute jadwal diperbaiki. Perintah lama yang belum memiliki handler ditandai di inventaris. |
+| 1 · Preserve & repair | PARTIAL | Identitas admin, password, sesi WhatsApp, pemeriksaan database, relay, dan beberapa rute jadwal diperbaiki. Semua handler kanonis di parser memiliki contoh eksekusi dalam katalog README. |
 | 2 · Output | PARTIAL | Menu menggunakan registri dan pemeriksaan izin. Halaman dan bantuan tersedia. Ringkasan kelas menjadi teks berbaris. Obrolan nongkrong langsung menjawab pengirim tanpa banner. |
 | 3 · Interaksi | PARTIAL | wwebjs mendeteksi mention dan kutipan. Jawaban mengutip pesan masuk dan menandai pengirim. Pertanyaan ambigu melalui intent NVIDIA. Perintah eksplisit dan izin tetap divalidasi aplikasi. Cooldown dan penyimpanan mode grup aktif. Perilaku perangkat nyata belum diuji. |
 | 4 · Hiburan | PARTIAL | Permainan per chat, sesi dua peserta, gabung/keluar, kategori, waktu, tingkat kesulitan, petunjuk, riwayat, tantangan harian, dan XP opt-in tersimpan. Bank soal berisi subset kategori yang diminta. Turnamen, eliminasi, tebak suara, serta seluruh variasi soal belum lengkap. |
@@ -43,12 +43,24 @@ Installer memakai systemd sebagai pengelola proses bot. Gunakan `systemctl statu
 
 Perubahan inti berada di src/admin/commands, src/whatsapp, src/modules/academic, src/modules/fun, src/modules/materials, src/modules/media, src/modules/reminders, src/observability, src/index.ts, prisma/seed.ts, .env.example, package.json, dan install.sh. Tidak ada penghapusan file source lama. Lihat CHANGELOG.md untuk ringkasan.
 
-- Verifikasi akhir 9 November 2026: 81 dari 81 tes lulus dalam 14 file Vitest, typecheck dan build lulus, Bash -n lulus, serta git diff --check bersih. Entry point dist/index.js mencapai health awal dalam dua startup terpisah dengan provider mock.
+- Verifikasi lanjutan 9 November 2026: 86 dari 86 tes lulus dalam 15 file Vitest, typecheck dan build lulus, Bash -n lulus, serta git diff --check bersih. Entry point dist/index.js mencapai health awal dalam dua startup terpisah dengan provider mock.
 - Uji baca publik Perawat.org berhasil memuat SDKI Nyeri Akut, SOP Pemasangan Infus, high alert, kategori Ukom, Kampus, Berita, Pojok PPNI, Patient Safety, MTB, Pemeriksaan Penunjang, dan daftar file Download. Pencarian askep stroke tidak menemukan judul yang cocok.
 - Pengujian mock meliputi akses monitoring, owner relay, quoted reply dan mention, percakapan yang tidak ditujukan ke bot, dua grup, skor, menu, klasifikasi intent, query medis, file musik lokal, pengiriman Drive berhasil/gagal, pencabutan akses dan pemulihan worker.
 - Pemeriksaan installer menggunakan Bash -n dan uji statis. Ini belum menyimulasikan boot Linux, penutupan SSH, pairing perangkat nyata, maupun kegagalan jaringan VPS.
 - Kredensial WhatsApp, NVIDIA, SoundCloud, Drive produksi, dan PostgreSQL pengguna tidak dipakai untuk pengujian integrasi. Tidak ada pesan uji yang dikirim ke anggota kelas.
 
+## Audit katalog dan transaksi jadwal
+
+README memuat transkrip dari registri dan dispatcher, termasuk alias, prasyarat, dan lampiran. Perintah .priority dan .broadcast preview telah dihubungkan ke antrean review. Perhitungan, ID tugas/catatan setelah penghapusan, filter tenggat WIB, MIME lampiran kompresi, kartu ucapan, dan pemotongan isi PDF diperbaiki. TTS memerlukan espeak-ng. Jadwal salat kini dibaca dari API untuk kota dan tanggal yang diminta.
+
+PostgreSQL 18 lokal terisolasi menjalankan dua migrasi dan seed. scripts/check-schedule-db.mjs memeriksa tambah/edit/hapus/reset, penolakan overlap dan pratinjau usang, backup, otorisasi owner, penolakan grup, replay nonce, seed ulang yang mempertahankan penghapusan, serta dua worker yang mencoba mengirim pengingat yang sama. Semua pengiriman pada pengujian menggunakan mock.
+
+## Pengingat tenggat akademik
+
+Untuk tugas aktif, antrean persisten memproses H−3, H−2, H−1, dan hari H dalam WIB. Setiap kartu masuk ke DM Hedy. Pengiriman ke grup memerlukan pilihan tujuan dan konfirmasi untuk kartu hari itu. Uji regresi mencakup migrasi antrean lama, restart, hari yang terlewat, pengiriman ganda, dan pembatalan pratinjau saat tugas berubah atau selesai.
+
+Pada 9 November 2026, seluruh 91 tes di 16 file lulus. Typecheck, build, dan pemeriksaan katalog README juga lulus. Katalog menjalankan 146 handler dan 291 nama perintah dalam 570 eksekusi melalui WhatsApp mock.
+
 ## Pekerjaan tersisa
 
-Uji staging untuk akun WhatsApp dan folder Drive yang telah dibagikan, verifikasi pemulihan PostgreSQL dan systemd di VPS, lengkapi RBAC untuk jabatan kelas, samakan jadwal runtime dengan perubahan database, lengkapi bank permainan dan indeks dokumen secara inkremental. Uji mock yang lulus tidak menutup butir tersebut.
+Uji staging untuk akun WhatsApp dan folder Drive yang telah dibagikan, verifikasi pemulihan PostgreSQL dan systemd di VPS, lengkapi RBAC untuk jabatan kelas, lengkapi bank permainan dan indeks dokumen secara inkremental. Uji mock yang lulus tidak menutup butir tersebut.

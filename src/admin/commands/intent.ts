@@ -6,6 +6,8 @@ const exactOnly = new Set(['menu','help','besok','mingguini','kuliahberikutnya',
 export async function inferIntent(input: string, router: ModelRouter) {
   const clean = input.replace(/@\d+(?::\d+)?\b/g, '').replace(/^\s*(?:(?:halo|hai|hei)\s+)?@?(?:hdybot|hdy|bot)\b[,:!\s-]*/i,'').trim();
   if (clean.startsWith('.')) return parseCommand(clean);
+  if (/\btugas\b/i.test(clean) && /\bhari ini\b/i.test(clean)) return parseCommand('.tugas hariini');
+  if (/\btugas\b/i.test(clean) && /\b(pekan|minggu) ini\b/i.test(clean)) return parseCommand('.tugas mingguini');
   const explicit = parseCommand('.' + clean);
   const head = clean.split(/\s+/)[0]?.toLowerCase() ?? '';
   if (actions.includes(head) && (!exactOnly.has(head) || clean.split(/\s+/).length === 1) &&

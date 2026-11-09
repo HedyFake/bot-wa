@@ -1,3 +1,4 @@
+import { indonesianDate } from '../academic/assignment-format.js';
 import { readFileSync } from 'node:fs';
 import type { ScheduleDatabase } from './database.js';
 import { resolve } from 'node:path';
@@ -15,6 +16,7 @@ export interface ScheduleSessionView {
   creditsSks: number;
   room: string | null;
   lecturerCandidates: string[];
+  assignedLecturers?: string[];
   status: string;
   exception?: { kind: 'cancelled' | 'moved' | 'room_changed'; newStart?: string; newEnd?: string; newRoom?: string; note?: string };
 }
@@ -200,7 +202,7 @@ export class ScheduleService {
       .map((e) => {
         const course = coursesByCode.get(e.course_code)!;
         const candidates = this.seed.lecturer_associations
-          .filter((l) => l.course_code === e.course_code)
+          .filter((l) => l.course_code === e.course_code && l.verification_status !== 'REJECTED')
           .map((l) => l.raw_name);
         const exKey = dateIso ? `${dateIso}|${e.weekday}|${e.start_time}` : '';
         const ex = exKey ? this.exceptions.get(exKey) : undefined;
@@ -214,6 +216,7 @@ export class ScheduleService {
           creditsSks: course.credits_sks,
           room: ex?.newRoom ?? e.room,
           lecturerCandidates: candidates,
+          assignedLecturers:e.lecturer_assignment ? [e.lecturer_assignment] : this.seed.lecturer_associations.filter(l=>l.course_code===e.course_code && l.assigns_to_every_session && l.verification_status==='VERIFIED').map(l=>l.raw_name),
           status: e.source_status,
           exception: ex
             ? { kind: ex.kind, newStart: ex.newStart, newEnd: ex.newEnd, newRoom: ex.newRoom, note: ex.note }
@@ -229,6 +232,16 @@ export class ScheduleService {
       weekdayLabel: p.weekdayLabel,
       sessions: this.getForWeekday(p.weekday, p.dateIso),
     };
+  }
+
+  getUpcomingDay(day:WeekdayName,now:Date) {
+    const current=toJakartaParts(now).weekday;
+    const offset=(WEEKDAYS.indexOf(day)-WEEKDAYS.indexOf(current)+7)%7;
+    return this.getToday(new Date(+now+offset*86400_000));
+  }
+  getWeek(now:Date) {
+    const monday=+now-WEEKDAYS.indexOf(toJakartaParts(now).weekday)*86400_000;
+    return WEEKDAYS.map((_,i)=>this.getToday(new Date(monday+i*86400_000)));
   }
 
   getTomorrow(now = new Date()): { dateIso: string; weekdayLabel: string; sessions: ScheduleSessionView[] } {
@@ -268,20 +281,18 @@ export class ScheduleService {
   }
 
   formatDayText(weekdayLabel: string, sessions: ScheduleSessionView[], dateIso?: string): string {
-    const header = `📅 *Jadwal Nursing Class A (5A) — ${weekdayLabel}${dateIso ? ` (${dateIso})` : ''}*`;
-    if (sessions.length === 0) {
-      return `${header}\nTidak ada jadwal kuliah terjadwal.`;
-    }
-    const lines = sessions.map((s, idx) => {
-      const roomTxt = s.room ? `Ruang: ${s.room}` : 'Ruang: belum ditentukan';
-      const exTxt = s.exception
-        ? s.exception.kind === 'cancelled'
-          ? ' ❌ *[DIBATALKAN]*'
-          : ` ⚠️ *[${s.exception.kind.toUpperCase()}]*`
-        : '';
-      return `${idx + 1}. *${s.startTime}–${s.endTime} WIB* — ${s.courseName} (${s.creditsSks} SKS)${exTxt}\n   ${roomTxt} | Status: ${s.status}`;
+    const header = '*MK ' + weekdayLabel + (dateIso ? ' ' + indonesianDate(dateIso) : '') + '*';
+    if (!sessions.length) return header + '\n\nTidak ada kuliah terjadwal.';
+    const blocks = sessions.map(s => {
+      const fields = ['🕦 Pukul: ' + s.startTime + '–' + s.endTime + ' WIB', '📗 Mata kuliah: ' + s.courseName,
+        '👤 Dosen pengampu: ' + (s.assignedLecturers?.join(', ') || 'Belum dikonfirmasi untuk sesi ini')];
+      if (!s.assignedLecturers?.length && s.lecturerCandidates.length) fields.push('🎓 Tim mata kuliah: ' + s.lecturerCandidates.join(', '));
+      if (s.room) fields.push('📍 Ruang/media: ' + s.room);
+      if (s.exception) fields.push(s.exception.kind === 'cancelled' ? '❌ Kuliah dibatalkan' : '🔁 Perubahan jadwal');
+      if (s.exception?.note) fields.push('📝 Catatan: ' + s.exception.note);
+      return fields.join('\n');
     });
-    const breaks = this.seed.breaks.map(b => '⏸️ ' + b.label + ' · ' + b.start_time + '–' + b.end_time + ' WIB');
-    return [header, ...lines, ...breaks].join('\n');
+    const breaks = this.seed.breaks.map(b => '☕ ' + b.label + ': ' + b.start_time + '–' + b.end_time + ' WIB');
+    return [header, ...blocks, ...breaks].join('\n\n');
   }
 }

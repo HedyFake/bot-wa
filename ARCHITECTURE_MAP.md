@@ -4,7 +4,7 @@
 
 Node menjalankan src/index.ts melalui dist/index.js. Adapter wwebjs menerjemahkan event WhatsApp menjadi InboundMessage. Dispatcher memeriksa duplikasi, konteks chat, dan identitas pengirim. Parser memetakan alias dan perintah bahasa alami. Layanan domain menghasilkan teks atau lampiran. OutboundGate memeriksa status pengiriman, grup, dan kunci idempotensi sebelum meneruskan pesan ke provider.
 
-Prisma menghubungkan PostgreSQL ke probe, worker pengingat, snapshot katalog Drive, dan audit pengiriman dokumen. Layanan jadwal lama membaca seed Semester 5A. Tugas, catatan, mode grup, dan skor opt-in memakai JSON lokal. Registry NVIDIA merutekan permintaan ke transport HTTP. Drive membaca folder melalui akun layanan dan memeriksa ulang izin unduh. systemd mengelola proses dan timer backup pada instalasi VPS.
+Prisma menghubungkan PostgreSQL ke probe, worker pengingat, snapshot katalog Drive, dan audit pengiriman dokumen. ScheduleDatabase memuat snapshot jadwal kelas dari PostgreSQL. Perubahan memerlukan konfirmasi, memeriksa versi pratinjau, dan menyimpan backup serta audit dalam transaksi serializable. Mode tanpa database memakai seed Semester 5A. Tugas, catatan, mode grup, dan skor opt-in memakai JSON lokal. Registry NVIDIA merutekan permintaan ke transport HTTP. Drive membaca folder melalui akun layanan dan memeriksa ulang izin unduh. systemd mengelola proses dan timer backup pada instalasi VPS.
 
 ## Modul TypeScript produksi
 

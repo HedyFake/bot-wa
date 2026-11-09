@@ -1,3 +1,4 @@
+import { buildNotices, jakartaDay, type DeadlineNotice } from '../academic/deadline-notices.js';
 import { questions } from './questions.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -11,6 +12,13 @@ export interface AssignmentItem {
   description: string;
   status: 'open' | 'done';
   pic?: string;
+  lecturer?: string;
+  kind?: 'tugas'|'deadline';
+  detected?:boolean;
+  sourceFingerprint?:string;
+  dueTime?: string;
+  sourceChat?: string;
+  revision?: number;
   createdBy: string;
   createdAt: string;
 }
@@ -85,12 +93,19 @@ export interface RelayDraft { id: string; source: string; target: string; text: 
 
 export interface PersistedBotState {
   relayDrafts?: Record<string, RelayDraft>;
+  deadlineNotices?: Record<string, DeadlineNotice>;
+  deadlinePlanVersion?: number;
+  taskSourceKeys?: Record<string,string>;
+  knownGroups?: Record<string,string>;
+  taskSources?: Record<string,string>;
+  pausedGroups?: string[];
   primaryGroup?: string;
   relaySources?: Record<string,string>;
   rounds?: Record<string, ActiveQuizSession>;
   rooms?: Record<string, { host: string; players: string[]; limit: number; seconds: number; level?: string; category: string }>;
   gameHistory?: { chat: string; user: string; points: number; when: string; daily?: string }[];
   dailyWinners?: Record<string,string>;
+  sequences?: Record<string, number>;
   scores?: Record<string, number>;
   nimbrung?: Record<string, boolean>;
   assignments: AssignmentItem[];
@@ -187,30 +202,7 @@ export const LECTURER_CONTACTS_5A: LecturerContactEntry[] = [
 ];
 
 const DEFAULT_STATE: PersistedBotState = {
-  assignments: [
-    {
-      id: 'TUG-1',
-      course: 'Metodologi Penelitian',
-      title: 'Proposal Bab 1–3 Latar Belakang & Rumusan Masalah',
-      dueDateIso: '2026-11-14',
-      description: 'Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.',
-      status: 'open',
-      pic: 'Inneke, Fitri',
-      createdBy: 'seed',
-      createdAt: '2026-11-06T08:00:00.000Z',
-    },
-    {
-      id: 'TUG-2',
-      course: 'Keperawatan Gerontik',
-      title: 'Asuhan Keperawatan Lansia (Studi Kasus Kelompok)',
-      dueDateIso: '2026-11-18',
-      description: 'Presentasi kelompok sesuai pembagian kelompok Semester 5A (PJ: Rika, Imel).',
-      status: 'open',
-      pic: 'Rika, Imel',
-      createdBy: 'seed',
-      createdAt: '2026-11-06T08:00:00.000Z',
-    },
-  ],
+  assignments: [],
   reminders: [],
   announcements: [],
   notes: [],
@@ -335,9 +327,27 @@ export class FunAndUtilityService {
   private readonly persistPath?: string;
 
 
-  constructor(opts?: { persistPath?: string }) {
+  constructor(opts?: { persistPath?: string; now?: () => Date }) {
     this.persistPath = opts?.persistPath;
     this.state = this.loadState();
+    if (this.state.deadlinePlanVersion !== 2) {
+      const now = +(opts?.now?.() ?? new Date());
+      this.state.deadlineNotices ??= {};
+      for (const task of this.state.assignments.filter(t => t.status === 'open')) {
+        const old = this.state.deadlineNotices[task.id + '.' + (task.revision ?? 1) + '.h3'];
+        if (old && !old.day && task.dueDateIso) {
+          const hadDecision = old.delivery !== 'queued' || old.share !== 'pending' || Boolean(old.target);
+          const issuedAt = old.delivery === 'delivered' && old.retryAt ? old.retryAt - 60_000 : old.sendAt;
+          old.day = hadDecision ? jakartaDay(issuedAt) : jakartaDay(Date.parse(task.dueDateIso + 'T12:00:00+07:00') - 3 * 86_400_000);
+        }
+        for (const job of buildNotices(task, now, false)) {
+          if (old?.day === job.day || this.state.deadlineNotices[job.id]) continue;
+          this.state.deadlineNotices[job.id] = job;
+        }
+      }
+      this.state.deadlinePlanVersion = 2;
+      if (this.persistPath && existsSync(this.persistPath)) this.saveState();
+    }
   }
 
   private loadState(): PersistedBotState {
@@ -422,9 +432,25 @@ export class FunAndUtilityService {
   }
 
   // ==================== 1. TUGAS & DEADLINE ====================
-  listAssignments(filter?: string): AssignmentItem[] {
+  private nextId(prefix: string, records: { id: string }[]): string {
+    this.state.sequences ??= {};
+    const max = records.reduce((n,r) => Math.max(n, Number(r.id.split('-')[1]) || 0), this.state.sequences[prefix] ?? 0);
+    this.state.sequences[prefix] = max + 1;
+    return prefix + '-' + (max + 1);
+  }
+
+  listAssignments(filter?: string, now = new Date()): AssignmentItem[] {
     const q = (filter ?? '').trim().toLowerCase();
+    const local = new Date(now.getTime() + 7 * 3600_000);
+    const today = local.toISOString().slice(0,10);
+    const monday = new Date(local);
+    monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay()+6)%7);
+    const sunday = new Date(monday);
+    sunday.setUTCDate(sunday.getUTCDate()+6);
     return this.state.assignments.filter((a) => {
+      if (q === 'hariini') return a.status === 'open' && a.dueDateIso === today;
+      if (q === 'mingguini') return a.status === 'open' && a.dueDateIso >= monday.toISOString().slice(0,10) && a.dueDateIso <= sunday.toISOString().slice(0,10);
+      if (q === 'aktif' || q === 'open') return a.status === 'open';
       if (!q || q === 'list' || q === 'terdekat') return a.status === 'open';
       if (q === 'all' || q === 'semua') return true;
       if (q === 'done' || q === 'selesai') return a.status === 'done';
@@ -433,7 +459,48 @@ export class FunAndUtilityService {
         a.title.toLowerCase().includes(q) ||
         a.id.toLowerCase() === q
       );
-    });
+    }).sort((a,b) => a.dueDateIso.localeCompare(b.dueDateIso));
+  }
+
+  rememberGroup(jid:string,name?:string) {
+    if (!jid.endsWith('@g.us')) return;
+    this.state.knownGroups ??= {};
+    const display = name?.trim() || this.state.knownGroups[jid] || jid;
+    if (this.state.knownGroups[jid] !== display) { this.state.knownGroups[jid] = display; this.saveState(); }
+  }
+
+  getTaskSources() { return {...this.state.taskSources}; }
+  setTaskSource(jid:string,name:string) { this.state.taskSources ??= {}; this.state.taskSources[jid]=name; this.saveState(); }
+  getPausedGroups() { return [...(this.state.pausedGroups ?? [])]; }
+  setGroupPaused(jid:string,paused:boolean) {
+    const groups=new Set(this.state.pausedGroups); if (paused) groups.add(jid); else groups.delete(jid);
+    this.state.pausedGroups=[...groups]; this.saveState();
+  }
+  groupsForNotices() { return Object.entries(this.state.knownGroups ?? {}); }
+
+  visibleAssignments(chat:string,owner:boolean,filter?:string,now=new Date()) {
+    return this.listAssignments(filter,now).filter(t=>owner || !t.sourceChat || (!t.detected && !chat.endsWith('@g.us') && t.sourceChat===chat) || Object.values(this.state.deadlineNotices ?? {}).some(j=>j.taskId===t.id && j.revision===(t.revision??1) && j.target===chat && j.share==='sent'));
+  }
+  getAssignment(id:string) { return this.state.assignments.find(t=>t.id.toUpperCase()===id.toUpperCase()); }
+  hasTaskSource(key:string) { return Boolean(this.state.taskSourceKeys?.[key]); }
+  noticeTask(j:DeadlineNotice) {
+    const t=this.getAssignment(j.taskId);
+    return t?.status==='open' && (t.revision??1)===j.revision ? t : undefined;
+  }
+  activeNotices() { return Object.values(this.state.deadlineNotices ?? {}).filter(j=>this.noticeTask(j)); }
+  saveNotice(job:DeadlineNotice) { this.state.deadlineNotices ??= {}; this.state.deadlineNotices[job.id]=job; this.saveState(); }
+  private queueNotices(t:AssignmentItem,now:number,includeNew:boolean) {
+    this.state.deadlineNotices ??= {};
+    for (const n of buildNotices(t,now,includeNew)) this.state.deadlineNotices[n.id]=n;
+  }
+  changeDeadline(id:string,date:string,time:string|undefined,now:Date) {
+    const t=this.getAssignment(id);
+    if (!t || t.status!=='open') return undefined;
+    if (t.dueDateIso!==date || t.dueTime!==time) {
+      t.dueDateIso=date; t.dueTime=time; t.revision=(t.revision??1)+1;
+      this.queueNotices(t,+now,true); this.saveState();
+    }
+    return t;
   }
 
   addAssignment(input: {
@@ -441,9 +508,14 @@ export class FunAndUtilityService {
     title: string;
     dueDateIso: string;
     description?: string;
+    kind?:'tugas'|'deadline'; detected?:boolean; sourceFingerprint?:string; lecturer?:string; pic?:string; dueTime?:string; sourceKey?:string; sourceChat?:string; now?:Date;
     createdBy: string;
   }): AssignmentItem {
-    const id = `TUG-${this.state.assignments.length + 1}`;
+    if (input.detected && input.sourceKey && input.sourceFingerprint) {
+      const same=this.state.assignments.find(t=>t.detected && t.sourceFingerprint===input.sourceFingerprint && t.sourceChat===input.sourceChat && t.dueDateIso===input.dueDateIso && t.dueTime===input.dueTime && (t.dueDateIso || +new Date(t.createdAt) >= +(input.now??new Date())-86400_000));
+      if (same) { this.state.taskSourceKeys ??= {}; this.state.taskSourceKeys[input.sourceKey]=same.id; this.saveState(); return same; }
+    }
+    const id = this.nextId('TUG',this.state.assignments);
     const item: AssignmentItem = {
       id,
       course: input.course.trim(),
@@ -451,10 +523,13 @@ export class FunAndUtilityService {
       dueDateIso: input.dueDateIso.trim(),
       description: (input.description ?? '-').trim(),
       status: 'open',
+      kind:input.kind,detected:input.detected,sourceFingerprint:input.sourceFingerprint,lecturer:input.lecturer?.trim(),pic:input.pic?.trim(),dueTime:input.dueTime,revision:1,sourceChat:input.sourceChat,
       createdBy: input.createdBy,
-      createdAt: new Date().toISOString(),
+      createdAt: (input.now ?? new Date()).toISOString(),
     };
     this.state.assignments.push(item);
+    if (input.sourceKey) { this.state.taskSourceKeys ??= {}; this.state.taskSourceKeys[input.sourceKey]=id; }
+    this.queueNotices(item, +(input.now ?? new Date()),true);
     this.saveState();
     return item;
   }
@@ -538,7 +613,7 @@ export class FunAndUtilityService {
 
   addNote(title: string, content: string, createdBy: string): ClassNoteItem {
     const note: ClassNoteItem = {
-      id: `NOTE-${this.state.notes.length + 1}`,
+      id: this.nextId('NOTE',this.state.notes),
       title: title.trim(),
       content: content.trim(),
       createdBy,
@@ -664,7 +739,8 @@ export class FunAndUtilityService {
       return { ok: false, error: 'Ekspresi hanya boleh berisi angka dan operator +, -, *, /, %, ^, (, )' };
     }
     try {
-      const tokens = cleaned.match(/\d+(?:\.\d+)?|[+\-*/()%^]/g);
+      const tokens = cleaned.match(/\d+(?:\.\d*)?|\.\d+|[+\-*/()%^]/g);
+      if (tokens?.join('') !== cleaned.replace(/\s/g,'')) return { ok:false, error:'Sintaks matematika tidak valid' };
       if (!tokens || !tokens.length) return { ok: false, error: 'Ekspresi kosong' };
       let pos = 0;
 
@@ -679,32 +755,30 @@ export class FunAndUtilityService {
       };
 
       const parseTerm = (): number => {
-        let val = parsePower();
+        let val = parseUnary();
         while (pos < tokens.length && (tokens[pos] === '*' || tokens[pos] === '/' || tokens[pos] === '%')) {
           const op = tokens[pos++]!;
-          const rhs = parsePower();
+          const rhs = parseUnary();
           if ((op === '/' || op === '%') && rhs === 0) throw new Error('Pembagian dengan nol');
           val = op === '*' ? val * rhs : op === '/' ? val / rhs : val % rhs;
         }
         return val;
       };
 
-      const parsePower = (): number => {
-        let base = parseFactor();
-        while (pos < tokens.length && tokens[pos] === '^') {
-          pos++;
-          base = Math.pow(base, parseFactor());
+      const parseUnary = (): number => {
+        if (tokens[pos] === '+' || tokens[pos] === '-') {
+          const op = tokens[pos++];
+          return op === '-' ? -parseUnary() : parseUnary();
         }
-        return base;
+        const base = parseFactor();
+        if (tokens[pos] !== '^') return base;
+        pos++;
+        return base ** parseUnary();
       };
 
       const parseFactor = (): number => {
         const tok = tokens[pos];
         if (tok === undefined) throw new Error('Akhir ekspresi tidak terduga');
-        if (tok === '+' || tok === '-') {
-          pos++;
-          return tok === '-' ? -parseFactor() : parseFactor();
-        }
         if (tok === '(') {
           pos++;
           const v = parseExpr();
@@ -843,11 +917,7 @@ export class FunAndUtilityService {
     } catch {
       // Gunakan fallback lokal jika jaringan offline/timeout
     }
-    return (
-      `🌤️ *Info Cuaca — ${city}*\n` +
-      `• Estimasi Wilayah Tropis Indonesia: 26°C – 32°C (Kelembapan 70%–85%)\n` +
-      `_Catatan: Layanan cuaca eksternal sedang tidak terjangkau; menampilkan referensi iklim lokal._`
-    );
+    return 'Data cuaca untuk ' + city + ' belum tersedia. Periksa nama kota atau coba kembali.';
   }
 
   async searchWikipedia(queryRaw: string): Promise<string> {
@@ -1111,16 +1181,22 @@ export class FunAndUtilityService {
     return `📖 *Daftar Surah Pilihan Al-Qur'an*\n${DAFTAR_SURAH_RINGKAS.join('\n')}\n\n_Ketik \`.doaharian\` untuk doa belajar & klinik._`;
   }
 
-  prayerSchedule(cityRaw = 'Jakarta / Jawa Timur'): string {
-    const city = cityRaw.trim() || 'Jakarta / Jawa Timur';
-    return (
-      `🕌 *Estimasi Jadwal Sholat Harian (${city} — WIB)*\n` +
-      `• Subuh: 04:15 WIB\n` +
-      `• Dzuhur: 11:45 WIB _(bertepatan jam istirahat kuliah 11:20–12:30 WIB)_\n` +
-      `• Ashar: 15:05 WIB\n` +
-      `• Maghrib: 17:50 WIB\n` +
-      `• Isya: 19:00 WIB`
-    );
+  async prayerSchedule(cityRaw: string, now = new Date()): Promise<string> {
+    const city = cityRaw.trim() || 'Jakarta';
+    const date = now.toLocaleDateString('en-GB', { timeZone:'Asia/Jakarta' }).replaceAll('/','-');
+    const url = 'https://api.aladhan.com/v1/timingsByCity/' + date + '?' + new URLSearchParams({city,country:'Indonesia',method:'20'});
+    try {
+      const res = await fetch(url,{signal:AbortSignal.timeout(6000)});
+      if (!res.ok) throw Error('provider');
+      const { data } = await res.json();
+      const names = { Fajr:'Subuh',Dhuhr:'Zuhur',Asr:'Asar',Maghrib:'Magrib',Isha:'Isya' };
+      const rows = Object.entries(names).map(([name,label]) => {
+        const value = data?.timings?.[name];
+        if (typeof value !== 'string' || !/^\d{2}:\d{2}/.test(value)) throw Error('timing');
+        return label + ' · ' + value;
+      });
+      return ['🕌 *Jadwal salat · ' + city + '*',date + ' · ' + data.meta.timezone,'',...rows,'','Sumber: AlAdhan · metode Kemenag RI'].join('\n');
+    } catch { return 'Jadwal salat untuk ' + city + ' pada ' + date + ' belum dapat diambil.'; }
   }
 
   truthOrDare(mode: 'truth' | 'dare'): string {

@@ -30,7 +30,7 @@ export class GroupGeneratorService {
   ): GeneratedGroup[] {
     const cleaned = membersInput.map((m) => m.trim()).filter(Boolean);
     if (cleaned.length === 0) throw new Error('Daftar anggota kosong');
-    if (groupCount < 1 || groupCount > cleaned.length) {
+    if (!Number.isInteger(groupCount) || groupCount < 1 || groupCount > cleaned.length) {
       throw new Error('Jumlah kelompok harus antara 1 dan jumlah anggota');
     }
 

@@ -1,3 +1,7 @@
+import { taskCard, taskList, parseDeadline } from '../../modules/academic/assignment-format.js';
+import { DeadlineNotifier, deadlineEnd, noticeBody, noticeCurrent } from '../../modules/academic/deadline-notices.js';
+import { extractTask, mightBeTask } from '../../modules/academic/task-intake.js';
+import { WEEKDAYS } from '../../database/seed-schema.js';
 import { extractSections } from '../../modules/materials/extract.js';
 import { questions } from '../../modules/fun/questions.js';
 import { Monitor, backupStatus, resources } from '../../observability/monitor.js';
@@ -94,6 +98,7 @@ export class CommandDispatcher {
   readonly media: MediaService;
   readonly music: MusicService;
   readonly fun: FunAndUtilityService;
+  private readonly deadlineNotifier: DeadlineNotifier;
 
   constructor(private readonly deps: DispatcherDeps) {
     this.monitor = deps.monitor ?? new Monitor();
@@ -105,9 +110,13 @@ export class CommandDispatcher {
     this.music = new MusicService({ clientId: deps.config.SOUNDCLOUD_CLIENT_ID, secret: deps.config.SOUNDCLOUD_CLIENT_SECRET, library: deps.config.MUSIC_LIBRARY_DIR, maxBytes: deps.config.MEDIA_MAX_MB * 1024 * 1024 });
     this.media = deps.mediaService ?? new MediaService();
     this.fun = deps.funService ?? new FunAndUtilityService();
+    this.deadlineNotifier=new DeadlineNotifier(this.fun,deps.outbound,e164ToJid(deps.config.OWNER_WHATSAPP));
+    if (deps.config.WHATSAPP_PRIMARY_GROUP_JID) this.fun.rememberGroup(deps.config.WHATSAPP_PRIMARY_GROUP_JID);
     const relay = this.fun.getRelaySettings();
     if (relay.primary) deps.intelligence.setPrimaryGroupJid(relay.primary);
+    for (const [jid,name] of Object.entries(this.fun.getTaskSources())) deps.intelligence.registerSourceGroup(jid,name);
     for (const [jid, name] of Object.entries(relay.sources)) deps.intelligence.registerPjmkGroup(jid, name);
+    for (const jid of this.fun.getPausedGroups()) { deps.intelligence.pauseSourceGroup(jid); deps.outbound.pauseGroup(jid); }
     this.gamification = deps.gamification ?? new GamificationService(this.fun.getScores(), scores => this.fun.saveScores(scores));
   }
 
@@ -139,15 +148,18 @@ export class CommandDispatcher {
 
     // 1. Berikan allow access otomatis untuk semua grup yang aktif & auto-deteksi "Nursing Class A" / "PJMK Semester 5"
     outbound.registerAllowedGroup(msg.chatJid);
+    this.fun.rememberGroup(msg.chatJid,msg.chatName);
     if (!intelligence.listSources().some((s) => s.jid === msg.chatJid)) {
       intelligence.registerSourceGroup(msg.chatJid, msg.chatName ?? `Grup (${msg.chatJid})`, 'member');
     }
 
     // 2. Ingest ke GroupIntelligenceService & evaluasi kualitas (baik/netral/buruk) + signifikansi (inti_penting/biasa/tidak_penting)
-    const analysis = intelligence.ingest(msg);
     const evaluation = intelligence.evaluateMessage(rawText, msg.isForwarded);
 
     const spokenToBot = Boolean(msg.isBotMentioned) || /^(?:@?hdybot|hdy|@?bot|tolong bantu|(?:halo|hai|hei|woi)\s+bot)\b/i.test(rawText);
+    if (!rawText.startsWith('.') && !outbound.isGroupPaused(msg.chatJid) && !intelligence.listSources().find(g=>g.jid===msg.chatJid)?.paused &&
+      (msg.chatJid===intelligence.getPrimaryGroupJid() || intelligence.isPjmkGroup(msg.chatJid) || this.fun.getTaskSources()[msg.chatJid]) && evaluation.quality!=='buruk' && await this.captureTask(msg)) return null;
+    const analysis = intelligence.ingest(msg);
     // Pesan percakapan dan perintah tidak ditawarkan sebagai berita kelas.
     let autoRelayedText: string | null = null;
     if (
@@ -308,6 +320,80 @@ export class CommandDispatcher {
     return autoRelayedText;
   }
 
+  async tickDeadlines(now=this.now()) {
+    const { config,whatsapp }=this.deps;
+    if (!config.OUTBOUND_ENABLED || config.DRY_RUN || whatsapp.state()!=='connected' || this.deps.outbound.isEmergencyStopped()) return;
+    try {
+      if (this.fun.activeNotices().some(j=>j.share==='pending' && j.delivery==='queued' && j.sendAt<=+now) && !await this.deps.worker?.isPaused()) await this.deadlineNotifier.tick(now);
+    } catch { this.monitor.record('Scheduler','error','Antrean tenggat belum dapat dikirim'); }
+  }
+
+  private async captureTask(msg:InboundMessage) {
+    const text=msg.text.trim();
+    if (!mightBeTask(text) && (msg.chatType!=='group' || text.length<15)) return false;
+    if (['nursing','music'].includes(parseCommand('.'+text).command)) return false;
+    const key=createHash('sha256').update(JSON.stringify([msg.chatJid,msg.providerMessageId])).digest('hex');
+    if (this.fun.hasTaskSource(key)) return true;
+    const result=await extractTask(text,msg.receivedAt,this.deps.router);
+    if (!result) return false;
+    if (!this.fun.hasTaskSource(key)) this.fun.addAssignment({...result,detected:true,sourceFingerprint:createHash('sha256').update(text.toLowerCase().replace(/\s+/g,' ')).digest('hex'),sourceKey:key,sourceChat:msg.chatJid,createdBy:msg.senderJid,now:this.now()});
+    await this.tickDeadlines();
+    return true;
+  }
+
+  private async manageTaskNotice(msg:InboundMessage,args:string[]): Promise<string> {
+    const actor=this.deps.auth.evaluate(msg);
+    if (msg.chatType!=='private' || !actor.allowed || !actor.isOwner) return 'Hanya Hedy dapat mengelola pemberitahuan lewat DM pribadi.';
+    const [sub,token,...rest]=args;
+    const groups=this.fun.groupsForNotices().filter(([jid])=>!this.deps.outbound.isGroupPaused(jid));
+    if (sub==='grup') return ['*Grup yang dikenali HdyBot*',...groups.map(([jid,name])=>name+'\n'+jid)].join('\n\n') + (groups.length?'':'\nBelum ada grup. Tunggu pesan dari grup tujuan.');
+    if (sub==='antrean') {
+      const jobs=this.fun.activeNotices().filter(j=>['pending','sending','uncertain'].includes(j.share) && noticeCurrent(j,this.fun.noticeTask(j)!,this.now()));
+      return ['*Antrean tenggat*', ...jobs.map(j=>j.id+' · '+this.fun.noticeTask(j)!.title + (['failed','sending','uncertain'].includes(j.delivery)?' · periksa DM, lalu .tugas ulang '+j.id:'') + (['sending','uncertain'].includes(j.share)?' · periksa riwayat grup':'') + (j.target?'\nTujuan: '+j.target:'')), jobs.length?'Pilih grup dengan .tugas tujuan <ID> <nama atau JID grup>.':'Belum ada pemberitahuan yang perlu ditinjau.'].join('\n\n');
+    }
+    if (sub==='deadline') {
+      const due=parseDeadline(rest.join(' '));
+      if (!token || !due) return 'Gunakan .tugas deadline TUG-1 YYYY-MM-DD [HH:mm].';
+      const task=this.fun.changeDeadline(token,due.date,due.time,this.now());
+      if (!task) return 'Tugas aktif tidak ditemukan.';
+      await this.tickDeadlines();
+      return 'Deadline tersimpan.\n\n'+taskCard(task);
+    }
+    const job=this.fun.activeNotices().find(j=>j.id.toLowerCase()===token?.toLowerCase());
+    if (!job || job.share!=='pending' || !noticeCurrent(job,this.fun.noticeTask(job)!,this.now())) return 'Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.';
+    if (sub==='ulang') {
+      if (this.deadlineNotifier.processing || !['failed','sending','uncertain'].includes(job.delivery)) return 'DM ini sudah terkirim atau masih dijadwalkan.';
+      this.fun.saveNotice({...job,delivery:'queued',attempts:0,retryAt:undefined});
+      await this.tickDeadlines();
+      return 'Permintaan kirim ulang ke DM dicatat. Periksa .tugas antrean.';
+    }
+    if (sub==='tolak') { this.fun.saveNotice({...job,share:'rejected'}); return 'Pemberitahuan ini tidak diteruskan.'; }
+    const query=rest.join(' ').trim().toLowerCase();
+    const matches=groups.filter(([jid,name])=>jid.toLowerCase()===query || name.toLowerCase()===query);
+    if (matches.length!==1) return 'Pilih satu JID grup dari .tugas grup, lalu kirim .tugas tujuan '+job.id+' <JID grup>.';
+    const [target,name]=matches[0]!;
+    const task=this.fun.noticeTask(job)!;
+    if (+this.now()>deadlineEnd(task)) return 'Deadline telah lewat. Perbarui melalui .tugas deadline jika tanggal berubah.';
+    const body=noticeBody(job,task,this.now());
+    this.fun.saveNotice({...job,target});
+    const preview=this.deps.confirmations.issue(actor.actorJid,'deadline_share','Kirim ke '+name,{id:job.id,target,body});
+    return ['*Pratinjau untuk Hedy*','Tujuan: '+name+' ('+target+')',body,'Kirim dengan .confirm '+preview.nonce+' atau batalkan dengan .cancel '+preview.nonce+'.'].join('\n\n');
+  }
+
+  private async confirmDeadline(msg:InboundMessage,payload:{id:string;target:string;body:string}):Promise<string> {
+    const actor=this.deps.auth.evaluate(msg);
+    if (!actor.allowed || !actor.isOwner || msg.chatType!=='private') return 'Hanya Hedy dapat mengonfirmasi pemberitahuan.';
+    const job=this.fun.activeNotices().find(j=>j.id===payload.id);
+    if (!job || job.share!=='pending' || job.target!==payload.target || this.deps.outbound.isGroupPaused(payload.target)) return 'Tugas atau tujuan berubah. Periksa .tugas antrean.';
+    const task=this.fun.noticeTask(job)!;
+    if (!noticeCurrent(job,task,this.now()) || noticeBody(job,task,this.now())!==payload.body) return 'Pratinjau sudah kedaluwarsa. Periksa .tugas antrean.';
+    this.fun.saveNotice({...job,share:'sending'});
+    const result=await this.deps.outbound.send({chatJid:payload.target,text:payload.body,idempotencyKey:'deadline-share:'+job.id});
+    const sent=result.ok && !result.dryRun;
+    this.fun.saveNotice({...job,share:sent?'sent':result.error==='send_failed'?'uncertain':'pending'});
+    return sent?'✅ Pemberitahuan terkirim ke '+payload.target+'.':'Pengiriman belum terkonfirmasi. Periksa status grup.';
+  }
+
   private async decideRelay(msg: InboundMessage, args: string[]): Promise<string> {
     const auth = this.deps.auth.evaluate(msg);
     if (!auth.allowed || !auth.isOwner || msg.chatType !== 'private') return 'Hanya Hedy dapat menyetujui relay melalui chat pribadi.';
@@ -376,7 +462,7 @@ export class CommandDispatcher {
 
     // Cek pertanyaan seputar tugas / PR / deadline
     if (/\b(tugas|pr\b|deadline|kumpul\s+kapan|ada\s+tugas)\b/i.test(lower)) {
-      const openTasks = this.fun.listAssignments('open');
+      const openTasks = this.fun.visibleAssignments(msg.chatJid,this.deps.auth.evaluate(msg).isOwner && this.deps.auth.evaluate(msg).allowed,'open',now);
       if (!openTasks.length) {
         return `Halo *${senderName}*! 🎉 Saat ini belum ada daftar tugas aktif yang tercatat di antrean *${config.CLASS_NAME}*. Kalau ada tugas baru dari dosen/PJMK, bisa langsung catat pakai \`.tugas add\` atau kabari di grup ya!`;
       }
@@ -564,6 +650,10 @@ export class CommandDispatcher {
     }
 
     let parsed = parseCommand(rawText);
+    if (!rawText.startsWith('.') && !this.deps.auth.isAwaitingPassword(msg.chatJid)) {
+      const actor=this.deps.auth.evaluate(msg);
+      if (actor.allowed && actor.isOwner && await this.captureTask(msg)) return 'Tugas masuk antrean privat.';
+    }
     if (parsed.kind === 'none' && !this.deps.auth.isAwaitingPassword(msg.chatJid)) parsed = await inferIntent(rawText, this.deps.router);
 
     // 2. Perintah eksplisit `.login <password>` / `.password <password>`
@@ -948,8 +1038,7 @@ export class CommandDispatcher {
       case 'schedule.today_courses':
       case 'schedule.today_lecturers': {
         const day = schedule.getToday(now);
-        const items = day.sessions.map(s => s.startTime + ' · ' + s.courseName + (parsed.command === 'schedule.today_rooms' ? ' · ' + (s.room ?? 'Ruang belum ditetapkan') : parsed.command === 'schedule.today_lecturers' ? ' · ' + (s.lecturerCandidates.join(', ') || 'Dosen belum ditetapkan') : ''));
-        return textOnly('🗓️ ' + day.weekdayLabel + ' · ' + day.dateIso + '\n' + (items.join('\n') || 'Tidak ada perkuliahan terjadwal.'));
+        return textOnly(schedule.formatDayText(day.weekdayLabel,day.sessions,day.dateIso));
       }
       case 'schedule.tomorrow': {
         const tmr = schedule.getTomorrow(now);
@@ -960,38 +1049,24 @@ export class CommandDispatcher {
         const dayArg = parsed.args[0] ?? 'senin';
         const wd = ScheduleService.resolveWeekday(dayArg);
         if (!wd) return textOnly(`⚠️ Nama hari tidak dikenali: ${dayArg}`);
-        const sessions = schedule.getForWeekday(wd);
-        return textOnly(schedule.formatDayText(dayArg.charAt(0).toUpperCase() + dayArg.slice(1), sessions));
+        const day = schedule.getUpcomingDay(wd,now);
+        return textOnly(schedule.formatDayText(day.weekdayLabel,day.sessions,day.dateIso));
       }
 
       case 'schedule.week': {
-        const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'] as const;
-        return textOnly(
-          days
-            .map((d) => {
-              const s = schedule.getForWeekday(d);
-              return schedule.formatDayText(s[0]?.weekdayLabel ?? d, s);
-            })
-            .join('\n\n'),
-        );
+        return textOnly(schedule.getWeek(now).map(day => schedule.formatDayText(day.weekdayLabel,day.sessions,day.dateIso)).join('\n\n━━━━━━━━━━━━\n\n'));
       }
 
       case 'schedule.next': {
         const next = schedule.getNextSession(now);
         if (!next) return textOnly('📭 Tidak ada jadwal kuliah berikutnya dalam 7 hari ke depan.');
         const s = next.session;
-        return textOnly(
-          `⏭️ *Kuliah Berikutnya (${next.dateIso} — ${s.weekdayLabel})*\n` +
-            `• Jam: *${s.startTime}–${s.endTime} WIB*\n` +
-            `• Mata Kuliah: *${s.courseName}* (${s.creditsSks} SKS)\n` +
-            `• Ruang: ${s.room ?? 'belum ditentukan'}\n` +
-            `• Kandidat Dosen (perlu konfirmasi sesi): ${s.lecturerCandidates.join('; ')}`,
-        );
+        return textOnly(schedule.formatDayText(s.weekdayLabel,[s],next.dateIso));
       }
 
       case 'schedule.export': {
         const fmt = (parsed.args[0] ?? 'csv').toLowerCase();
-        const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'] as const;
+        const days = WEEKDAYS;
         const all = days.flatMap((d) => schedule.getForWeekday(d));
         if (fmt === 'json') {
           return textOnly(`📤 *Export Jadwal 5A (JSON):*\n\`\`\`json\n${JSON.stringify(all, null, 2)}\n\`\`\``);
@@ -1005,12 +1080,14 @@ export class CommandDispatcher {
 
       case 'courses': {
         const list = schedule.listCourses();
-        const lines = list.map((c, i) => `${i + 1}. *${c.normalizedName}* [${c.code}] — ${c.creditsSks} SKS`);
-        return textOnly(
-          `📚 *Mata Kuliah Semester 5A (${config.CLASS_NAME})*\n` +
-            lines.join('\n') +
-            `\nTotal SKS Mata Kuliah: *${schedule.totalCourseCreditsSks()} SKS* (status: perlu verifikasi dokumen resmi)`,
-        );
+        const week=WEEKDAYS.flatMap(day=>schedule.getForWeekday(day));
+        const blocks=list.map((c,i)=>{
+          const slots=week.filter(s=>s.courseCode===c.code).map(s=>s.weekdayLabel+' '+s.startTime+'–'+s.endTime);
+          const lecturers=schedule.listLecturers(c.code).filter(l=>l.course_code===c.code && l.verification_status!=='REJECTED').map(l=>l.raw_name);
+          return ['*'+(i+1)+'.*','📗 Mata kuliah: '+c.normalizedName,'🕦 Jadwal: '+(slots.join(', ')||'Belum ditetapkan'),
+            '👤 Tim pengampu: '+(lecturers.join(', ')||'Belum tercatat'),'📖 Kode / SKS: '+c.code+' · '+c.creditsSks+' SKS'].join('\n');
+        });
+        return textOnly(['*MATA KULIAH · Semester ' + schedule.getClassInfo().semester + '*', ...blocks, 'Total: ' + schedule.totalCourseCreditsSks() + ' SKS'].join('\n\n'));
       }
 
       case 'lecturers': {
@@ -1030,27 +1107,33 @@ export class CommandDispatcher {
       // ==================== TUGAS, REMINDER, PENGUMUMAN, CATATAN ====================
       case 'tasks': {
         const sub = (parsed.args[0] ?? 'list').toLowerCase();
+        if (['antrean','grup','tujuan','tolak','deadline','ulang'].includes(sub)) return textOnly(await this.manageTaskNotice(msg,parsed.args));
         if (sub === 'add' || sub === 'tambah') {
           const raw = parsed.rawArgs.slice(parsed.args[0]!.length).trim();
           const parts = raw.split('|').map((s) => s.trim());
-          if (parts.length < 3) {
-            return textOnly('⚠️ Format: `.tugas add <Mata Kuliah>|<Judul Tugas>|<YYYY-MM-DD>|<Deskripsi>`');
+          if (parts.length < 3 || parts.length > 6) {
+            return textOnly('⚠️ Format: `.tugas add matkul|judul|YYYY-MM-DD [HH:mm]|catatan|dosen|PJ`');
           }
+          const due=parseDeadline(parts[2]!);
+          if (!parts[0] || !parts[1] || !due) return textOnly('Masukkan mata kuliah, judul, dan deadline yang valid: YYYY-MM-DD atau YYYY-MM-DD HH:mm (WIB).');
+          const sourceKey = createHash('sha256').update(JSON.stringify([msg.chatJid,msg.providerMessageId])).digest('hex');
+          if (this.fun.hasTaskSource(sourceKey)) return textOnly('Pesan tugas ini sudah diproses.');
           const created = this.fun.addAssignment({
+            sourceKey,
             course: parts[0]!,
             title: parts[1]!,
-            dueDateIso: parts[2]!,
+            dueDateIso:due.date,dueTime:due.time,lecturer:parts[4],pic:parts[5],sourceChat:msg.chatJid,now,
             description: parts[3],
             createdBy: actorJid,
           });
           this.recordAudit(actorJid, 'task.add', 'ok', created.id);
-          return textOnly(
-            `✅ *Tugas Baru Ditambahkan (${created.id})*\n` +
-              `• Mata Kuliah: *${created.course}*\n` +
-              `• Judul: *${created.title}*\n` +
-              `• Deadline: *${created.dueDateIso}*\n` +
-              `• Keterangan: ${created.description}`,
-          );
+          await this.tickDeadlines();
+          return textOnly(msg.chatType==='group' ? '✅ '+created.id+' tersimpan di antrean Hedy.' : '✅ Tugas tersimpan.\n\n'+taskCard(created));
+        }
+        if (['done','selesai','del','delete','hapus'].includes(sub)) {
+          const task = this.fun.getAssignment(parsed.args[1] ?? '');
+          const auth = this.deps.auth.evaluate(msg);
+          if (task?.sourceChat && !(auth.isOwner && auth.allowed) && !(msg.chatJid===task.sourceChat && msg.senderJid===task.createdBy)) return textOnly('Hanya pembuat tugas di chat asal atau Hedy di DM dapat mengubah status tugas ini.');
         }
         if (sub === 'done' || sub === 'selesai') {
           const id = parsed.args[1] ?? '';
@@ -1063,20 +1146,11 @@ export class CommandDispatcher {
           const ok = this.fun.deleteAssignment(id);
           return textOnly(ok ? `🗑️ Tugas *${id.toUpperCase()}* dihapus.` : `⚠️ Tugas \`${id}\` tidak ditemukan.`);
         }
-        const items = this.fun.listAssignments(parsed.rawArgs);
-        if (!items.length) return textOnly('✅ Tidak ada tugas/deadline aktif untuk filter tersebut.');
-        return textOnly(
-          `📌 *Daftar Tugas & Deadline ${config.CLASS_NAME} (${items.length})*\n` +
-            items
-              .map(
-                (t) =>
-                  `• *${t.id}* [${t.status.toUpperCase()}] — *${t.course}*\n` +
-                  `  Judul: ${t.title}\n` +
-                  `  Deadline: *${t.dueDateIso}* | Ket: ${t.description}`,
-              )
-              .join('\n\n') +
-            `\n\n_Tambah tugas: \`.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>\` | Selesai: \`.tugas done <ID>\`_`,
-        );
+        if (sub === 'detail' && !parsed.args[1]) return textOnly('Gunakan .tugas detail <id>.');
+        const viewer = this.deps.auth.evaluate(msg);
+        const items = this.fun.visibleAssignments(msg.chatJid, viewer.isOwner && viewer.allowed, sub === 'detail' ? parsed.args[1] : parsed.rawArgs, now);
+        if (!items.length) return textOnly('*LIST TUGAS*\n\nTidak ada tugas untuk filter ini.');
+        return textOnly(taskList(items));
       }
 
       case 'reminders.pause':
@@ -1096,6 +1170,18 @@ export class CommandDispatcher {
       }
       case 'reminders': {
         const sub = (parsed.args[0] ?? 'list').toLowerCase();
+        if (sub==='add' || sub==='tambah') {
+          const [deadline,title]=parsed.rawArgs.slice(sub.length).trim().split('|').map(p=>p.trim());
+          if (title && /\b(tugas|deadline|tenggat|pengumpulan)\b/i.test(title)) {
+            const due=parseDeadline(deadline ?? '');
+            if (!due) return textOnly('Gunakan .reminder add YYYY-MM-DD HH:mm|Deadline kegiatan (WIB).');
+            const key='custom:'+JSON.stringify([msg.chatJid,msg.providerMessageId]);
+            if (this.fun.hasTaskSource(key)) return textOnly('Tenggat ini sudah masuk antrean Hedy.');
+            const task=this.fun.addAssignment({course:'',title,kind:'deadline',sourceChat:msg.chatJid,sourceKey:key,createdBy:msg.senderJid,dueDateIso:due.date,dueTime:due.time,now});
+            await this.tickDeadlines();
+            return textOnly('Tenggat tersimpan untuk ditinjau Hedy. ID: '+task.id);
+          }
+        }
         if (this.deps.worker) return textOnly(await this.deps.worker.command(msg.chatJid, msg.providerMessageId, sub, parsed.rawArgs.slice(sub.length).trim()));
         if (sub === 'add' || sub === 'tambah') {
           const raw = parsed.rawArgs.slice(parsed.args[0]!.length).trim();
@@ -1365,7 +1451,7 @@ export class CommandDispatcher {
           customNames.length >= count && count > 0
             ? customNames
             : this.fun.getClassMembers().map((m) => `${m.name} (${m.nim})`);
-        if (!count || count < 1 || names.length < count) {
+        if (!Number.isInteger(count) || count < 1 || names.length < count) {
           return textOnly(
             '⚠️ Format: `.buatkelompok <jumlah_kelompok>` (otomatis membagi 36 anggota Nursing Class A) atau `.buatkelompok <jumlah> <nama1, nama2, ...>`',
           );
@@ -1396,7 +1482,8 @@ export class CommandDispatcher {
 
       case 'countdown': {
         const target = parsed.args[0] ?? '';
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return textOnly('⚠️ Format: `.countdown YYYY-MM-DD`');
+        const validDate = new Date(target + 'T12:00:00+07:00');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(target) || !Number.isFinite(+validDate) || validDate.toISOString().slice(0,10) !== target) return textOnly('⚠️ Format: `.countdown YYYY-MM-DD`');
         const days = this.calendar.countdownDays(target, now);
         return textOnly(`⏳ Hitung mundur menuju *${target}*: *${days} hari*.`);
       }
@@ -1504,13 +1591,14 @@ export class CommandDispatcher {
         }
         const width = Number(parsed.args[1] ?? '512');
         const height = Number(parsed.args[2] ?? '512');
+        if (effect === 'resize' && (![width,height].every(n=>Number.isInteger(n) && n>=32 && n<=2048))) return textOnly('Gunakan .resize <lebar> <tinggi> dengan ukuran 32–2048 piksel.');
         const out = await this.media.applyImageEffect(srcMedia.data, effect, { width, height });
         return {
           text: `🖼️ Efek gambar *${effect.toUpperCase()}* selesai diproses.`,
           media: {
             data: out.data,
             mimeType: out.mimeType,
-            filename: `hdybot-${effect}.png`,
+            filename: `hdybot-${effect}.${out.mimeType === 'image/jpeg' ? 'jpg' : 'png'}`,
             caption: `🖼️ Efek: ${effect.toUpperCase()}`,
           },
         };
@@ -1533,6 +1621,11 @@ export class CommandDispatcher {
       }
 
       case 'media.schedulecard': {
+        if (parsed.args[0] === 'kartuucapan') {
+          if (!parsed.rawArgs) return textOnly('Gunakan .kartuucapan <pesan>.');
+          const png = await this.media.generateQuoteCard(parsed.rawArgs,config.CLASS_NAME);
+          return { text:'Kartu ucapan kelas',media:{data:png,mimeType:'image/png',filename:'ucapan.png',caption:parsed.rawArgs} };
+        }
         const dayArg = parsed.args[1] ?? '';
         const wd = dayArg ? ScheduleService.resolveWeekday(dayArg) : undefined;
         const sessions = wd ? schedule.getForWeekday(wd) : schedule.getToday(now).sessions;
@@ -1668,16 +1761,18 @@ export class CommandDispatcher {
       case 'media.tts': {
         const txt = parsed.rawArgs || msg.quoted?.text || '';
         if (!txt) return textOnly('⚠️ Format: `.tts <teks yang ingin diubah ke suara>`');
-        return textOnly(
-          `🔊 *Teks-ke-Suara (TTS HdyBot):*\n“${txt}”\n_(Catatan: Sintesis audio diteruskan sebagai teks terformat untuk menjaga kompatibilitas perangkat)._`,
-        );
+        if (txt.length > 1500) return textOnly('Batasi teks suara hingga 1.500 karakter.');
+        try {
+          const data = await this.media.speakIndonesian(txt);
+          return { text: '🔊 Audio bahasa Indonesia', media: { data, mimeType:'audio/wav', filename:'hdybot-suara.wav', asDocument:true } };
+        } catch { return textOnly('Sintesis suara belum tersedia. Periksa instalasi espeak-ng di server.'); }
       }
 
       // ==================== UTILITAS & API PUBLIK ====================
       case 'util.bmi': {
         const w = Number(parsed.args[0]);
         const h = Number(parsed.args[1]);
-        if (!w || !h) return textOnly('⚠️ Format: `.bmi <berat_kg> <tinggi_cm>`');
+        if (![w,h].every(n => Number.isFinite(n) && n > 0)) return textOnly('⚠️ Format: `.bmi <berat_kg> <tinggi_cm>`');
         const res = UtilityService.calculateBmi(w, h);
         return textOnly(`⚖️ *Kalkulator BMI Edukatif*: BMI = *${res.bmi}* (Kategori: *${res.category}*).`);
       }
@@ -1686,14 +1781,14 @@ export class CommandDispatcher {
         if (!parsed.rawArgs) {
           return textOnly('⚠️ Format: `.ipk <sks1:bobot1, sks2:bobot2>` (contoh: `.ipk 4:4.0, 2:3.5, 3:3.75`)');
         }
+        if (!/^\s*\d+\s*:\s*\d+(?:\.\d+)?\s*(?:,\s*\d+\s*:\s*\d+(?:\.\d+)?\s*)*$/.test(parsed.rawArgs)) return textOnly('Gunakan .ipk 4:4.0, 2:3.5 dengan bobot 0–4.');
         const entries = parsed.rawArgs
           .split(',')
           .map((item) => {
             const [s, g] = item.trim().split(':');
             return { sks: Number(s), gradePoint: Number(g) };
-          })
-          .filter((e) => e.sks > 0 && Number.isFinite(e.gradePoint));
-        if (!entries.length) {
+          });
+        if (!entries.length || entries.some(e => !Number.isInteger(e.sks) || e.sks <= 0 || !Number.isFinite(e.gradePoint) || e.gradePoint < 0 || e.gradePoint > 4)) {
           return textOnly('⚠️ Format: `.ipk 4:4.0, 2:3.5, 3:3.75`');
         }
         const res = UtilityService.calculateGpa(entries);
@@ -1756,7 +1851,7 @@ export class CommandDispatcher {
         return textOnly(this.fun.listSurah());
 
       case 'fun.sholat':
-        return textOnly(this.fun.prayerSchedule(parsed.rawArgs));
+        return textOnly(await this.fun.prayerSchedule(parsed.rawArgs,now));
 
       case 'fun.truth':
         return textOnly(this.fun.truthOrDare('truth'));
@@ -1872,7 +1967,9 @@ export class CommandDispatcher {
         const jid = parsed.args[0];
         const name = parsed.args.slice(1).join(' ') || 'Grup Sumber';
         if (!jid || !jid.endsWith('@g.us')) return textOnly('⚠️ Format: `.groups add <id@g.us> <Nama Grup>`');
-        intelligence.registerSourceGroup(jid, name);
+        this.fun.rememberGroup(jid,name);
+        this.fun.setTaskSource(jid,name);
+        if (!intelligence.isPjmkGroup(jid)) intelligence.registerSourceGroup(jid, name);
         outbound.registerAllowedGroup(jid);
         this.recordAudit(actorJid, 'groups.add', 'ok', jid);
         return textOnly(`✅ Grup sumber *${name}* (\`${jid}\`) terdaftar dan aktif.`);
@@ -1882,6 +1979,7 @@ export class CommandDispatcher {
         const jid = parsed.args[0] ?? '';
         const ok = intelligence.pauseSourceGroup(jid);
         outbound.pauseGroup(jid);
+        this.fun.setGroupPaused(jid,true);
         this.recordAudit(actorJid, 'groups.pause', ok ? 'ok' : 'not_found', jid);
         return textOnly(ok ? `⏸️ Pemantauan & pengiriman grup \`${jid}\` dijeda.` : `⚠️ Grup \`${jid}\` tidak ditemukan.`);
       }
@@ -1890,6 +1988,7 @@ export class CommandDispatcher {
         const jid = parsed.args[0] ?? '';
         const ok = intelligence.resumeSourceGroup(jid);
         outbound.resumeGroup(jid);
+        this.fun.setGroupPaused(jid,false);
         this.recordAudit(actorJid, 'groups.resume', ok ? 'ok' : 'not_found', jid);
         return textOnly(ok ? `▶️ Pemantauan & pengiriman grup \`${jid}\` dilanjutkan.` : `⚠️ Grup \`${jid}\` tidak ditemukan.`);
       }
@@ -2053,6 +2152,15 @@ export class CommandDispatcher {
         );
       }
 
+      case 'priority': {
+        const list = intelligence.listPendingReviews().filter(i => i.analysis.category === 'URGENT' || i.analysis.category === 'IMPORTANT');
+        return textOnly(list.length ? '*Prioritas kelas*\n' + list.map(i => i.id + ' · ' + i.analysis.category + '\n' + i.analysis.summary).join('\n\n') : 'Belum ada informasi penting yang menunggu tinjauan.');
+      }
+      case 'broadcast.preview': {
+        const id = parsed.args[0];
+        const item = id ? intelligence.getReviewItem(id) : undefined;
+        return textOnly(item ? '*Pratinjau pengumuman*\nTujuan: ' + item.targetGroupJid + '\n\n' + item.draftAnnouncementText : 'Gunakan .broadcast preview <ID dari .pending>.');
+      }
       case 'pending':
       case 'filter.review': {
         const items = intelligence.listPendingReviews();
@@ -2125,6 +2233,7 @@ export class CommandDispatcher {
           return textOnly(`❌ Konfirmasi gagal: *${res.reason}*.`);
         }
         const { item } = res;
+        if (item.action==='deadline_share') return textOnly(await this.confirmDeadline(msg,item.payload as {id:string;target:string;body:string}));
         if (item.action === 'schedule_change') {
           if (!this.deps.scheduleDatabase || !this.deps.auth.evaluate(msg).allowed) return textOnly('Akses perubahan jadwal ditolak.');
           let backup: string;

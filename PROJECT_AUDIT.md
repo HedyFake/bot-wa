@@ -10,7 +10,7 @@ Peta modul produksi dan dependensinya tercantum di [ARCHITECTURE_MAP.md](ARCHITE
 |---|---|
 | src/admin, src/whatsapp | Parser membedakan perintah titik dan bahasa alami. Dispatcher memiliki jalur grup dan privat tersendiri. Adapter wwebjs memproses event message_create, metadata peserta, pesan kutipan, dan media. |
 | src/ai | Router mengelola alias model, timeout, retry, fallback, dan penolakan modality yang tidak didukung. Group intelligence memiliki antrean review dan ringkasan lintas grup. |
-| src/modules | Jadwal berasal dari seed Semester 5A. Tugas, pengingat lama, catatan, dan pengaturan hiburan memakai state lokal. Sebagian respons lama menggunakan data tetap. |
+| src/modules | Saat PostgreSQL dikonfigurasi, jadwal, mata kuliah, dosen dan pengecualian tanggal diambil dari database. Mode mock tanpa database memakai seed Semester 5A. Tugas, pengingat lama, catatan, dan pengaturan hiburan memakai state lokal. Sebagian respons lama menggunakan data tetap. |
 | prisma, data | Dua migrasi awal mencakup tabel domain dan proteksi audit append-only. Seed melakukan upsert. Perbaikan memakai tabel Reminder, AuditLog, dan BotSetting yang sudah ada. |
 | scripts, install.sh, start.js | Tersedia backup dan restore PostgreSQL, installer systemd, serta peluncur Node. Konfigurasi PM2 lama merupakan jalur deployment alternatif. |
 | tests | Vitest menguji parser, autentikasi, router, seed, media, pengingat, dan alur mock. Pengujian baru mencakup Drive, pengiriman dokumen dan registri. |
@@ -30,7 +30,7 @@ Peta modul produksi dan dependensinya tercantum di [ARCHITECTURE_MAP.md](ARCHITE
 ## Risiko yang masih terbuka
 
 - Relay lintas grup lama mempercayai nama tampilan. Jalur baru mensyaratkan sumber dan tujuan JID yang ditetapkan admin. Gunakan .setpjmk dan .setkelasa melalui DM admin.
-- Handler jadwal baca masih memakai seed, dan beberapa perintah mutasi jadwal lama telah dipetakan parser tanpa handler eksekusi. Lihat inventaris.
+- Audit lanjutan menemukan empat mutasi jadwal, .priority, dan .broadcast preview sudah dikenali parser tetapi belum dieksekusi. Handler sekarang terhubung. Pengujian database terisolasi memeriksa perubahan jadwal, penolakan konflik, backup, seed ulang, dan pengiriman pengingat.
 - Role lama memiliki beberapa padanan dengan nama baru di seed. Penegakan permission per role akademik belum menyeluruh.
 - Sebagian riwayat AI dan log monitoring chat disimpan di memori. Sesi permainan, skor opt-in, riwayat jawaban benar, dan mode interaksi menggunakan state lokal persisten. Backup PostgreSQL tidak menyertakan state JSON.
 - Lingkungan lokal belum membuktikan pairing WhatsApp, izin Drive asli, restart systemd, boot VPS, atau pemulihan database dari backup. Tidak ada sesi WhatsApp maupun database produksi yang diubah selama pengujian.

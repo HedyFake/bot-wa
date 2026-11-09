@@ -100,7 +100,7 @@ async function main() {
     persistPath: './data/runtime/bot-state.json',
   });
 
-  const worker = prisma ? new ReminderWorker(prisma, outbound, () => funService.listReminders()) : undefined;
+  const worker = prisma ? new ReminderWorker(prisma, outbound, () => funService.listReminders(), funService) : undefined;
   const drive = config.GOOGLE_APPLICATION_CREDENTIALS ? DriveCatalog.serviceAccount(config.GOOGLE_DRIVE_FOLDER_ID, config.GOOGLE_APPLICATION_CREDENTIALS, prisma ? async files => {
     const key = 'drive.catalog.' + config.GOOGLE_DRIVE_FOLDER_ID;
     const value = { indexedAt: new Date().toISOString(), files: JSON.parse(JSON.stringify(files)) };
@@ -184,6 +184,7 @@ async function main() {
   const syncTimer = setInterval(syncDrive, 15 * 60_000);
   const jobTimer = setInterval(() => {
     if (whatsapp.state() === 'connected' && config.OUTBOUND_ENABLED && !config.DRY_RUN) {
+      void dispatcher.tickDeadlines().catch(() => monitor.record('Scheduler','error','Pemberitahuan deadline gagal'));
       void worker?.tick().catch(() => monitor.record('Scheduler', 'error', 'Pemrosesan antrean gagal'));
     }
   }, 15_000);

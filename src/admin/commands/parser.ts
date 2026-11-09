@@ -193,7 +193,7 @@ function build(
     command,
     args,
     rawArgs: rawArgs.trim(),
-    adminOnly: ADMIN_ONLY.has(command),
+    adminOnly: ADMIN_ONLY.has(command) || (command === 'tasks' && ['antrean','grup','tujuan','tolak','deadline','ulang'].includes((args[0] ?? '').toLowerCase())),
     requiresConfirmation: REQUIRES_CONFIRMATION.has(command),
   };
 }
@@ -324,6 +324,10 @@ export function parseCommand(textInput: string): ParsedCommand {
     const rawRest = withoutDot.slice(head.length).trim();
     const rawRest2 = rawRest.slice(sub.length).trim();
 
+    if (head === 'tambahtugas' || head === 'selesaitugas' || head === 'tugasaktif') {
+      const subtask = head === 'tambahtugas' ? 'add' : head === 'selesaitugas' ? 'done' : 'aktif';
+      return build('dot','tasks',[subtask,...rest],[subtask,rawRest].join(' ').trim());
+    }
     if (head === 'kalkulator' && !rest.length) return build('dot', 'nursing', ['kalkulator']);
     if (head === 'kuis' && sub === 'ukom') return build('dot', 'nursing', ['kuisukom'], rawRest2);
     if (head === 'high' && sub === 'alert') return build('dot', 'nursing', ['highalert'], rawRest2);

@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
@@ -183,6 +184,17 @@ export class MediaService {
     });
   }
 
+  speakIndonesian(text: string): Promise<Buffer> {
+    return new Promise((resolve,reject) => {
+      const child = execFile('espeak-ng',['-v','id','--stdout','--stdin'],{ encoding:'buffer', maxBuffer:12_000_000, timeout:20_000, windowsHide:true },(err,data) => {
+        if (err || data.subarray(0,4).toString() !== 'RIFF') reject(new Error('Sintesis suara gagal'));
+        else resolve(data);
+      });
+      child.stdin?.on('error', () => undefined);
+      child.stdin?.end(text);
+    });
+  }
+
   /** Buat dokumen PDF resmi berlabel DRAFT (.doc pdf <judul>|<isi>). */
   async generatePdfDocument(opts: {
     title: string;
@@ -191,12 +203,14 @@ export class MediaService {
     watermark?: string;
   }): Promise<Buffer> {
     const pdf = await PDFDocument.create();
-    const page = pdf.addPage([595.28, 841.89]); // A4
+    let page = pdf.addPage([595.28, 841.89]); // A4
     const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
 
     const watermark = opts.watermark ?? 'DRAFT — PERLU VERIFIKASI HEDY / ADMIN';
-    page.drawText(watermark, {
+    const supported = new Set(fontRegular.getCharacterSet());
+    const printable = (value: string) => Array.from(value).map(c => supported.has(c.codePointAt(0)!) ? c : 'U+' + c.codePointAt(0)!.toString(16).toUpperCase()).join('');
+    page.drawText(printable(watermark), {
       x: 50,
       y: 800,
       size: 10,
@@ -204,7 +218,8 @@ export class MediaService {
       color: rgb(0.8, 0.2, 0.2),
     });
 
-    page.drawText(opts.title.slice(0, 70), {
+    pdf.setTitle(opts.title);
+    page.drawText(printable(opts.title.slice(0, 70)), {
       x: 50,
       y: 765,
       size: 18,
@@ -213,7 +228,7 @@ export class MediaService {
     });
 
     if (opts.subtitle) {
-      page.drawText(opts.subtitle.slice(0, 90), {
+      page.drawText(printable(opts.subtitle.slice(0, 90)), {
         x: 50,
         y: 742,
         size: 11,
@@ -223,30 +238,26 @@ export class MediaService {
     }
 
     let y = 705;
-    for (const rawLine of opts.bodyLines) {
-      const wrapped = wrapLines(rawLine, 75, 10);
-      for (const l of wrapped) {
-        if (y < 60) break;
-        page.drawText(l, {
-          x: 50,
-          y,
-          size: 11,
-          font: fontRegular,
-          color: rgb(0.1, 0.1, 0.1),
-        });
-        y -= 18;
+    const drawLine = (line: string) => {
+      if (y < 60) { page = pdf.addPage([595.28,841.89]); y = 780; }
+      page.drawText(line, {x:50,y,size:11,font:fontRegular,color:rgb(0.1,0.1,0.1)});
+      y -= 18;
+    };
+    for (const raw of opts.bodyLines) {
+      let line = '';
+      for (const word of printable(raw.replace(/\s+/g,' ').trim()).split(' ')) {
+        const candidate = line ? line + ' ' + word : word;
+        if (fontRegular.widthOfTextAtSize(candidate,11) <= 490) { line = candidate; continue; }
+        if (line) drawLine(line);
+        line = '';
+        for (const char of word) {
+          if (fontRegular.widthOfTextAtSize(line + char,11) > 490) { drawLine(line); line = ''; }
+          line += char;
+        }
       }
-      if (y < 60) break;
+      drawLine(line);
     }
-
-    page.drawText('Dicetak oleh HdyBot — Nursing Class A Assistant (Asia/Jakarta)', {
-      x: 50,
-      y: 35,
-      size: 9,
-      font: fontRegular,
-      color: rgb(0.45, 0.5, 0.55),
-    });
-
+    pdf.getPages().forEach((p,i) => p.drawText('HdyBot · Nursing Class A · ' + (i+1) + '/' + pdf.getPageCount(), {x:50,y:35,size:9,font:fontRegular}));
     const bytes = await pdf.save();
     return Buffer.from(bytes);
   }

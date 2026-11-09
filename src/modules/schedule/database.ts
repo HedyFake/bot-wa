@@ -95,6 +95,7 @@ export class ScheduleDatabase {
       const cls = await loadClass(tx,this.name);
       if (version(cls) !== change.version) throw new InvalidChange('Jadwal berubah sejak pratinjau. Jalankan perintah lagi.');
       const p = plan(cls,this.base,change.action,change.input);
+      await tx.botSetting.upsert({where:{key:'schedule.initialized.' + cls.id},update:{},create:{key:'schedule.initialized.' + cls.id,value:true}});
       const backup = 'schedule.backup.' + randomUUID();
       await tx.botSetting.create({data:{key:backup,updatedBy:actor,value:{ classId:cls.id, schedules:JSON.parse(JSON.stringify(cls.schedules)) }}});
       if (p.reset) {

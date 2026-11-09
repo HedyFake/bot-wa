@@ -2,6 +2,12 @@
 
 ## 9 November 2026
 
+- Jadwal, daftar mata kuliah, dan daftar tugas memakai blok WhatsApp berjarak dengan waktu, pengampu, deadline, serta PJ dari data aktual. NVIDIA mengenali penugasan dan tenggat; pemberitahuan baru dan pengingat harian H−3 sampai hari H diproses melalui antrean persisten dan hanya diteruskan sesudah owner memilih grup dan mengonfirmasi isi.
+
+- README kini memuat katalog perintah dengan alias, prasyarat, dan contoh hasil dispatcher. Uji katalog dapat diulang dengan npm run test:commands.
+- Jadwal produksi membaca PostgreSQL. Admin mengubah jadwal melalui DM dengan pratinjau, konfirmasi, backup dan audit. Seed ulang mempertahankan perubahan pengguna.
+- Perbaikan mencakup prioritas/review, TTS lokal, salat berdasarkan kota/tanggal, kalkulator, pemilihan tugas menurut WIB, ID catatan/tugas, dan pagination PDF.
+
 - Relay PJMK sekarang menunggu keputusan Hedy di DM untuk isi dan tujuan yang ditampilkan. Persetujuan lewat kutipan, penolakan, klaim pengiriman, dan pencegahan replay disimpan.
 - Balasan nongkrong mengutip pengirim dengan teks percakapan biasa. NVIDIA merutekan permintaan bahasa alami ke perintah baca yang diizinkan.
 - Perawat.org menjadi sumber untuk sembilan menu keperawatan. SoundCloud menyediakan pencarian dan atribusi. Audio yang diizinkan dapat dilampirkan dari katalog lokal.

@@ -43,6 +43,18 @@ Admin yang terdaftar membuka sesi lewat DM untuk perintah terbatas dan menguncin
 
 Contoh: `.menu`, `@HdyBot jadwal besok?`, `.keperawatan`, `.sdki nyeri akut`, dan `.music fals`. Balasan nongkrong berbentuk percakapan biasa. Pengaturan grup disimpan per JID.
 
+### Tugas, tenggat, dan pengingat H−3 sampai hari H
+
+HdyBot memeriksa pesan penugasan atau tenggat di grup kelas, grup PJMK, dan grup sumber yang admin daftarkan melalui `.groups add <JID> <nama>`, serta DM Hedy yang sudah terautentikasi. NVIDIA membedakan pengumuman dari obrolan. Tugas hasil deteksi masuk ke antrean privat. Jika tanggal, dosen, atau PJ tidak disebutkan, bot menandainya belum tercatat. Pesan biasa tidak memicu pengumuman ke grup.
+
+Contoh penambahan manual: `.tugas add Keperawatan Gerontik|Makalah lansia|2026-11-16 14:00|Presentasi kelompok|Ibu Sari|Ani`. Gunakan `.tugas detail TUG-3` untuk membaca satu tugas. Hedy menerima pengingat pribadi pada H−3, H−2, H−1, dan hari H. Misalnya, untuk tenggat Senin 16 November pukul 14.00 WIB, pengingat datang tanggal 13, 14, 15, dan 16 November pukul 14.00 WIB. Jika hanya ada tanggal, jadwal hariannya pukul 09.00 WIB. Tugas yang baru tercatat di dalam periode itu langsung diberitahukan. Setelah restart, bot melewati hari yang sudah lewat. Setiap pengiriman ke grup memerlukan konfirmasi baru.
+
+1. Hedy menerima kartu tugas di DM, beserta ID pemberitahuan. Gunakan `.tugas antrean` untuk memeriksanya kembali. Untuk memperbaiki tenggat, gunakan `.tugas deadline TUG-3 2026-11-16 14:00`.
+2. Pilih nama atau JID dari `.tugas grup`, lalu ketik, misalnya, `.tugas tujuan TUG-3.1.h3 Praktikum`. Bot menampilkan isi dan tujuan di DM.
+3. Balas `.confirm <kode>` untuk mengirim ke grup tersebut. Gunakan `.cancel <kode>` untuk membatalkan pratinjau atau `.tugas tolak <ID>` untuk melewati pemberitahuan. Tugas yang telah selesai, dihapus, atau berubah tenggat tidak dapat dikirim memakai pratinjau lama.
+
+Antrean tenggat disimpan atomik bersama state tugas di `data/runtime/bot-state.json`. Proses tunggal memeriksanya tiap 15 detik dan mengejar notifikasi yang masih relevan setelah restart. Pengiriman membutuhkan WhatsApp terhubung, OUTBOUND_ENABLED aktif, dan DRY_RUN nonaktif. Jika proses terputus di tengah pengiriman, periksa riwayat WhatsApp sebelum tindak lanjut. Gunakan `.tugas ulang <ID>` untuk meminta ulang DM yang gagal atau belum terkonfirmasi. Perintah ini hanya mengirim ke owner. Pengingat lama yang berisi penugasan atau tenggat dialihkan ke antrean owner. Jika tenggat asli belum diketahui, Hedy dapat mengisinya di DM. Grup pilihan mencakup grup tujuan terkonfigurasi dan grup yang sudah dikenali dari pesan masuk.
+
 ### Persetujuan Hedy
 
 Gunakan `.setpjmk <jid>` dan `.setkelasa <jid>` dari DM admin. Saat ada pratinjau, kutip pesan itu dan jawab **ya** atau **tidak**. Alternatifnya, gunakan `.relay kirim <id>` atau `.relay tolak <id>`. Hanya pemilik terautentikasi yang dapat mengirim relay ke tujuan yang ditampilkan.
@@ -267,15 +279,51 @@ Pengguna · Alias: `.me`
 Pengguna
 
 ~~~~text
-📚 *Mata Kuliah Semester 5A (Nursing Class A)*
-1. *Metodologi Penelitian* [METPEN] — 4 SKS
-2. *Keperawatan Anak Sakit dan Kronis dan Terminal* [KAST] — 2 SKS
-3. *Keperawatan Menjelang Ajal* [KMA] — 3 SKS
-4. *Konsep Keperawatan Agregat Komunitas* [KAK] — 2 SKS
-5. *Entrepreneurship 2* [ENT2] — 4 SKS
-6. *Keperawatan Gerontik* [GERO] — 4 SKS
-7. *Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan* [KDW] — 3 SKS
-Total SKS Mata Kuliah: *22 SKS* (status: perlu verifikasi dokumen resmi)
+*MATA KULIAH · Semester 5A*
+
+*1.*
+📗 Mata kuliah: Metodologi Penelitian
+🕦 Jadwal: Senin 08:00–09:40, Selasa 12:30–14:10, Kamis 09:40–11:20
+👤 Tim pengampu: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+📖 Kode / SKS: METPEN · 4 SKS
+
+*2.*
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+🕦 Jadwal: Senin 09:40–11:20
+👤 Tim pengampu: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+📖 Kode / SKS: KAST · 2 SKS
+
+*3.*
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+🕦 Jadwal: Senin 12:30–14:10, Rabu 12:30–14:10
+👤 Tim pengampu: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+📖 Kode / SKS: KMA · 3 SKS
+
+*4.*
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+🕦 Jadwal: Selasa 08:00–09:40
+👤 Tim pengampu: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+📖 Kode / SKS: KAK · 2 SKS
+
+*5.*
+📗 Mata kuliah: Entrepreneurship 2
+🕦 Jadwal: Selasa 09:40–11:20, Kamis 08:00–09:40, Jumat 12:30–14:10
+👤 Tim pengampu: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+📖 Kode / SKS: ENT2 · 4 SKS
+
+*6.*
+📗 Mata kuliah: Keperawatan Gerontik
+🕦 Jadwal: Rabu 08:00–09:40, Kamis 12:30–14:10, Jumat 08:00–09:40
+👤 Tim pengampu: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+📖 Kode / SKS: GERO · 4 SKS
+
+*7.*
+📗 Mata kuliah: Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan
+🕦 Jadwal: Rabu 09:40–11:20, Jumat 09:40–11:20
+👤 Tim pengampu: Dr. Darsini, S.Kep., Ns., M.Kes, Nanang Bagus Sasmito, S.Kep., Ns., M.Kep, Gevi Mellya Sari, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Facrur Rozi, S.Kep., Ns., M.Kep, Dwi Uswatun, S.Kep., Ns., M.Kep, Siti Hidayati, M.Kep
+📖 Kode / SKS: KDW · 3 SKS
+
+Total: 22 SKS
 ~~~~
 
 **.dosen Contoh**
@@ -302,14 +350,24 @@ Pengguna · Alias: `.id`
 Pengguna · Alias: `.schedule`
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Senin (2026-11-09)*
-1. *08:00–09:40 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Anak Sakit dan Kronis dan Terminal (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.jadwal hariini**
@@ -317,29 +375,49 @@ Pengguna · Alias: `.schedule`
 Pengguna · Alias: `.schedule hariini`
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Senin (2026-11-09)*
-1. *08:00–09:40 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Anak Sakit dan Kronis dan Terminal (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.jadwal senin**
 
-Pengguna · Alias: `.schedule senin` · Nama hari senin sampai minggu diterima.
+Pengguna · Alias: `.schedule senin` · Gunakan nama hari untuk tanggal terdekat. Bentuk .jadwal minggu menunjukkan pekan berjalan.
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Senin*
-1. *08:00–09:40 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Anak Sakit dan Kronis dan Terminal (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.besok**
@@ -347,14 +425,24 @@ Pengguna · Alias: `.schedule senin` · Nama hari senin sampai minggu diterima.
 Pengguna
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Selasa (2026-11-10)*
-1. *08:00–09:40 WIB* — Konsep Keperawatan Agregat Komunitas (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Selasa 10 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.jadwal besok**
@@ -362,14 +450,24 @@ Pengguna
 Pengguna · Alias: `.schedule besok`
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Selasa (2026-11-10)*
-1. *08:00–09:40 WIB* — Konsep Keperawatan Agregat Komunitas (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Selasa 10 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.mingguini**
@@ -377,56 +475,120 @@ Pengguna · Alias: `.schedule besok`
 Pengguna
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Senin*
-1. *08:00–09:40 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Anak Sakit dan Kronis dan Terminal (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Senin 9 November 2026*
 
-📅 *Jadwal Nursing Class A (5A) — Selasa*
-1. *08:00–09:40 WIB* — Konsep Keperawatan Agregat Komunitas (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
 
-📅 *Jadwal Nursing Class A (5A) — Rabu*
-1. *08:00–09:40 WIB* — Keperawatan Gerontik (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
 
-📅 *Jadwal Nursing Class A (5A) — Kamis*
-1. *08:00–09:40 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Gerontik (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
 
-📅 *Jadwal Nursing Class A (5A) — Jumat*
-1. *08:00–09:40 WIB* — Keperawatan Gerontik (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+☕ Istirahat: 11:20–12:30 WIB
 
-📅 *Jadwal Nursing Class A (5A) — SATURDAY*
-Tidak ada jadwal kuliah terjadwal.
+━━━━━━━━━━━━
 
-📅 *Jadwal Nursing Class A (5A) — SUNDAY*
-Tidak ada jadwal kuliah terjadwal.
+*MK Selasa 10 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Rabu 11 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Keperawatan Gerontik
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Dr. Darsini, S.Kep., Ns., M.Kes, Nanang Bagus Sasmito, S.Kep., Ns., M.Kep, Gevi Mellya Sari, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Facrur Rozi, S.Kep., Ns., M.Kep, Dwi Uswatun, S.Kep., Ns., M.Kep, Siti Hidayati, M.Kep
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Kamis 12 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Gerontik
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Jumat 13 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Keperawatan Gerontik
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Dr. Darsini, S.Kep., Ns., M.Kes, Nanang Bagus Sasmito, S.Kep., Ns., M.Kep, Gevi Mellya Sari, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Facrur Rozi, S.Kep., Ns., M.Kep, Dwi Uswatun, S.Kep., Ns., M.Kep, Siti Hidayati, M.Kep
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Sabtu 14 November 2026*
+
+Tidak ada kuliah terjadwal.
+
+━━━━━━━━━━━━
+
+*MK Minggu 15 November 2026*
+
+Tidak ada kuliah terjadwal.
 ~~~~
 
 **.jadwal minggu**
@@ -434,56 +596,120 @@ Tidak ada jadwal kuliah terjadwal.
 Pengguna · Alias: `.jadwal mingguini`, `.schedule minggu`, `.schedule mingguini`
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Senin*
-1. *08:00–09:40 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Anak Sakit dan Kronis dan Terminal (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Senin 9 November 2026*
 
-📅 *Jadwal Nursing Class A (5A) — Selasa*
-1. *08:00–09:40 WIB* — Konsep Keperawatan Agregat Komunitas (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
 
-📅 *Jadwal Nursing Class A (5A) — Rabu*
-1. *08:00–09:40 WIB* — Keperawatan Gerontik (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Menjelang Ajal (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
 
-📅 *Jadwal Nursing Class A (5A) — Kamis*
-1. *08:00–09:40 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Keperawatan Gerontik (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
 
-📅 *Jadwal Nursing Class A (5A) — Jumat*
-1. *08:00–09:40 WIB* — Keperawatan Gerontik (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan (3 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+☕ Istirahat: 11:20–12:30 WIB
 
-📅 *Jadwal Nursing Class A (5A) — SATURDAY*
-Tidak ada jadwal kuliah terjadwal.
+━━━━━━━━━━━━
 
-📅 *Jadwal Nursing Class A (5A) — SUNDAY*
-Tidak ada jadwal kuliah terjadwal.
+*MK Selasa 10 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Rabu 11 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Keperawatan Gerontik
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Dr. Darsini, S.Kep., Ns., M.Kes, Nanang Bagus Sasmito, S.Kep., Ns., M.Kep, Gevi Mellya Sari, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Facrur Rozi, S.Kep., Ns., M.Kep, Dwi Uswatun, S.Kep., Ns., M.Kep, Siti Hidayati, M.Kep
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Kamis 12 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Gerontik
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Jumat 13 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Keperawatan Gerontik
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusina Vidhiastutik, S.Kep., Ns., M.Kep, Vendi Eko Kurniawan, S.Kep., Ns., M.Kes, Fachrun Nisa, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Dewasa Sistem Muskuloskeletal, Integumen, Persepsi Sensori dan Persyarafan
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Dr. Darsini, S.Kep., Ns., M.Kes, Nanang Bagus Sasmito, S.Kep., Ns., M.Kep, Gevi Mellya Sari, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Facrur Rozi, S.Kep., Ns., M.Kep, Dwi Uswatun, S.Kep., Ns., M.Kep, Siti Hidayati, M.Kep
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+☕ Istirahat: 11:20–12:30 WIB
+
+━━━━━━━━━━━━
+
+*MK Sabtu 14 November 2026*
+
+Tidak ada kuliah terjadwal.
+
+━━━━━━━━━━━━
+
+*MK Minggu 15 November 2026*
+
+Tidak ada kuliah terjadwal.
 ~~~~
 
 **.kuliahberikutnya**
@@ -491,11 +717,14 @@ Tidak ada jadwal kuliah terjadwal.
 Pengguna
 
 ~~~~text
-⏭️ *Kuliah Berikutnya (2026-11-09 — Senin)*
-• Jam: *08:00–09:40 WIB*
-• Mata Kuliah: *Metodologi Penelitian* (4 SKS)
-• Ruang: belum ditentukan
-• Kandidat Dosen (perlu konfirmasi sesi): Facrur Rozi, S.Kep., Ns., M.Kep; Eliza Zihni, S.Kep., Ns., M.Kep; Prawito, S.Kep., Ns., M.Kep; Karisma Dwi Ana, S.Kep., Ns., M.Kep
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.cekjadwal 2026-11-10**
@@ -503,14 +732,24 @@ Pengguna
 Pengguna
 
 ~~~~text
-📅 *Jadwal Nursing Class A (5A) — Selasa (2026-11-10)*
-1. *08:00–09:40 WIB* — Konsep Keperawatan Agregat Komunitas (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Selasa 10 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.matkulhariini**
@@ -518,10 +757,24 @@ Pengguna
 Pengguna
 
 ~~~~text
-🗓️ Senin · 2026-11-09
-08:00 · Metodologi Penelitian
-09:40 · Keperawatan Anak Sakit dan Kronis dan Terminal
-12:30 · Keperawatan Menjelang Ajal
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.dosenhariini**
@@ -529,10 +782,24 @@ Pengguna
 Pengguna
 
 ~~~~text
-🗓️ Senin · 2026-11-09
-08:00 · Metodologi Penelitian · Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
-09:40 · Keperawatan Anak Sakit dan Kronis dan Terminal · Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
-12:30 · Keperawatan Menjelang Ajal · Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.ruanganhariini**
@@ -540,10 +807,24 @@ Pengguna
 Pengguna
 
 ~~~~text
-🗓️ Senin · 2026-11-09
-08:00 · Metodologi Penelitian · Ruang belum ditetapkan
-09:40 · Keperawatan Anak Sakit dan Kronis dan Terminal · Ruang belum ditetapkan
-12:30 · Keperawatan Menjelang Ajal · Ruang belum ditetapkan
+*MK Senin 9 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Keperawatan Anak Sakit dan Kronis dan Terminal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Asri Kusyani, S.Kep., Ns., M.Kep, dr. Alia Astutik, M.Kes, Yusina Vidhiastutik, Ns., M.Kep, Eli Rahmawati, M.Kes
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Keperawatan Menjelang Ajal
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Aditya Nurdin A, S.Kep., Ns., M.Kep, Dr. Darsini, S.Kep., Ns., M.Kes, Dwi Uswatun, S.Kep., Ns., M.Kep, Eliza Zihni Z, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **.jadwal export csv**
@@ -595,6 +876,7 @@ Pengguna · Alias: `.schedule export`
       "Prawito, S.Kep., Ns., M.Kep",
       "Karisma Dwi Ana, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -612,6 +894,7 @@ Pengguna · Alias: `.schedule export`
       "Yusina Vidhiastutik, Ns., M.Kep",
       "Eli Rahmawati, M.Kes"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -629,6 +912,7 @@ Pengguna · Alias: `.schedule export`
       "Dwi Uswatun, S.Kep., Ns., M.Kep",
       "Eliza Zihni Z, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -646,6 +930,7 @@ Pengguna · Alias: `.schedule export`
       "Yusiana Vidhiastutik, S.Kep., Ns., M.Kep",
       "Roni Setyawan, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -664,6 +949,7 @@ Pengguna · Alias: `.schedule export`
       "Elis Fatmawati, S.ST., M.Keb",
       "Aris Setyawan"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -681,6 +967,7 @@ Pengguna · Alias: `.schedule export`
       "Prawito, S.Kep., Ns., M.Kep",
       "Karisma Dwi Ana, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -698,6 +985,7 @@ Pengguna · Alias: `.schedule export`
       "Vendi Eko Kurniawan, S.Kep., Ns., M.Kes",
       "Fachrun Nisa, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -718,6 +1006,7 @@ Pengguna · Alias: `.schedule export`
       "Dwi Uswatun, S.Kep., Ns., M.Kep",
       "Siti Hidayati, M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -735,6 +1024,7 @@ Pengguna · Alias: `.schedule export`
       "Dwi Uswatun, S.Kep., Ns., M.Kep",
       "Eliza Zihni Z, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -753,6 +1043,7 @@ Pengguna · Alias: `.schedule export`
       "Elis Fatmawati, S.ST., M.Keb",
       "Aris Setyawan"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -770,6 +1061,7 @@ Pengguna · Alias: `.schedule export`
       "Prawito, S.Kep., Ns., M.Kep",
       "Karisma Dwi Ana, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -787,6 +1079,7 @@ Pengguna · Alias: `.schedule export`
       "Vendi Eko Kurniawan, S.Kep., Ns., M.Kes",
       "Fachrun Nisa, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -804,6 +1097,7 @@ Pengguna · Alias: `.schedule export`
       "Vendi Eko Kurniawan, S.Kep., Ns., M.Kes",
       "Fachrun Nisa, S.Kep., Ns., M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -824,6 +1118,7 @@ Pengguna · Alias: `.schedule export`
       "Dwi Uswatun, S.Kep., Ns., M.Kep",
       "Siti Hidayati, M.Kep"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   },
   {
@@ -842,6 +1137,7 @@ Pengguna · Alias: `.schedule export`
       "Elis Fatmawati, S.ST., M.Keb",
       "Aris Setyawan"
     ],
+    "assignedLecturers": [],
     "status": "USER_PROVIDED_PENDING_CONFIRMATION"
   }
 ]
@@ -926,27 +1222,22 @@ Pengguna
 <details>
 <summary><strong>Tugas, catatan, dan pengingat</strong></summary>
 
-Tambah dan selesaikan tugas berdasarkan ID. Filter hari dan minggu mengikuti WIB. Pengingat disimpan per chat oleh worker PostgreSQL pada produksi. Contoh lokal memakai pengingat JSON untuk kompatibilitas.
+Tambah dan selesaikan tugas berdasarkan ID. Filter hari dan minggu mengikuti WIB. Notifikasi tenggat baru dan pengingat harian H−3 sampai hari H masuk ke DM Hedy. Hedy memilih grup lalu mengonfirmasi teks sebelum pengiriman. Pengingat disimpan per chat oleh worker PostgreSQL pada produksi. Contoh lokal memakai pengingat JSON untuk kompatibilitas.
 
 **.tasks**
 
 Pengguna · Alias: `.tugas`, `.deadline`, `.mytask`, `.progress`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (3)*
-• *TUG-3* [OPEN] — *Metodologi*
-  Judul: Diskusi
-  Deadline: *2026-11-09* | Ket: -
+*LIST TUGAS*
 
-• *TUG-1* [OPEN] — *Metodologi Penelitian*
-  Judul: Proposal Bab 1–3 Latar Belakang & Rumusan Masalah
-  Deadline: *2026-11-14* | Ket: Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.
-
-• *TUG-2* [OPEN] — *Keperawatan Gerontik*
-  Judul: Asuhan Keperawatan Lansia (Studi Kasus Kelompok)
-  Deadline: *2026-11-18* | Ket: Presentasi kelompok sesuai pembagian kelompok Semester 5A (PJ: Rika, Imel).
-
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas list**
@@ -954,20 +1245,15 @@ _Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tug
 Pengguna · Alias: `.tasks list`, `.deadline list`, `.mytask list`, `.progress list`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (3)*
-• *TUG-3* [OPEN] — *Metodologi*
-  Judul: Diskusi
-  Deadline: *2026-11-09* | Ket: -
+*LIST TUGAS*
 
-• *TUG-1* [OPEN] — *Metodologi Penelitian*
-  Judul: Proposal Bab 1–3 Latar Belakang & Rumusan Masalah
-  Deadline: *2026-11-14* | Ket: Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.
-
-• *TUG-2* [OPEN] — *Keperawatan Gerontik*
-  Judul: Asuhan Keperawatan Lansia (Studi Kasus Kelompok)
-  Deadline: *2026-11-18* | Ket: Presentasi kelompok sesuai pembagian kelompok Semester 5A (PJ: Rika, Imel).
-
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas all**
@@ -975,20 +1261,15 @@ _Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tug
 Pengguna · Alias: `.tugas semua`, `.tasks all`, `.deadline all`, `.mytask all`, `.progress all`, `.tasks semua`, `.deadline semua`, `.mytask semua`, `.progress semua`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (3)*
-• *TUG-3* [OPEN] — *Metodologi*
-  Judul: Diskusi
-  Deadline: *2026-11-09* | Ket: -
+*LIST TUGAS*
 
-• *TUG-1* [OPEN] — *Metodologi Penelitian*
-  Judul: Proposal Bab 1–3 Latar Belakang & Rumusan Masalah
-  Deadline: *2026-11-14* | Ket: Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.
-
-• *TUG-2* [OPEN] — *Keperawatan Gerontik*
-  Judul: Asuhan Keperawatan Lansia (Studi Kasus Kelompok)
-  Deadline: *2026-11-18* | Ket: Presentasi kelompok sesuai pembagian kelompok Semester 5A (PJ: Rika, Imel).
-
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas aktif**
@@ -996,20 +1277,15 @@ _Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tug
 Pengguna · Alias: `.tasks aktif`, `.deadline aktif`, `.mytask aktif`, `.progress aktif`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (3)*
-• *TUG-3* [OPEN] — *Metodologi*
-  Judul: Diskusi
-  Deadline: *2026-11-09* | Ket: -
+*LIST TUGAS*
 
-• *TUG-1* [OPEN] — *Metodologi Penelitian*
-  Judul: Proposal Bab 1–3 Latar Belakang & Rumusan Masalah
-  Deadline: *2026-11-14* | Ket: Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.
-
-• *TUG-2* [OPEN] — *Keperawatan Gerontik*
-  Judul: Asuhan Keperawatan Lansia (Studi Kasus Kelompok)
-  Deadline: *2026-11-18* | Ket: Presentasi kelompok sesuai pembagian kelompok Semester 5A (PJ: Rika, Imel).
-
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas hariini**
@@ -1017,12 +1293,15 @@ _Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tug
 Pengguna · Alias: `.tasks hariini`, `.deadline hariini`, `.mytask hariini`, `.progress hariini`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (1)*
-• *TUG-3* [OPEN] — *Metodologi*
-  Judul: Diskusi
-  Deadline: *2026-11-09* | Ket: -
+*LIST TUGAS*
 
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas mingguini**
@@ -1030,16 +1309,15 @@ _Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tug
 Pengguna · Alias: `.tasks mingguini`, `.deadline mingguini`, `.mytask mingguini`, `.progress mingguini`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (2)*
-• *TUG-3* [OPEN] — *Metodologi*
-  Judul: Diskusi
-  Deadline: *2026-11-09* | Ket: -
+*LIST TUGAS*
 
-• *TUG-1* [OPEN] — *Metodologi Penelitian*
-  Judul: Proposal Bab 1–3 Latar Belakang & Rumusan Masalah
-  Deadline: *2026-11-14* | Ket: Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.
-
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas detail TUG-1**
@@ -1047,24 +1325,49 @@ _Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tug
 Pengguna · Alias: `.tasks detail`, `.deadline detail`, `.mytask detail`, `.progress detail`
 
 ~~~~text
-📌 *Daftar Tugas & Deadline Nursing Class A (1)*
-• *TUG-1* [OPEN] — *Metodologi Penelitian*
-  Judul: Proposal Bab 1–3 Latar Belakang & Rumusan Masalah
-  Deadline: *2026-11-14* | Ket: Kumpulkan draft PDF melalui PJ Mata Kuliah (Inneke, Fitri) sebelum pukul 14:00 WIB.
+*LIST TUGAS*
 
-_Tambah tugas: `.tugas add <Matkul>|<Judul>|<YYYY-MM-DD>|<Ket>` | Selesai: `.tugas done <ID>`_
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
-**.tugas add Metodologi|Makalah|2026-11-16|Kelompok 1**
+**.tugas add Metodologi|Makalah|2026-11-16 14:00|Kelompok 1|Ibu Sari|Ani**
 
 Pengguna · Alias: `.tugas tambah`, `.tasks add`, `.deadline add`, `.mytask add`, `.progress add`, `.tasks tambah`, `.deadline tambah`, `.mytask tambah`, `.progress tambah`
 
 ~~~~text
-✅ *Tugas Baru Ditambahkan (TUG-4)*
-• Mata Kuliah: *Metodologi*
-• Judul: *Makalah*
-• Deadline: *2026-11-16*
-• Keterangan: Kelompok 1
+✅ Tugas tersimpan.
+
+*1.*
+📑 Tugas: Makalah
+🗓️ Deadline: 16 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+📝 Catatan: Kelompok 1
+ID: TUG-2 · Aktif
+~~~~
+
+**.tambahtugas Metodologi|Makalah|2026-11-16 14:00|Kelompok 1|Ibu Sari|Ani**
+
+Pengguna
+
+~~~~text
+✅ Tugas tersimpan.
+
+*1.*
+📑 Tugas: Makalah
+🗓️ Deadline: 16 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+📝 Catatan: Kelompok 1
+ID: TUG-2 · Aktif
 ~~~~
 
 **.tugas done TUG-1**
@@ -1072,7 +1375,94 @@ Pengguna · Alias: `.tugas tambah`, `.tasks add`, `.deadline add`, `.mytask add`
 Pengguna · Alias: `.tugas selesai`, `.tasks done`, `.deadline done`, `.mytask done`, `.progress done`, `.tasks selesai`, `.deadline selesai`, `.mytask selesai`, `.progress selesai`
 
 ~~~~text
-✅ Tugas *TUG-1* (Proposal Bab 1–3 Latar Belakang & Rumusan Masalah) ditandai *SELESAI*.
+✅ Tugas *TUG-1* (Diskusi) ditandai *SELESAI*.
+~~~~
+
+**.selesaitugas TUG-1**
+
+Pengguna
+
+~~~~text
+✅ Tugas *TUG-1* (Diskusi) ditandai *SELESAI*.
+~~~~
+
+**.tugasaktif**
+
+Pengguna
+
+~~~~text
+*LIST TUGAS*
+
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 9 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+~~~~
+
+**.tugas antrean**
+
+DM admin terverifikasi · Alias: `.tasks antrean`, `.deadline antrean`, `.mytask antrean`, `.progress antrean`
+
+~~~~text
+*Antrean tenggat*
+
+TUG-1.1.baru · Diskusi
+
+Pilih grup dengan .tugas tujuan <ID> <nama atau JID grup>.
+~~~~
+
+**.tugas grup**
+
+DM admin terverifikasi · Alias: `.tasks grup`, `.deadline grup`, `.mytask grup`, `.progress grup`
+
+~~~~text
+*Grup yang dikenali HdyBot*
+
+kelas-uji@g.us
+kelas-uji@g.us
+~~~~
+
+**.tugas tujuan TUG-1.1.h3 kelas-uji@g.us**
+
+DM admin terverifikasi · Alias: `.tasks tujuan`, `.deadline tujuan`, `.mytask tujuan`, `.progress tujuan`
+
+~~~~text
+Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
+~~~~
+
+**.tugas tolak TUG-1.1.h3**
+
+DM admin terverifikasi · Alias: `.tasks tolak`, `.deadline tolak`, `.mytask tolak`, `.progress tolak`
+
+~~~~text
+Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
+~~~~
+
+**.tugas ulang TUG-1.1.h3**
+
+DM admin terverifikasi · Alias: `.tasks ulang`, `.deadline ulang`, `.mytask ulang`, `.progress ulang`
+
+~~~~text
+Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
+~~~~
+
+**.tugas deadline TUG-1 2026-11-16 14:00**
+
+DM admin terverifikasi · Alias: `.tasks deadline`, `.deadline deadline`, `.mytask deadline`, `.progress deadline`
+
+~~~~text
+Deadline tersimpan.
+
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 16 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas del TUG-1**
@@ -1106,6 +1496,14 @@ Pengguna · Alias: `.reminder tambah`, `.reminders add`, `.reminders tambah`
 
 ~~~~text
 ⏰ Pengingat *REM-2* dijadwalkan pada *2026-11-10 08:00 WIB*: _Diskusi_
+~~~~
+
+**.reminder add 2026-11-16 14:00|Deadline pendaftaran seminar**
+
+Pengguna · Alias: `.reminders add`
+
+~~~~text
+Tenggat tersimpan untuk ditinjau Hedy. ID: TUG-2
 ~~~~
 
 **.reminder snooze REM-1 15**
@@ -2764,7 +3162,7 @@ Pengguna · Alias: `.activity`, `.report`
 📈 *Laporan Analitik Kelas (WEEK) — Nursing Class A*
 • Total Eksekusi Command: *1*
 • Command Terpopuler: analytics.stats (1x)
-• Tugas Aktif: *3* | Tugas Selesai: *0*
+• Tugas Aktif: *1* | Tugas Selesai: *0*
 • Pengingat Terjadwal: *1*
 • Catatan Kelas Tersimpan: *1*
 _Data agregat kelas (privasi terjaga)._
@@ -3612,14 +4010,24 @@ Jawaban yang mengutip pengirim:
 
 ~~~~text
 @<pengirim>
-📅 *Jadwal Nursing Class A (5A) — Selasa (2026-11-10)*
-1. *08:00–09:40 WIB* — Konsep Keperawatan Agregat Komunitas (2 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-2. *09:40–11:20 WIB* — Entrepreneurship 2 (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-3. *12:30–14:10 WIB* — Metodologi Penelitian (4 SKS)
-   Ruang: belum ditentukan | Status: USER_PROVIDED_PENDING_CONFIRMATION
-⏸️ Istirahat · 11:20–12:30 WIB
+*MK Selasa 10 November 2026*
+
+🕦 Pukul: 08:00–09:40 WIB
+📗 Mata kuliah: Konsep Keperawatan Agregat Komunitas
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Vendi Kurniawan, S.Kep., Ns., M.Kes, Kusuma Wijaya Ridi P, S.Kep., Ns., MNS, Yusiana Vidhiastutik, S.Kep., Ns., M.Kep, Roni Setyawan, S.Kep., Ns., M.Kep
+
+🕦 Pukul: 09:40–11:20 WIB
+📗 Mata kuliah: Entrepreneurship 2
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Karisma Dwi Ana, Ns., M.Kep, Ardiyanti Hidayah, M.Kes, Masrulloh, S.Kep., Ns., M.Kes, Elis Fatmawati, S.ST., M.Keb, Aris Setyawan
+
+🕦 Pukul: 12:30–14:10 WIB
+📗 Mata kuliah: Metodologi Penelitian
+👤 Dosen pengampu: Belum dikonfirmasi untuk sesi ini
+🎓 Tim mata kuliah: Facrur Rozi, S.Kep., Ns., M.Kep, Eliza Zihni, S.Kep., Ns., M.Kep, Prawito, S.Kep., Ns., M.Kep, Karisma Dwi Ana, S.Kep., Ns., M.Kep
+
+☕ Istirahat: 11:20–12:30 WIB
 ~~~~
 
 **Pesan:** HdyBot, bantu aku belajar
@@ -3642,9 +4050,120 @@ Ke kelas-uji@g.us
 
 Perubahan jadwal praktikum besok pukul 10.00 WIB.
 
-.relay kirim c488d4f8f6049666
-.relay tolak c488d4f8f6049666
+.relay kirim 8e859606f0439462
+.relay tolak 8e859606f0439462
 Atau kutip pesan ini dan balas ya atau tidak.
+~~~~
+
+</details>
+
+<details>
+<summary><strong>Notifikasi H−3 sampai hari H, pemilihan grup, dan hasil konfirmasi</strong></summary>
+
+**DM Hedy pada H−3**
+
+~~~~text
+*Pengingat H−3*
+
+*1.*
+📑 Tugas: Makalah lansia
+🗓️ Deadline: 12 November 2026, pukul 07:30 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Keperawatan Gerontik
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+
+Khusus Hedy. Pilih grup dengan .tugas grup, lalu .tugas tujuan TUG-1.1.h3 <grup>.
+
+Untuk melewati pemberitahuan ini: .tugas tolak TUG-1.1.h3
+~~~~
+
+**.tugas tujuan TUG-1.1.h3 Praktikum**
+
+~~~~text
+*Pratinjau untuk Hedy*
+
+Tujuan: Praktikum (kelas-uji@g.us)
+
+*Pengingat H−3*
+
+*1.*
+📑 Tugas: Makalah lansia
+🗓️ Deadline: 12 November 2026, pukul 07:30 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Keperawatan Gerontik
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+
+Kirim dengan .confirm <kode> atau batalkan dengan .cancel <kode>.
+~~~~
+
+**Teks yang diterima grup setelah Hedy mengonfirmasi**
+
+~~~~text
+*Pengingat H−3*
+
+*1.*
+📑 Tugas: Makalah lansia
+🗓️ Deadline: 12 November 2026, pukul 07:30 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Keperawatan Gerontik
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+~~~~
+
+**DM Hedy pada H−2**
+
+~~~~text
+*Pengingat H−2*
+
+*1.*
+📑 Tugas: Makalah lansia
+🗓️ Deadline: 12 November 2026, pukul 07:30 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Keperawatan Gerontik
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+
+Khusus Hedy. Pilih grup dengan .tugas grup, lalu .tugas tujuan TUG-1.1.h2 <grup>.
+
+Untuk melewati pemberitahuan ini: .tugas tolak TUG-1.1.h2
+~~~~
+
+**DM Hedy pada H−1**
+
+~~~~text
+*Pengingat H−1*
+
+*1.*
+📑 Tugas: Makalah lansia
+🗓️ Deadline: 12 November 2026, pukul 07:30 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Keperawatan Gerontik
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+
+Khusus Hedy. Pilih grup dengan .tugas grup, lalu .tugas tujuan TUG-1.1.h1 <grup>.
+
+Untuk melewati pemberitahuan ini: .tugas tolak TUG-1.1.h1
+~~~~
+
+**DM Hedy pada hari H**
+
+~~~~text
+*Deadline hari ini*
+
+*1.*
+📑 Tugas: Makalah lansia
+🗓️ Deadline: 12 November 2026, pukul 07:30 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Keperawatan Gerontik
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+
+Khusus Hedy. Pilih grup dengan .tugas grup, lalu .tugas tujuan TUG-1.1.h0 <grup>.
+
+Untuk melewati pemberitahuan ini: .tugas tolak TUG-1.1.h0
 ~~~~
 
 </details>
