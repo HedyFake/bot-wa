@@ -311,7 +311,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       text: 'Halo bot, besok kuliah apa aja ya?',
       receivedAt: new Date(),
     });
-    expect(memberFollowUp).toContain('Halo');
+    expect(memberFollowUp).toMatch(/^\*MK /);
     expect(memberFollowUp).not.toMatch(/NOTIFIKASI|Filter AI/);
     expect(wa.sent.at(-1)).toMatchObject({ quotedMessageId: 'grp-good-2', mentionedJids: ['628555666777@s.whatsapp.net'] });
     expect(await dispatcher.handleInbound({ providerMessageId: 'repeat', chatType: 'group', chatJid: 'nursing-class-a@g.us', senderJid: '628555666777@s.whatsapp.net', text: 'Halo bot, besok kuliah apa aja ya?', receivedAt: new Date() })).toBeNull();

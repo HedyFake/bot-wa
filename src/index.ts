@@ -128,9 +128,17 @@ async function main() {
     startedAt,
   });
 
+  let lastSlowMessageLog = 0;
   whatsapp.onMessage(async (msg) => {
+    const received = Date.now();
+    const inboundAgeMs = Math.max(0, received - msg.receivedAt.getTime());
     try {
-      await dispatcher.handleInbound(msg);
+      const reply = await dispatcher.handleInbound(msg);
+      const handledMs = Date.now() - received;
+      if (reply && Math.max(inboundAgeMs, handledMs) >= 3000 && Date.now() - lastSlowMessageLog >= 60_000) {
+        lastSlowMessageLog = Date.now();
+        log.info({ inboundAgeMs, handledMs, chatType: msg.chatType }, 'Balasan WhatsApp lambat');
+      }
     } catch (e) {
       log.error({ err: e instanceof Error ? e.name : 'unknown' }, 'gagal memproses pesan masuk');
       if (msg.chatType === 'private' || msg.isBotMentioned || msg.text.startsWith('.')) {

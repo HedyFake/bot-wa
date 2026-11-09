@@ -45,6 +45,8 @@ Contoh: `.menu`, `@HdyBot jadwal besok?`, `.keperawatan`, `.sdki nyeri akut`, da
 
 ### Model AI otomatis
 
+Sapaan seperti `HdyBot halo`, `HdyBot menu`, dan `HdyBot tugas hari ini` mendapat jawaban lokal. Permintaan AI atau pencarian seperti `.ask` dan `.music` yang masih diproses setelah 1,5 detik menampilkan satu pemberitahuan sebelum hasil. Untuk memeriksa keterlambatan di VPS, jalankan `sudo journalctl -u hdybot -g 'Balasan WhatsApp lambat' -n 10 --no-pager`. Kolom `inboundAgeMs` mengukur usia pesan sejak waktu yang tercatat di WhatsApp hingga dispatcher menerimanya. Kolom `handledMs` mengukur waktu pemrosesan sampai pengiriman balasan selesai di sisi bot. Log ini hanya memuat jenis chat dan waktu, maksimal satu per menit untuk balasan lambat.
+
 Isi `NVIDIA_API_KEY` pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
 
 | Model utama | Pemakaian di WhatsApp |

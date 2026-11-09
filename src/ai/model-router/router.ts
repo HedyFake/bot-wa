@@ -85,6 +85,7 @@ export class ModelRouter {
   private readonly retryAfter = new Map<ModelAlias, number>();
   private authHalted = false;
   private inFlight = 0;
+  private classificationsInFlight = 0;
   private lastError?: string;
   private callCount = 0;
   readonly usageHistory: UsageLogEntry[] = [];
@@ -148,7 +149,7 @@ export class ModelRouter {
     else if (req.task === 'coding') primary = 'minimax';
     else if (req.task === 'reformat_announcement') primary = 'mistral';
     else if (ULTRA_TASKS.has(req.task) || req.complexity === 'high') primary = 'ultra';
-    else primary = req.task === 'faq' ? 'super-vl' : 'deepseek';
+    else primary = req.task === 'faq' || req.task === 'intent_detection' ? 'super-vl' : 'deepseek';
 
     let reason = mode.startsWith('pinned:') ? 'admin_' + mode : 'auto_' + req.task;
     const order: ModelAlias[] = isMultimodal ? ['super-vl','mistral','kimi','minimax']
@@ -184,9 +185,16 @@ export class ModelRouter {
   }
 
   private async invokePreferred(req: RouteRequest, preferred?: ModelAlias) {
-    if (this.inFlight >= 3) throw new Error('ai_busy');
+    const classification = req.task === 'classification';
+    const limit = !classification && this.classificationsInFlight > 0 ? 4 : 3;
+    if (this.inFlight >= limit) throw new Error('ai_busy');
     this.inFlight++;
-    try { return await this.invokeAvailable(req, preferred); } finally { this.inFlight--; }
+    if (classification) this.classificationsInFlight++;
+    try { return await this.invokeAvailable(req, preferred); }
+    finally {
+      this.inFlight--;
+      if (classification) this.classificationsInFlight--;
+    }
   }
 
   private async invokeAvailable(req: RouteRequest, preferred?: ModelAlias) {

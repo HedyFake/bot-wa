@@ -580,6 +580,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       }
     };
 
+    const groupNames = new Map<string, { name: string; until: number }>();
+    const lidContacts = new Map<string, { jid: string; until: number }>();
     const handleRawMessage = async (msgRaw: unknown) => {
       const m = msgRaw as WWebMessageLike;
       if (!m) return;
@@ -596,28 +598,39 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       if (!rawChatId || rawChatId === 'status@broadcast') return;
 
       const isGroup = rawChatId.endsWith('@g.us');
+      // Perintah ini hanya membaca data lokal dan tidak memakai lampiran, kutipan, atau hak admin grup.
+      const textOnly = /^\.(?:ping|menu|help|jadwal|matkul|jam|runtime)(?:\s|$)/i.test(text);
+      const cached = groupNames.get(rawChatId);
+      const cachedName = cached && cached.until > Date.now() ? cached.name : undefined;
+      const groupChat = isGroup && (!textOnly || !cachedName) ? m.getChat?.().catch(() => undefined) : undefined;
       let senderJid = isGroup ? String(m.author ?? m.from ?? '') : String(m.from ?? '');
       const isLidSender = senderJid.endsWith('@lid');
       const phone = normalizeE164(senderJid);
       if (phone) senderJid = e164ToJid(phone);
 
-      if (isLidSender && typeof m.getContact === 'function') {
+      const resolved = isLidSender ? lidContacts.get(senderJid) : undefined;
+      if (resolved && resolved.until > Date.now()) {
+        senderJid = resolved.jid;
+      } else if (isLidSender && typeof m.getContact === 'function') {
         try {
           const contact = await m.getContact();
           const contactNumberDigits = (contact?.number ?? '').replace(/\D/g, '');
           const contactUserDigits = (contact?.id?.user ?? '').replace(/\D/g, '');
           if (contactNumberDigits.length >= 8 && contactNumberDigits !== contactUserDigits) {
-            senderJid = `${contactNumberDigits}@s.whatsapp.net`;
+            const jid = `${contactNumberDigits}@s.whatsapp.net`;
+            if (lidContacts.size >= 1024 && !lidContacts.has(senderJid)) lidContacts.delete(lidContacts.keys().next().value!);
+            lidContacts.set(senderJid, {jid, until:Date.now() + 60_000});
+            senderJid = jid;
           }
         } catch {
           // Gunakan senderJid apa adanya jika getContact gagal
         }
       }
 
-      const media = await extractMedia(m);
+      const media = textOnly ? undefined : await extractMedia(m);
       let quoted: InboundMessage['quoted'];
       let quotedFromBot = false;
-      if (m.hasQuotedMsg && typeof m.getQuotedMessage === 'function') {
+      if (!textOnly && m.hasQuotedMsg && typeof m.getQuotedMessage === 'function') {
         try {
           const q = await m.getQuotedMessage();
           if (q) {
@@ -635,12 +648,16 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         }
       }
 
-      let chatName: string | undefined;
+      let chatName = cachedName;
       let isGroupAdmin = false;
-      if (isGroup && typeof m.getChat === 'function') {
+      if (groupChat) {
         try {
-          const chat = await m.getChat();
-          chatName = chat?.name;
+          const chat = await groupChat;
+          if (chat?.name) {
+            chatName = chat.name;
+            if (groupNames.size >= 1024 && !groupNames.has(rawChatId)) groupNames.delete(groupNames.keys().next().value!);
+            groupNames.set(rawChatId, { name: chatName, until: Date.now() + 60_000 });
+          }
           const senderDigits = senderJid.replace(/\D/g, '');
           const rawAuthor = String(m.author ?? '');
           if (Array.isArray(chat?.participants)) {

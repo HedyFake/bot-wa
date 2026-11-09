@@ -36,7 +36,7 @@ import type { AdminAuthenticator } from '../authentication/authenticator.js';
 import type { ConfirmationManager } from '../authorization/confirmation.js';
 import { perawatAnswer } from '../../modules/academic/perawat.js';
 import { MusicService } from '../../modules/media/music.js';
-import { inferIntent } from './intent.js';
+import { directIntent, greeting, inferIntent } from './intent.js';
 import { menuPage } from './menu.js';
 import { monitoringCommands, parseCommand } from './parser.js';
 
@@ -158,7 +158,8 @@ export class CommandDispatcher {
     const evaluation = intelligence.evaluateMessage(rawText, msg.isForwarded);
 
     const spokenToBot = Boolean(msg.isBotMentioned) || /^(?:@?hdybot|hdy|@?bot|tolong bantu|(?:halo|hai|hei|woi)\s+bot)\b/i.test(rawText);
-    if ((!spokenToBot || mightBeTask(rawText)) && !rawText.startsWith('.') && !outbound.isGroupPaused(msg.chatJid) && !intelligence.listSources().find(g=>g.jid===msg.chatJid)?.paused &&
+    const localIntent = spokenToBot ? directIntent(rawText) : undefined;
+    if (!localIntent && (!spokenToBot || mightBeTask(rawText)) && !rawText.startsWith('.') && !outbound.isGroupPaused(msg.chatJid) && !intelligence.listSources().find(g=>g.jid===msg.chatJid)?.paused &&
       (msg.chatJid===intelligence.getPrimaryGroupJid() || intelligence.isPjmkGroup(msg.chatJid) || this.fun.getTaskSources()[msg.chatJid]) && evaluation.quality!=='buruk' && await this.captureTask(msg)) return null;
     const analysis = intelligence.ingest(msg);
     // Pesan percakapan dan perintah tidak ditawarkan sebagai berita kelas.
@@ -273,12 +274,11 @@ export class CommandDispatcher {
       for (const [key, entry] of this.autoReplies) if (now - entry.at >= 60_000) this.autoReplies.delete(key);
       const userKey = msg.chatJid + '|' + msg.senderJid;
       const last = this.autoReplies.get(userKey);
-      if ((last && (now - last.at < 8000 || last.text === rawText.toLowerCase())) || now - (this.autoReplies.get(msg.chatJid)?.at ?? 0) < 3000) return autoRelayedText;
+      if (last && last.text === rawText.toLowerCase() && now - last.at < 8000) return autoRelayedText;
       const entry = { at: now, text: rawText.toLowerCase() };
       this.autoReplies.set(userKey, entry);
-      this.autoReplies.set(msg.chatJid, entry);
     }
-    if (addressed && !rawText.startsWith('.')) parsedGroup = await inferIntent(rawText, router);
+    if (addressed && !rawText.startsWith('.')) parsedGroup = localIntent ?? await inferIntent(rawText, router);
     const allowedNaturalInGroup =
       addressed && parsedGroup.kind === 'natural';
     if (parsedGroup.kind === 'dot' || allowedNaturalInGroup) {
@@ -306,7 +306,7 @@ export class CommandDispatcher {
     // 7. Jika Mode Nimbrung sedang AKTIF di grup ini, bot saling membalas pesan dengan seluruh member grup secara lancar
     if (addressed && !rawText.startsWith('.') && parsedGroup.kind === 'none') {
       outbound.registerAllowedGroup(msg.chatJid);
-      const aiReply = await this.generateAiNimbrungReply(msg, evaluation, false);
+      const aiReply = await this.withProgress(msg, () => this.generateAiNimbrungReply(msg, evaluation, false));
       await outbound.send({
         chatJid: msg.chatJid,
         text: '@' + (msg.participantJid ?? msg.senderJid).split('@')[0] + '\n' + aiReply,
@@ -507,13 +507,7 @@ export class CommandDispatcher {
       return `Sama-sama *${senderName}*! 🤗✨ Senang bisa bantu dan nongkrong bareng teman-teman *${config.CLASS_NAME}*. Kalau ada yang mau diobrolin lagi, gas terus ya! 🚀`;
     }
 
-    // Cek pertanyaan umum
-    if (rawText.includes('?') || /\b(apa|gimana|bagaimana|kenapa|kapan|dimana|siapa|berapa|bisa\s+gak|tau\s+gak)\b/i.test(lower)) {
-      return `Pertanyaan bagus dari *${senderName}*! 🤔 Mengenai _"${rawText.slice(0, 140)}"_, menurutku kita bisa bahas bareng-bareng di sini atau cek data kelas lewat menu AI (\`.ask\` / \`.jadwal\` / \`.tugas\`). Menurut teman-teman *${config.CLASS_NAME}* yang lain gimana nih? 💬✨`;
-    }
-
-    // Respons obrolan santai / interaktif default yang ramah kepada pengirim
-    return `Siap *${senderName}*! 😄 Aku nyimak banget nih: _"${rawText.slice(0, 130)}"_. Seru juga obrolan kita di *${config.CLASS_NAME}*! Gimana menurut teman-teman yang lain, ada yang mau nambahin? 🗣️✨`;
+    return 'Aku belum bisa menjawab pesan itu karena layanan AI sedang sibuk atau belum tersedia. Coba lagi sebentar. Untuk info kelas, ketik .jadwal atau .tugas.';
   }
 
   private async generateAiNimbrungReply(
@@ -524,6 +518,9 @@ export class CommandDispatcher {
     const rawText = (msg.text ?? '').trim();
     const { router, config, schedule } = this.deps;
     const senderName = msg.pushName?.trim() || msg.senderJid.split('@')[0] || 'Member Grup';
+
+    const quickReply = !justJoined && greeting(rawText);
+    if (quickReply) return quickReply;
 
     const priorTurns = this.groupChatHistory.get(msg.chatJid) ?? [];
     const historyTranscript =
@@ -652,7 +649,7 @@ export class CommandDispatcher {
     }
 
     let parsed = parseCommand(rawText);
-    if (!rawText.startsWith('.') && !this.deps.auth.isAwaitingPassword(msg.chatJid)) {
+    if (parsed.kind === 'none' && !directIntent(rawText) && !rawText.startsWith('.') && !this.deps.auth.isAwaitingPassword(msg.chatJid)) {
       const actor=this.deps.auth.evaluate(msg);
       if (actor.allowed && actor.isOwner && await this.captureTask(msg)) return 'Tugas masuk antrean privat.';
     }
@@ -718,7 +715,7 @@ export class CommandDispatcher {
 
     if (!monitoringCommands.has(parsed.command)) this.fun.recordCommandUsage(parsed.command, msg.chatJid);
     if (parsed.kind === 'none') {
-      const response = await this.generateAiNimbrungReply(msg, this.deps.intelligence.evaluateMessage(rawText), false);
+      const response = await this.withProgress(msg, () => this.generateAiNimbrungReply(msg, this.deps.intelligence.evaluateMessage(rawText), false));
       await this.replyPrivate(msg, response);
       return response;
     }
@@ -753,7 +750,27 @@ export class CommandDispatcher {
     );
   }
 
-  private async executePublicOrAdmin(
+  private async withProgress<T>(msg: InboundMessage, work: () => Promise<T>) {
+    let pending: Promise<unknown> | undefined;
+    const timer = setTimeout(() => {
+      pending = this.deps.outbound.send({
+        chatJid: msg.chatJid,
+        text: 'Aku sedang menyiapkan jawabannya.',
+        quotedMessageId: msg.providerMessageId,
+        idempotencyKey: 'progress:' + msg.chatJid + ':' + msg.providerMessageId,
+      }).catch(() => undefined);
+    }, 1500);
+    try { return await work(); }
+    finally { clearTimeout(timer); await pending; }
+  }
+
+  private executePublicOrAdmin(parsed: ReturnType<typeof parseCommand>, msg: InboundMessage, actorJid?: string) {
+    const work = () => this.executeCommand(parsed, msg, actorJid);
+    return ['ask','ai.summarize','rewrite','music','document.summary','document.ask'].includes(parsed.command)
+      ? this.withProgress(msg, work) : work();
+  }
+
+  private async executeCommand(
     parsed: ReturnType<typeof parseCommand>,
     msg: InboundMessage,
     actorJid = msg.senderJid,
@@ -1436,7 +1453,7 @@ export class CommandDispatcher {
           if (!this.deps.drive || !config.GOOGLE_DRIVE_ALLOWED_CHATS.includes(msg.chatJid)) return textOnly('Akses materi Drive belum tersedia untuk chat ini.');
           const match = await this.deps.drive.matchMaterial(parsed.args.slice(1).join(' '));
           if (!match.id || !match.question) return textOnly(match.prompt ?? 'Tambahkan pertanyaan setelah ID materi.');
-          return this.executePublicOrAdmin(parseCommand('.tanyadokumen ' + match.id + ' ' + match.question), msg, actorJid);
+          return this.executeCommand(parseCommand('.tanyadokumen ' + match.id + ' ' + match.question), msg, actorJid);
         }
         const image = msg.media ?? msg.quoted?.media;
         if (image?.kind === 'image' && image.data) {

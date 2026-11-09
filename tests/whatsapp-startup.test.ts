@@ -34,6 +34,16 @@ it('menampilkan QR privat lalu menandai sesi siap dan memproses teks tanpa penca
     client.emit('message_create', { id: { _serialized: 'cmd-1' }, from: '628123456789@c.us', body: '.menu', getContact });
     await expect(received).resolves.toMatchObject({ text: '.menu', senderJid: '628123456789@s.whatsapp.net' });
     expect(getContact).not.toHaveBeenCalled();
+    const getChat = vi.fn(async () => ({name:'Kelas',participants:[]}));
+    const getQuotedMessage = vi.fn();
+    for (const id of ['cmd-2','cmd-3']) {
+      const inbound = new Promise(resolve => provider.onMessage(resolve));
+      client.emit('message_create', { id:{_serialized:id}, from:'kelas@g.us', author:'628123456789@c.us',
+        body:'.jadwal', hasQuotedMsg:true, getQuotedMessage, getChat });
+      await expect(inbound).resolves.toMatchObject({chatName:'Kelas',text:'.jadwal'});
+    }
+    expect(getChat).toHaveBeenCalledTimes(1);
+    expect(getQuotedMessage).not.toHaveBeenCalled();
     await provider.disconnect();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
