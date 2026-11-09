@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminAuthenticator } from '../src/admin/authentication/authenticator.js';
 import { ConfirmationManager } from '../src/admin/authorization/confirmation.js';
 import { CommandDispatcher } from '../src/admin/commands/dispatcher.js';
@@ -179,7 +179,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     expect(fun.transformText('hilih', 'Selamat Pagi Kelas')).toBe('Silimit Pigi Kilis');
   });
 
-  it('diam di grup untuk chat tidak penting, ikut nimbrung saat disenggol/diajak Owner/Admin, berhenti saat "bot berhenti", dan mengirim relay PJMK hanya setelah persetujuan Hedy', async () => {
+  async function setupGroup() {
     const config = loadConfig({
       OWNER_WHATSAPP: '082233038659',
       ADMIN_PASSWORD: 'hedyfake',
@@ -236,6 +236,13 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
       startedAt: new Date('2026-11-06T00:00:00Z'),
     });
 
+    return { dispatcher, wa, config };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('menangani sapaan anggota serta kontrol nimbrung dan diam dari owner', async () => {
+    const { dispatcher, wa } = await setupGroup();
     // 1. Pesan tidak penting di grup dari anggota biasa -> Bot WAJIB DIAM (null)
     const casual1 = await dispatcher.handleInbound({
       providerMessageId: 'grp-casual-1',
@@ -341,7 +348,10 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     });
     expect(casualAfterStop).toBeNull();
 
-    // 5. Pesan PJMK diperiksa Hedy sebelum diteruskan.
+  });
+
+  it('memerlukan persetujuan Hedy sebelum mengirim relay PJMK', async () => {
+    const { dispatcher, wa, config } = await setupGroup();
     const pjmkImportant = await dispatcher.handleInbound({
       providerMessageId: 'pjmk-msg-1',
       chatJid: 'pjmk-sem5@g.us',
@@ -374,7 +384,10 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     expect(await dispatcher.handleInbound(dm('deny-replay','.relay kirim ' + secondId))).toContain('sudah diproses');
     expect(wa.sent.filter(m => m.chatJid === 'nursing-class-a@g.us' && m.text.startsWith('Info penting: jadwal ujian'))).toHaveLength(0);
 
-    // 6. Verifikasi Pengurus Kelas, 36 Anggota Kelas + NIM, dan 23 Nomor Dosen Lengkap
+  });
+
+  it('menampilkan pengurus, anggota, dan dosen dari data kelas', async () => {
+    const { dispatcher } = await setupGroup();
     const officersReply = await dispatcher.handleInbound({
       providerMessageId: 'grp-officers-1',
       chatJid: 'nursing-class-a@g.us',
@@ -426,7 +439,16 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     expect(lecturersReply).toContain('Gilang Akbar Shobirin');
     expect(lecturersReply).toContain('082226608763');
 
-    // 7. Verifikasi pencarian jurnal AI (.jurnal) dengan output link + PDF, serta pencarian gambar (.gambar) ke grup
+  });
+
+  it('mengirim hasil jurnal dan lampiran PDF dari respons indeks uji', async () => {
+    const { dispatcher, wa } = await setupGroup();
+    const request = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (String(input).startsWith('https://www.ebi.ac.uk/')) {
+        return Response.json({resultList:{result:[{title:'Artikel gerontik uji', authorString:'Tim Uji', pubYear:'2026', doi:'10.1234/test'}]}});
+      }
+      return Response.json({message:{items:[]}});
+    });
     const journalReply = await dispatcher.handleInbound({
       providerMessageId: 'grp-journal-1',
       chatJid: 'nursing-class-a@g.us',
@@ -441,7 +463,14 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     const sentJournalPdf = wa.sent.find(
       (s) => s.chatJid === 'nursing-class-a@g.us' && s.media?.mimeType === 'application/pdf',
     );
-    expect(sentJournalPdf).toBeDefined();
+    expect(sentJournalPdf?.media?.data.subarray(0,4).toString()).toBe('%PDF');
+    expect(request).toHaveBeenCalled();
+    expect(journalReply).toContain('Artikel gerontik uji');
+  });
+
+  it('mengirim PNG saat pencarian gambar tidak menemukan hasil', async () => {
+    const { dispatcher, wa } = await setupGroup();
+    const request = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({query:{pages:{}}}));
 
     const imageReply = await dispatcher.handleInbound({
       providerMessageId: 'grp-image-1',
@@ -456,6 +485,7 @@ describe('MediaService & Command Media/Stiker/QR/PDF/Utilitas/Fun', () => {
     const sentImage = wa.sent.find(
       (s) => s.chatJid === 'nursing-class-a@g.us' && s.media?.mimeType === 'image/png',
     );
-    expect(sentImage).toBeDefined();
-  }, 20000);
+    expect(request).toHaveBeenCalled();
+    expect(sentImage?.media?.data.subarray(1,4).toString()).toBe('PNG');
+  });
 });
