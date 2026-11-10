@@ -141,6 +141,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     inject?: () => Promise<void>;
     attachEventListeners?: () => Promise<void>;
     getChatById?: (chatId: unknown) => Promise<unknown>;
+    getContactLidAndPhone?: (lid:string) => Promise<Array<{lid?:string;pn?:string}>>;
     requestPairingCode: (phone: string, notify: boolean, interval: number) => Promise<string>;
     initialize: () => Promise<void>;
     destroy: () => Promise<void>;
@@ -696,13 +697,21 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const resolved = isLidSender ? lidContacts.get(senderJid) : undefined;
       if (resolved && resolved.until > Date.now()) {
         senderJid = resolved.jid;
-      } else if (isLidSender && typeof m.getContact === 'function') {
+      } else if (isLidSender) {
+        const lid = senderJid;
         try {
-          const contact = await m.getContact();
-          const contactNumberDigits = (contact?.number ?? '').replace(/\D/g, '');
-          const contactUserDigits = (contact?.id?.user ?? '').replace(/\D/g, '');
-          if (contactNumberDigits.length >= 8 && contactNumberDigits !== contactUserDigits) {
-            const jid = `${contactNumberDigits}@s.whatsapp.net`;
+          const pairs = await client.getContactLidAndPhone?.(lid).catch(() => []);
+          const pn = pairs?.find(pair => pair.lid === lid)?.pn;
+          let number = pn && /@(c\.us|s\.whatsapp\.net)$/.test(pn) ? normalizeE164(pn) : null;
+          if (!number) {
+            const contact = await m.getContact?.();
+            const id = contact?.id?._serialized;
+            if (id && /@(c\.us|s\.whatsapp\.net)$/.test(id)) number = normalizeE164(id);
+            else if (id === lid && contact?.number && contact.number.replace(/\D/g,'') !== lid.split('@')[0])
+              number = normalizeE164(contact.number);
+          }
+          if (number) {
+            const jid = e164ToJid(number);
             if (lidContacts.size >= 1024 && !lidContacts.has(senderJid)) lidContacts.delete(lidContacts.keys().next().value!);
             lidContacts.set(senderJid, {jid, until:Date.now() + 60_000});
             senderJid = jid;

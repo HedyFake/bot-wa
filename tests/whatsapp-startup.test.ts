@@ -23,6 +23,9 @@ vi.mock('whatsapp-web.js', () => ({
       async inject() {}
       async initialize() { await this.inject(); if (emitQr) this.emit('qr', 'pairing-fixture'); }
       requestPairingCode = phone;
+      async getContactLidAndPhone(lid:string) {
+        return [{lid: '81234567890@lid',pn:'628123456789@c.us'}];
+      }
       async destroy() {}
     },
   },
@@ -43,6 +46,11 @@ it('menampilkan QR privat lalu menandai sesi siap dan memproses teks tanpa penca
     client.emit('message_create', { id: { _serialized: 'cmd-1' }, from: '628123456789@c.us', body: '.menu', getContact });
     await expect(received).resolves.toMatchObject({ text: '.menu', senderJid: '628123456789@s.whatsapp.net' });
     expect(getContact).not.toHaveBeenCalled();
+    for (const [from, expected] of [['81234567890@lid','628123456789@s.whatsapp.net'],['99999999999@lid','99999999999@lid']]){
+      const incoming = new Promise(resolve => provider.onMessage(resolve));
+      client.emit('message_create',{id:{_serialized:from},from,body:'.login'});
+      await expect(incoming).resolves.toMatchObject({senderJid:expected});
+    }
     const getChat = vi.fn(async () => ({name:'Kelas',participants:[]}));
     const getQuotedMessage = vi.fn();
     for (const id of ['cmd-2','cmd-3']) {

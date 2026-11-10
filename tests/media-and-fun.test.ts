@@ -56,6 +56,7 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
     // 1. Admin mengirim .dashboard -> bot meminta password terlebih dahulu
     const step1 = await dispatcher.handleInbound(hedyMsg('m1', '.dashboard'));
     expect(step1).toContain('Verifikasi Password Admin');
+    expect(await dispatcher.handleInbound(hedyMsg('login-empty', '.login'))).toContain('Silakan balas');
 
     // 2. Admin membalas password yang salah -> ditolak
     const step2 = await dispatcher.handleInbound(hedyMsg('m2', 'passwordsalah'));
@@ -102,6 +103,8 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
     expect(step5).toContain('dikunci');
     const step6 = await dispatcher.handleInbound(hedyMsg('m6', '.dashboard'));
     expect(step6).toContain('Verifikasi Password Admin');
+    expect(await dispatcher.handleInbound(hedyMsg('cancel-challenge','.logout'))).toContain('dikunci');
+    expect(auth.isAwaitingPassword(hedyMsg('check','').chatJid)).toBe(false);
   });
 });
 

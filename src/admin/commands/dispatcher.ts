@@ -550,12 +550,25 @@ export class CommandDispatcher {
       if (draft) rawText = '.relay ' + (rawText.toLowerCase() === 'ya' ? 'kirim ' : 'tolak ') + draft.id;
     }
 
+    let parsed = parseCommand(rawText);
+    const loginFailure = (reason: string) => {
+      switch (reason) {
+        case 'invalid_password': return '❌ Password salah. Periksa ADMIN_PASSWORD di /opt/hdybot/.env dan restart service setelah mengubahnya.';
+        case 'not_in_allowlist': return normalizeE164(msg.senderJid)
+          ? '🔒 Nomor pengirim tidak terdaftar sebagai admin. Periksa OWNER_WHATSAPP dan ADMIN_WHATSAPP_ALLOWLIST.'
+          : '🔒 Nomor pengirim belum berhasil dikenali oleh WhatsApp. Coba kembali dari chat pribadi nomor admin.';
+        case 'rate_limited': return '⏳ Terlalu banyak percobaan. Tunggu 10 menit sebelum mencoba lagi.';
+        case 'session_revoked': return '🔒 Akses sesi ini telah dicabut.';
+        default: return 'Login admin belum tersedia. Periksa konfigurasi bot.';
+      }
+    };
     // 1. Jika sedang dalam state ditanya password ATAU pengirim langsung mengetik password admin,
     //    tangkap & verifikasi langsung (tahan terhadap kutip, huruf besar/kecil, maupun awalan "password ").
     if (
       (this.deps.auth.isAwaitingPassword(msg.chatJid) || (!rawText.startsWith('.') && !this.deps.auth.isSessionPasswordVerified(msg) && this.deps.auth.evaluate(msg).isAdmin && this.deps.auth.matchesAdminPassword(rawText))) &&
       rawText &&
-      !rawText.startsWith('.pair')
+      parsed.command !== 'pair' && parsed.command !== 'auth.logout' &&
+      !(parsed.command === 'auth.login' && !parsed.rawArgs.trim())
     ) {
       if (
         this.deps.auth.isAwaitingPassword(msg.chatJid) &&
@@ -574,10 +587,7 @@ export class CommandDispatcher {
       const ver = this.deps.auth.verifyAdminPassword(msg, rawText);
       this.recordAudit(msg.senderJid, 'auth.password_reply', ver.reason);
       if (!ver.ok) {
-        const failText =
-          ver.reason === 'rate_limited'
-            ? '⛔ Terlalu banyak percobaan password gagal. Silakan tunggu beberapa menit.'
-            : '❌ Password salah. Silakan balas ulang dengan password admin yang benar.';
+        const failText = loginFailure(ver.reason);
         await this.replyPrivate(msg, failText);
         return failText;
       }
@@ -601,7 +611,6 @@ export class CommandDispatcher {
       return welcome;
     }
 
-    let parsed = parseCommand(rawText);
     if (parsed.kind === 'none' && !directIntent(rawText) && !rawText.startsWith('.') && !this.deps.auth.isAwaitingPassword(msg.chatJid)) {
       const actor=this.deps.auth.evaluate(msg);
       if (actor.allowed && actor.isOwner && await this.captureTask(msg)) return 'Tugas masuk antrean privat.';
@@ -612,7 +621,7 @@ export class CommandDispatcher {
     if (parsed.command === 'auth.login') {
       const candidate = parsed.rawArgs.trim();
       if (!candidate) {
-        this.deps.auth.promptForPassword(msg.chatJid);
+        if (!this.deps.auth.isAwaitingPassword(msg.chatJid)) this.deps.auth.promptForPassword(msg.chatJid);
         const askText = `🔐 *Verifikasi Admin ${this.deps.config.BOT_NAME}*\nSilakan balas pesan ini dengan password admin Anda:`;
         await this.replyPrivate(msg, askText);
         return askText;
@@ -621,7 +630,7 @@ export class CommandDispatcher {
       this.recordAudit(msg.senderJid, 'auth.login', ver.reason);
       const replyText = ver.ok
         ? `✅ *Login Admin Berhasil!* Halo *${this.deps.config.OWNER_NAME}*, akses kontrol penuh HdyBot telah aktif.`
-        : `❌ Login gagal (${ver.reason}).`;
+          : loginFailure(ver.reason);
       await this.replyPrivate(msg, replyText);
       return replyText;
     }
