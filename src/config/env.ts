@@ -62,6 +62,8 @@ export const EnvSchema = z.object({
   NVIDIA_MODEL_ULTRA: z.string().default('nvidia/nemotron-3-ultra-550b-a55b'),
   NVIDIA_MODEL_SUPER_VL: z.string().default('nvidia/nemotron-3.5-super-vl-120b-a12b'),
   NVIDIA_MODEL_LIGHTNING: z.string().default('nvidia/nemotron-3.5-lightning-30b-a3b'),
+  LMS_ENCRYPTION_KEY: z.string().optional().transform(v=>v?.trim() || undefined),
+  LMS_SYNC_MINUTES: z.coerce.number().int().min(30).max(1440).default(45),
   OPENAI_API_KEY: z.string().optional().transform(v => v?.trim() || undefined),
   AI_PROVIDER_SWITCH_MS: z.coerce.number().int().positive().default(3500),
   NVIDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),

@@ -215,7 +215,8 @@ export class ModelRouter {
 
     const decision = this.decide(req, preferred);
     const chain: ModelAlias[] = [decision.alias, ...decision.fallbacks];
-    const deadline = this.now() + (req.responseBudgetMs ?? this.timeoutMs);
+    const interactiveLimit = ['long_document_analysis','complex_qa','coding'].includes(req.task) ? 25_000 : 12_000;
+    const deadline = this.now() + Math.min(req.responseBudgetMs ?? interactiveLimit, this.timeoutMs);
     let lastErr: unknown;
 
     for (let idx = 0; idx < chain.length; idx++) {

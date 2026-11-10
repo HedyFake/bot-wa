@@ -13,6 +13,7 @@ export type CanonicalCommand =
   | 'system'
   | 'status'
   | 'health'
+  | 'lms'
   | 'ping'
   | 'runtime'
   | 'about'
@@ -208,6 +209,7 @@ export const commandRegistry: ReadonlyArray<{ names: string[]; command: Canonica
   { names: ['system'], command: 'system', args: false },
   { names: ['status'], command: 'status', args: false },
   { names: ['health'], command: 'health', args: false },
+  { names: ['lms'], command: 'lms', args: true },
   { names: ['ping'], command: 'ping', args: false },
   { names: ['runtime'], command: 'runtime', args: false },
   { names: ['about'], command: 'about', args: false },

@@ -50,6 +50,7 @@ export interface InboundMessage {
   };
   isForwarded?: boolean;
   media?: InboundMediaPayload;
+  adapterReceivedAt?: number;
   receivedAt: Date;
 }
 

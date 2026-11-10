@@ -43,6 +43,10 @@ Admin yang terdaftar membuka sesi lewat DM untuk perintah terbatas dan menguncin
 
 Contoh: `.menu`, `@HdyBot jadwal besok?`, `.keperawatan`, `.sdki nyeri akut`, dan `.music fals`. Balasan nongkrong berbentuk percakapan biasa. Pengaturan grup disimpan per JID.
 
+### LMS mahasiswa
+
+Di DM, ketik `.lms help` untuk menghubungkan akun pribadi. Owner perlu mendaftarkan pasangan nomor dan NIM terlebih dahulu. Installer menyiapkan kunci enkripsi untuk sesi dan menjalankan migrasi PostgreSQL. Lihat [panduan command LMS](docs/LMS_COMMANDS.md) dan [status pengujian](LMS_IMPLEMENTATION_STATUS.md).
+
 ### Model AI otomatis
 
 Menu menampilkan perintah yang tersedia di chat tersebut. Gunakan `.help game riwayat` untuk petunjuk subperintah. Bantuan juga mendukung alias seperti `.help hitung`. Katalog di bawah memuat contoh masukan dan balasan setiap handler.
@@ -1875,6 +1879,30 @@ Contoh respons NVIDIA untuk pengujian format.
 </details>
 
 <details>
+<summary><strong>LMS STIKES Husada Jombang</strong></summary>
+
+
+
+**.lms help**
+
+Pengguna
+
+~~~~text
+🎓 *LMS pribadi*
+
+.lms <nama> setuju
+.lms <nama> login <password LMS>
+.lms <nama> dashboard | matkul | materi | tugas | deadline | kuis
+.lms <nama> materi detail <ID>
+.lms <nama> materi kirim <ID> [nomor file]
+.lms <nama> sync | status | logout
+
+Tambahkan page 2 untuk halaman berikutnya. Gunakan DM dari nomor yang didaftarkan.
+~~~~
+
+</details>
+
+<details>
 <summary><strong>Keperawatan dan Perawat.org</strong></summary>
 
 Pencarian kategori mengembalikan artikel dan tautan sumber. Kalkulator menghitung langsung dari nilai dan satuan yang diberikan. Contoh artikel, cuaca, dan jawaban AI dalam katalog menggunakan data uji.
@@ -3272,7 +3300,7 @@ Pengguna · Alias: `.allmenu`
 • .dosen [nama]
 • .kalender
 
-Halaman 1/7 · .menu 2
+Halaman 1/8 · .menu 2
 Cara pakai: .help <perintah>
 ~~~~
 
@@ -3913,7 +3941,7 @@ Pengguna · Alias: `.maintenance menu`
 • .dosen [nama]
 • .kalender
 
-Halaman 1/7 · .menu 2
+Halaman 1/8 · .menu 2
 Cara pakai: .help <perintah>
 ~~~~
 
@@ -4083,8 +4111,8 @@ Ke kelas-uji@g.us
 
 Perubahan jadwal praktikum besok pukul 10.00 WIB.
 
-.relay kirim 8e859606f0439462
-.relay tolak 8e859606f0439462
+.relay kirim 67a2bddec94b80e3
+.relay tolak 67a2bddec94b80e3
 Atau kutip pesan ini dan balas ya atau tidak.
 ~~~~
 

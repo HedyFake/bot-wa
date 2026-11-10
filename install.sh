@@ -298,7 +298,7 @@ if grep -q '^# Dibuat otomatis oleh install.sh' "$ENV_FILE"; then
   sed -Ei '/^# Dibuat otomatis oleh install.sh/,$ { /^PUPPETEER_EXECUTABLE_PATH=/{n;s/^ADMIN_PASSWORD=[[:xdigit:]]{48}$/ADMIN_PASSWORD=hedyfake/;} }' "$ENV_FILE"
 fi
 if [[ -f "$SRC_DIR/.env" && ! "$SRC_DIR/.env" -ef "$ENV_FILE" ]]; then
-  for setting in NVIDIA_API_KEY OPENAI_API_KEY AI_PROVIDER_SWITCH_MS ADMIN_PASSWORD; do
+  for setting in NVIDIA_API_KEY OPENAI_API_KEY AI_PROVIDER_SWITCH_MS ADMIN_PASSWORD LMS_SYNC_MINUTES; do
     if grep -qE "^${setting}=.+$" "$SRC_DIR/.env"; then
       sed -i "/^${setting}=/d" "$ENV_FILE"
       grep -E "^${setting}=.+$" "$SRC_DIR/.env" | tail -1 >> "$ENV_FILE"
@@ -309,6 +309,14 @@ admin_setting="$(grep -E '^ADMIN_PASSWORD=[^[:space:]]' "$ENV_FILE" | tail -1 ||
 sed -i '/^ADMIN_PASSWORD=/d' "$ENV_FILE"
 printf '%s\n' "${admin_setting:-ADMIN_PASSWORD=hedyfake}" >> "$ENV_FILE"
 unset admin_setting
+if ! grep -Eq '^LMS_ENCRYPTION_KEY=.+$' "$ENV_FILE"; then
+  sed -i '/^LMS_ENCRYPTION_KEY=/d' "$ENV_FILE"
+  if [[ -f "$SRC_DIR/.env" ]] && grep -Eq '^LMS_ENCRYPTION_KEY=.+$' "$SRC_DIR/.env"; then
+    grep -E '^LMS_ENCRYPTION_KEY=.+$' "$SRC_DIR/.env" | tail -1 >> "$ENV_FILE"
+  else
+    printf 'LMS_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" >> "$ENV_FILE"
+  fi
+fi
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
 

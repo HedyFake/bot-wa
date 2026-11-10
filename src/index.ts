@@ -1,3 +1,4 @@
+import { LmsService } from './modules/lms/service.js';
 import { LunaTransport } from './ai/openai/luna.js';
 import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
@@ -109,7 +110,10 @@ async function main() {
     const value = { indexedAt: new Date().toISOString(), files: JSON.parse(JSON.stringify(files)) };
     await prisma.botSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
   } : undefined) : undefined;
+  const lms = prisma && config.LMS_ENCRYPTION_KEY ? new LmsService(prisma,Buffer.from(config.LMS_ENCRYPTION_KEY,'base64'),router,outbound,
+    config.LMS_SYNC_MINUTES * 60_000,config.MEDIA_MAX_MB * 1024 * 1024) : undefined;
   const dispatcher = new CommandDispatcher({
+    lms,
     config,
     whatsapp,
     outbound,
@@ -140,7 +144,7 @@ async function main() {
       const handledMs = Date.now() - received;
       if (reply && Math.max(inboundAgeMs, handledMs) >= 3000 && Date.now() - lastSlowMessageLog >= 60_000) {
         lastSlowMessageLog = Date.now();
-        log.info({ inboundAgeMs, handledMs, chatType: msg.chatType }, 'Balasan WhatsApp lambat');
+        log.info({ inboundAgeMs, handledMs, adapterMs:msg.adapterReceivedAt ? received-msg.adapterReceivedAt : undefined, ageAtProviderEventMs:msg.adapterReceivedAt ? Math.max(0,msg.adapterReceivedAt-msg.receivedAt.getTime()) : undefined, chatType: msg.chatType }, 'Balasan WhatsApp lambat');
       }
     } catch (e) {
       log.error({ err: e instanceof Error ? e.name : 'unknown' }, 'gagal memproses pesan masuk');
@@ -197,6 +201,7 @@ async function main() {
   const jobTimer = setInterval(() => {
     refreshSchedule();
     if (whatsapp.state() === 'connected' && config.OUTBOUND_ENABLED && !config.DRY_RUN) {
+      void lms?.tick().catch(()=>monitor.record('LMS','error','Sinkronisasi tertunda'));
       void dispatcher.tickDeadlines().catch(() => monitor.record('Scheduler','error','Pemberitahuan deadline gagal'));
       void worker?.tick().catch(() => monitor.record('Scheduler', 'error', 'Pemrosesan antrean gagal'));
     }
@@ -246,6 +251,7 @@ async function main() {
     stopping = true;
     clearInterval(heartbeat);
     clearInterval(jobTimer);
+    await lms?.stop();
     clearInterval(syncTimer);
     if (reconnectTimer) clearTimeout(reconnectTimer);
     log.info({ sig }, 'shutdown: stop ingest, tutup koneksi');

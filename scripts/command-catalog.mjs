@@ -77,6 +77,7 @@ section('Materi, Drive, jurnal, dan AI',[
   example('drive status/drive errors'),example('drive sync'),example('drive files'),example('drive search','belajar'),reg('download','M1'),reg('document.summary','M1'),reg('document.ask','M1 Apa metode belajar?'),
   reg('journal.search','belajar'),reg('ask','Bagaimana cara belajar?'),example('ask materi','M1 Apa metode belajar?'),reg('rewrite','besok bawa buku'),reg('ai.summarize','Belajar bersama. Catat hasil diskusi.'),reg('ai.flashcard','belajar'),reg('ai.quiz','belajar'),reg('ai.translate','en Terima kasih'),
 ]);
+section('LMS STIKES Husada Jombang',[reg('lms','help')]);
 section('Keperawatan dan Perawat.org',[
   ...['keperawatan','sdki nyeri akut','sop pasang infus','askep stroke','pengkajian anak','penunjang','ukom','kampus','kuisukom','highalert','safety','berita','ppni','mtb','ebook','imt 65 170','gcs E4 V5 M6','balance 1800 1500','tetesan 500 ml 6 jam 20','kalkulatorperawat'].map(s=>{
     const [head,...args]=s.split(' ');
@@ -252,7 +253,7 @@ const sourceParser = await readFile('src/admin/commands/parser.ts','utf8');
 const canonical = [...sourceParser.split('export interface ParsedCommand')[0].matchAll(/\| '([^']+)'/g)].map(m=>m[1]).filter(n=>n!=='unknown');
 assert.deepEqual(canonical.filter(c=>!covered.has(c)),[],'Handler tanpa contoh');
 const visible = new Set();
-for (let page = 1; page <= 7; page++) {
+for (let page = 1; page <= 8; page++) {
   for (const row of menuPage(String(page),true,false,true,true).split('\n').filter(s => s.startsWith('• .'))) {
     const parsed = parseCommand(row.slice(2));
     assert.notEqual(parsed.command,'unknown',row);

@@ -308,13 +308,18 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     if (typeof client.inject === 'function') {
       const origInject = client.inject.bind(client);
       let isInjecting = false;
+      let navigationPending = false;
+      let installedDocument: number | undefined;
       const patchedPages = new WeakSet<object>();
 
       client.inject = async () => {
-        if (isInjecting) return;
+        if (this.client !== client) return;
+        if (isInjecting) { navigationPending = true; return; }
         isInjecting = true;
         try {
           const page = client.pupPage;
+          const documentId = await page?.evaluate?.(() => performance.timeOrigin).catch(() => undefined);
+          if (typeof documentId === 'number' && installedDocument === documentId && !client.lastLoggedOut) return;
           if (page && this._state === 'connected' && !client.lastLoggedOut) {
             const alreadyReady = await page
               .evaluate(() => {
@@ -379,6 +384,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           }
 
           await origInject();
+          if (typeof documentId === 'number') installedDocument = documentId;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           if (
@@ -390,6 +396,10 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           }
         } finally {
           isInjecting = false;
+          if (navigationPending && this.client === client) {
+            navigationPending = false;
+            await client.inject?.();
+          }
         }
       };
     }
@@ -657,6 +667,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const groupNames = new Map<string, { name: string; until: number }>();
     const lidContacts = new Map<string, { jid: string; until: number }>();
     const handleRawMessage = async (msgRaw: unknown) => {
+      const adapterReceivedAt = Date.now();
       const m = msgRaw as WWebMessageLike;
       if (!m) return;
       const msgId = String(m.id?._serialized ?? `${Date.now()}`);
@@ -786,6 +797,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
         quoted,
         media,
         isForwarded: Boolean(m.isForwarded),
+        adapterReceivedAt,
         receivedAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
       };
 

@@ -3,7 +3,7 @@ import { readdir, stat, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 
 type Level = 'info' | 'warning' | 'error';
-type Service = 'WhatsApp' | 'Database' | 'Scheduler' | 'Drive' | 'Sistem' | 'AI';
+type Service = 'WhatsApp' | 'Database' | 'Scheduler' | 'Drive' | 'Sistem' | 'AI' | 'LMS';
 export class Monitor {
   private events: { at: Date; level: Level; service: Service; message: string }[] = [];
   record(service: Service, level: Level, message: string) {

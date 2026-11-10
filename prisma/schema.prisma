@@ -33,6 +33,23 @@ enum MessageCategory {
   REVIEW
 }
 
+model LmsAccount {
+  phone       String   @id
+  nim         String   @unique
+  alias       String
+  consentAt   DateTime?
+  aiConsent   Boolean  @default(false)
+  encrypted   String?
+  revision    Int      @default(0)
+  paused      Boolean  @default(false)
+  notify      Boolean  @default(false)
+  nextSyncAt  DateTime @default(now())
+  failures    Int      @default(0)
+  loginAttempts Int    @default(0)
+  loginAfter  DateTime?
+  @@index([paused, nextSyncAt])
+}
+
 model User {
   id          String     @id @default(uuid())
   e164        String?    @unique

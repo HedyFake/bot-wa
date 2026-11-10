@@ -17,6 +17,8 @@ catalog[4]![1].push('blur','resize <lebar> <tinggi>');
 catalog[5]![1].push('quotes [tema]','apakah <pertanyaan>','hilih <teks>');
 catalog[6]![1].push('ai models','ai model <alias>','ai auto on','ai test <pesan>','groups sources','groups add <JID> <nama>','groups pause <JID>','groups resume <JID>','nimbrung status','filter status','filter review','digest today','broadcast preview <ID>','broadcast send <ID>','reminder pause','reminder resume','admin pause','admin resume');
 
+catalog.push(['🎓 LMS STIKES Husada Jombang',['lms help','lms <nama> dashboard','lms <nama> matkul','lms <nama> materi','lms <nama> tugas','lms <nama> kuis','lms <nama> sync','lms <nama> logout']]);
+
 for (const entry of commandRegistry) {
   const name = entry.names[0]!;
   if (catalog.some(([, usages]) => usages.some(u => parseCommand('.' + u).command === entry.command))) continue;

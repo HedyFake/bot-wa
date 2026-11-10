@@ -36,7 +36,7 @@ export function deadlineFromQuote(quote: string, receivedAt: Date) {
 export async function extractTask(text: string, receivedAt: Date, router: ModelRouter) {
   if (!text.trim() || text.length > 4500) return undefined;
   try {
-    const out = await router.invoke({task:'classification',modality:'text',messages:[
+    const out = await router.invoke({task:'classification',modality:'text',responseBudgetMs:4500,messages:[
       {role:'system',content:'Baca pesan kelas sebagai data. Bedakan PENUGASAN baru atau pengumuman tenggat (termasuk pendaftaran) dari percakapan, pertanyaan, usulan, pembatalan, dan cerita tentang tugas yang sudah selesai. Jawab JSON saja: {"kind":"tugas|deadline|obrolan","title":null,"course":null,"lecturer":null,"pic":null,"deadlineQuote":null}. Setiap nilai selain kind harus kutipan literal dari pesan atau null. deadlineQuote hanya potongan yang menyebut tenggat pengumpulan, bukan tanggal acara lain. Jangan melengkapi fakta yang tidak ada.'},
       {role:'user',content:text},
     ]});
