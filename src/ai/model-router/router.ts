@@ -85,7 +85,7 @@ export class ModelRouter {
   private readonly retryAfter = new Map<ModelAlias, number>();
   private authHalted = false;
   private lunaAuthHalted = false;
-  private preferLunaUntil = 0;
+  private preferNvidiaUntil = 0;
   private inFlight = 0;
   private classificationsInFlight = 0;
   private lastError?: string;
@@ -161,8 +161,10 @@ export class ModelRouter {
       : ['deepseek','super-vl','mistral','ultra','kimi','minimax'];
     const candidates: ModelAlias[] = [primary, ...order];
     if (this.opts.openai) {
-      const preferLuna = !preferred && !mode.startsWith('pinned:') && this.fallbackEnabled && this.preferLunaUntil > this.now();
+      const preferLuna = !preferred && !mode.startsWith('pinned:') &&
+        (!this.fallbackEnabled || this.preferNvidiaUntil <= this.now());
       candidates.splice(preferLuna ? 0 : 1, 0, 'luna');
+      if (preferLuna && modality !== 'video') { primary = 'luna'; reason = 'auto_openai_primary'; }
     }
     const healthy = [...new Set(candidates)].filter(alias =>
       (alias === 'luna' ? this.opts.openai && !this.lunaAuthHalted : !this.authHalted && (this.opts.transport || !this.opts.openai)) &&
@@ -280,8 +282,8 @@ export class ModelRouter {
           });
 
           if (ctrl.signal.aborted) {
-            this.retryAfter.set(alias, this.now() + 60_000);
-            if (switching) this.preferLunaUntil = isLuna ? 0 : this.now() + 60_000;
+            if (!isLuna) this.retryAfter.set(alias, this.now() + 60_000);
+            if (switching) this.preferNvidiaUntil = isLuna ? this.now() + 60_000 : 0;
             break;
           }
           // Kredensial salah menghentikan semua model. Izin dan ketersediaan diperiksa per model.
@@ -299,7 +301,7 @@ export class ModelRouter {
             break;
           }
           if (switching) {
-            this.preferLunaUntil = isLuna ? 0 : this.now() + 60_000;
+            this.preferNvidiaUntil = isLuna ? this.now() + 60_000 : 0;
             break;
           }
           // Retry hanya untuk timeout / 429 / 5xx.

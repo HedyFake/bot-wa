@@ -271,21 +271,17 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo ""
     echo "# Dibuat otomatis oleh install.sh pada $(date -Iseconds)"
     echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable"
-    echo "ADMIN_PASSWORD=$(randhex 24)"
     echo "ADMIN_REQUIRE_PASSWORD=true"
     echo "STORAGE_DIR=${DATA_DIR}/storage"
     echo "BACKUP_DIR=${BACKUP_DIR}"
     echo "BACKUP_ENCRYPTION_KEY=${BACKUP_KEY}"
   } >> "$ENV_FILE"
-  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs, password admin acak & Chrome Stable (permission 0600)"
+  c_ok ".env dibuat dengan WHATSAPP_PROVIDER=wwebjs dan Chrome Stable (permission 0600)"
 else
   sed -i "s|^WHATSAPP_PROVIDER=.*|WHATSAPP_PROVIDER=wwebjs|" "$ENV_FILE"
   sed -i "s|^WHATSAPP_AUTH_DIR=.*|WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth|" "$ENV_FILE"
   sed -i "s|^OUTBOUND_ENABLED=.*|OUTBOUND_ENABLED=true|" "$ENV_FILE"
   sed -i "s|^DRY_RUN=.*|DRY_RUN=false|" "$ENV_FILE"
-  if ! grep -qE '^ADMIN_PASSWORD=.+' "$ENV_FILE"; then
-    echo "ADMIN_PASSWORD=$(randhex 24)" >> "$ENV_FILE"
-  fi
   grep -q '^ADMIN_REQUIRE_PASSWORD=' "$ENV_FILE" \
     && sed -i "s|^ADMIN_REQUIRE_PASSWORD=.*|ADMIN_REQUIRE_PASSWORD=true|" "$ENV_FILE" \
     || echo "ADMIN_REQUIRE_PASSWORD=true" >> "$ENV_FILE"
@@ -297,14 +293,22 @@ else
 fi
 grep -q '^WHATSAPP_AUTH_DIR=' "$ENV_FILE" || echo "WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth" >> "$ENV_FILE"
 grep -q '^WHATSAPP_PROVIDER=' "$ENV_FILE" || echo 'WHATSAPP_PROVIDER=wwebjs' >> "$ENV_FILE"
+# Instalasi lama menambahkan kunci acak tepat sesudah lokasi Chrome di blok buatan installer.
+if grep -q '^# Dibuat otomatis oleh install.sh' "$ENV_FILE"; then
+  sed -Ei '/^# Dibuat otomatis oleh install.sh/,$ { /^PUPPETEER_EXECUTABLE_PATH=/{n;s/^ADMIN_PASSWORD=[[:xdigit:]]{48}$/ADMIN_PASSWORD=hedyfake/;} }' "$ENV_FILE"
+fi
 if [[ -f "$SRC_DIR/.env" && ! "$SRC_DIR/.env" -ef "$ENV_FILE" ]]; then
-  for setting in NVIDIA_API_KEY OPENAI_API_KEY AI_PROVIDER_SWITCH_MS; do
+  for setting in NVIDIA_API_KEY OPENAI_API_KEY AI_PROVIDER_SWITCH_MS ADMIN_PASSWORD; do
     if grep -qE "^${setting}=.+$" "$SRC_DIR/.env"; then
       sed -i "/^${setting}=/d" "$ENV_FILE"
       grep -E "^${setting}=.+$" "$SRC_DIR/.env" | tail -1 >> "$ENV_FILE"
     fi
   done
 fi
+admin_setting="$(grep -E '^ADMIN_PASSWORD=[^[:space:]]' "$ENV_FILE" | tail -1 || true)"
+sed -i '/^ADMIN_PASSWORD=/d' "$ENV_FILE"
+printf '%s\n' "${admin_setting:-ADMIN_PASSWORD=hedyfake}" >> "$ENV_FILE"
+unset admin_setting
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 0600 "$ENV_FILE"
 

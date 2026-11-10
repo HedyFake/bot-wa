@@ -15,7 +15,6 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
   it('meminta password saat admin 082233038659 pertama kali chat, menolak password salah, menerima hedyfake, dan menjalankan command tertunda', async () => {
     const config = loadConfig({
       OWNER_WHATSAPP: '082233038659',
-      ADMIN_PASSWORD: 'hedyfake',
       ADMIN_REQUIRE_PASSWORD: 'true',
       OUTBOUND_ENABLED: 'true',
       DRY_RUN: 'true',
@@ -75,7 +74,7 @@ describe('Verifikasi Password Admin Interaktif (hedyfake) & Nomor Admin 08223303
     expect(lidVer.reason).toBe('not_in_allowlist');
 
     // 4. Admin 082233038659 membalas '"hedyfake"' -> berhasil & otomatis menampilkan .dashboard yang tertunda
-    const step3 = await dispatcher.handleInbound(hedyMsg('m3', '"hedyfake"'));
+    const step3 = await dispatcher.handleInbound(hedyMsg('m3', '.login hedyfake'));
     expect(step3).toContain('Password Admin Terverifikasi');
     expect(step3).toContain('DASHBOARD HDYBOT');
 

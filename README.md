@@ -1,6 +1,6 @@
 # 🤖🩺 HdyBot — Nursing Class A Assistant (Semester 5A)
 
-Versi revisi 10 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Menu .keperawatan memakai Perawat.org, dan .music mencari SoundCloud. Untuk fitur aktif, batas pengujian, konfigurasi Drive, dan pemulihan, lihat [laporan implementasi](IMPLEMENTATION_STATUS.md) dan [audit proyek](PROJECT_AUDIT.md). Installer memakai systemd dan membuat password unik pada instalasi baru. QR hanya ditampilkan lewat akses lokal privat.
+Versi revisi 10 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Menu .keperawatan memakai Perawat.org, dan .music mencari SoundCloud. Untuk fitur aktif, batas pengujian, konfigurasi Drive, dan pemulihan, lihat [laporan implementasi](IMPLEMENTATION_STATUS.md) dan [audit proyek](PROJECT_AUDIT.md). Installer memakai systemd dan memakai password admin default `hedyfake`. QR hanya ditampilkan lewat akses lokal privat.
 
 > **Asisten AI WhatsApp Akademik, Sekretaris Kelas Digital, & Pengelola Informasi Grup Cerdas (24/7 Daemon)**  
 > Dirancang khusus untuk **Nursing Class A (S1 Ilmu Keperawatan — Semester 5A)** dengan pusat kendali penuh melalui WhatsApp pribadi **Hedy (`082233038659`)** dan ditenagai oleh **NVIDIA Nemotron Auto-Router AI**.
@@ -49,13 +49,13 @@ Menu menampilkan perintah yang tersedia di chat tersebut. Gunakan `.help game ri
 
 Sapaan seperti `HdyBot halo`, `HdyBot menu`, dan `HdyBot tugas hari ini` mendapat jawaban lokal. Permintaan AI atau pencarian seperti `.ask` dan `.music` yang masih diproses setelah 1,5 detik menampilkan satu pemberitahuan sebelum hasil. Untuk memeriksa keterlambatan di VPS, jalankan `sudo journalctl -u hdybot -g 'Balasan WhatsApp lambat' -n 10 --no-pager`. Kolom `inboundAgeMs` mengukur usia pesan sejak waktu yang tercatat di WhatsApp hingga dispatcher menerimanya. Kolom `handledMs` mengukur waktu pemrosesan sampai pengiriman balasan selesai di sisi bot. Log ini hanya memuat jenis chat dan waktu, maksimal satu per menit untuk balasan lambat.
 
-Untuk memakai dua penyedia, isi `NVIDIA_API_KEY` dan `OPENAI_API_KEY` dalam file `.env` pada mesin bot. Model OpenAI adalah `gpt-6-luna` (teks dan gambar). Dalam mode auto dengan fallback aktif, bot mulai di NVIDIA. Jika permintaan lambat atau gagal, bot mencoba Luna dalam sisa waktu permintaan yang sama. Setelah timeout NVIDIA, bot mengutamakan Luna selama 60 detik. Bila Luna lambat, NVIDIA mengambil alih kembali. Ambang percobaan awal adalah `AI_PROVIDER_SWITCH_MS=3500` milidetik dan dapat lebih singkat jika anggaran waktu fitur terbatas. Satu kunci saja juga didukung. Pesan dan lampiran yang memerlukan AI dapat diproses oleh kedua penyedia, dan percobaan API dapat dikenai biaya masing-masing.
+Untuk memakai dua penyedia, isi `NVIDIA_API_KEY` dan `OPENAI_API_KEY` dalam file `.env` pada mesin bot. Model OpenAI adalah `gpt-6-luna` (teks dan gambar). Dalam mode auto dengan fallback aktif, bot memulai permintaan teks dan gambar dengan GPT-6 Luna. Jika permintaan lambat atau gagal, bot mencoba model NVIDIA yang sesuai dalam sisa waktu permintaan yang sama. Setelah Luna timeout, bot mengutamakan NVIDIA selama 60 detik. Jika NVIDIA juga lambat, Luna dapat mengambil alih lagi. Ambang percobaan awal adalah `AI_PROVIDER_SWITCH_MS=3500` milidetik dan dapat lebih singkat jika anggaran waktu fitur terbatas. Satu kunci saja juga didukung. Pesan dan lampiran yang memerlukan AI dapat diproses oleh kedua penyedia, dan percobaan API dapat dikenai biaya masing-masing.
 
 Isi kunci yang tersedia pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
 
 | Model utama | Pemakaian di WhatsApp |
 | --- | --- |
-| GPT-6 Luna (OpenAI) | Mengambil alih permintaan teks atau gambar ketika NVIDIA lambat atau gagal. Bisa dipilih sementara lewat `.ai model luna`. |
+| GPT-6 Luna (OpenAI) | Pilihan utama untuk teks dan gambar. NVIDIA menjadi cadangan. Bisa dipilih sementara lewat `.ai model luna`. |
 | DeepSeek V4.1 Flash | Klasifikasi intent dan ringkasan singkat |
 | Nemotron Super-VL | Pertanyaan singkat dan tangkapan layar. Kirim gambar dengan caption `.ask jelaskan tabel ini`, atau kutip gambar dengan perintah itu. |
 | Mistral Large 4 | Penyuntingan dengan `.rapikan` dan draf tulisan |
@@ -63,7 +63,7 @@ Isi kunci yang tersedia pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam 
 | Kimi K3.1 Pro | Teks dokumen Drive yang dapat diekstrak, riset, dan konteks panjang |
 | MiniMax M3.1 Flash | Permintaan coding, misalnya `.ask debug skrip Python ini ...` |
 
-Pada 10 November 2026, NVIDIA menampilkan Kimi K3.1 Pro sebagai preview tanpa akses API publik. Jika endpoint menolak Kimi, bot meneruskan tugas teks panjang ke Ultra dan dapat mencoba Kimi lagi setelah satu jam. Lightning tetap tersedia untuk konfigurasi lama dan pemilihan manual. Command lokal seperti `.jadwal` dan `.tugas` tetap memakai data bot.
+Pada 10 November 2026, NVIDIA menampilkan Kimi K3.1 Pro sebagai preview tanpa akses API publik. Jika endpoint menolak Kimi pada jalur NVIDIA, bot dapat meneruskan tugas teks panjang ke Ultra dan dapat mencoba Kimi lagi setelah satu jam. Lightning tetap tersedia untuk konfigurasi lama dan pemilihan manual. Command lokal seperti `.jadwal` dan `.tugas` tetap memakai data bot.
 
 ### Tugas, tenggat, dan pengingat H−3 sampai hari H
 
@@ -93,7 +93,7 @@ Gunakan `.setpjmk <jid>` dan `.setkelasa <jid>` dari DM admin. Saat ada pratinja
 
 ### 🚀 Cara Install Otomatis di Ubuntu Server (Sekali Jalan dengan `install.sh`)
 
-Skrip [`install.sh`](install.sh) sudah dirancang **idempoten**, memasang Node.js dan mengonfigurasi systemd, PostgreSQL, Google Chrome `.deb` asli (bukan Snap), membuat file `.env` dengan password admin acak, menjalankan migrasi + seed jadwal Semester 5A, serta mengaktifkan daemon 24/7 **tanpa `ufw` dan tanpa `fail2ban`** tanpa mengubah akses SSH:
+Skrip [`install.sh`](install.sh) sudah dirancang **idempoten**, memasang Node.js dan mengonfigurasi systemd, PostgreSQL, Google Chrome `.deb` asli (bukan Snap), membuat file `.env` dengan password admin default `hedyfake`, menjalankan migrasi + seed jadwal Semester 5A, serta mengaktifkan daemon 24/7 **tanpa `ufw` dan tanpa `fail2ban`** tanpa mengubah akses SSH:
 
 ```bash
 # 1. Masuk ke folder project
@@ -119,7 +119,7 @@ npm install
 # 2. Salin konfigurasi environment
 cp .env.example .env
 
-# 3. Edit .env (pastikan OWNER_WHATSAPP=082233038659, ADMIN_PASSWORD=<password admin dari konfigurasi>, dan isi NVIDIA_API_KEY)
+# 3. Edit .env (pastikan OWNER_WHATSAPP=082233038659, ADMIN_PASSWORD=hedyfake, dan isi NVIDIA_API_KEY)
 nano .env
 
 # 4. Generate Prisma Client & build TypeScript ke folder dist/
@@ -138,7 +138,7 @@ OWNER_NAME=Hedy
 OWNER_WHATSAPP=+6282233038659
 OWNER_EMAIL=wibyjoe12@gmail.com
 ADMIN_WHATSAPP_ALLOWLIST=+6282233038659
-ADMIN_PASSWORD=<password admin dari konfigurasi>
+ADMIN_PASSWORD=hedyfake
 ADMIN_REQUIRE_PASSWORD=true
 
 WHATSAPP_PROVIDER=wwebjs

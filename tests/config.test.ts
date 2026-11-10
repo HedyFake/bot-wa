@@ -4,6 +4,11 @@ import { loadConfig } from '../src/config/env.js';
 const base = { OWNER_WHATSAPP: '082233038659' };
 
 describe('loadConfig', () => {
+  it('memakai password default untuk nilai kosong dan menghormati password yang dikonfigurasi', () => {
+    expect(loadConfig(base).ADMIN_PASSWORD).toBe('hedyfake');
+    expect(loadConfig({...base,ADMIN_PASSWORD:' '}).ADMIN_PASSWORD).toBe('hedyfake');
+    expect(loadConfig({...base,ADMIN_PASSWORD:'custom-fixture'}).ADMIN_PASSWORD).toBe('custom-fixture');
+  });
   it('memuat identitas default dan memasukkan owner ke allowlist', () => {
     const c = loadConfig(base);
     expect(c.BOT_NAME).toBe('HdyBot');
