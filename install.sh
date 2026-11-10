@@ -75,6 +75,9 @@ case "${1:-}" in
         c_ok "WhatsApp sudah terhubung. Coba .menu melalui WhatsApp."
         exit 0
       fi
+      if [[ "$pid" != 0 && "$state" == "$pid syncing" ]]; then
+        exec bash "$0" --watch-pairing
+      fi
       if grep -Eq '^WHATSAPP_PAIRING_PHONE=.+$' "$APP_DIR/.env" || [[ "$state" == "$pid logged_out" || "$state" == "$pid session_expired" ]] || ! systemctl is-active --quiet "$APP_NAME"; then
         sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env"
         systemctl reset-failed "$APP_NAME"
@@ -158,13 +161,14 @@ case "${1:-}" in
     [[ "$PAIR_PHONE" =~ ^\+?[0-9]{8,15}$ ]] || die "Masukkan nomor WA Bot! Contoh: sudo ./install.sh --pair 081234567890"
     pid="$(systemctl show "$APP_NAME" --property=MainPID --value)"
     state="$(cat "$DATA_DIR/whatsapp-auth/connection-state" 2>/dev/null || true)"
+    if [[ "$pid" != 0 && ( "$state" == "$pid connected" || "$state" == "$pid syncing" ) ]]; then
+      exec bash "$0" --watch-pairing
+    fi
     if [[ "$pid" != 0 && ( "$state" == "$pid connecting" || "$state" == "$pid syncing" || "$state" == "$pid connected" ) ]] && grep -Fxq "WHATSAPP_PAIRING_PHONE=$PAIR_PHONE" "$APP_DIR/.env"; then
       c_info "Memantau sesi yang sudah berjalan untuk nomor ini."
       exec bash "$0" --watch-pairing
     fi
     systemctl stop "$APP_NAME" 2>/dev/null || true
-    archive_session
-    rm -rf "${APP_DIR}/.wwebjs_cache" /tmp/hdybot-qr* /tmp/hdybot-pairing-code.txt 2>/dev/null || true
     if [[ -f "$APP_DIR/.env" ]]; then
       sed -i '/^WHATSAPP_PAIRING_PHONE=/d' "$APP_DIR/.env" || true
       echo "WHATSAPP_PAIRING_PHONE=${PAIR_PHONE}" >> "$APP_DIR/.env"
@@ -293,13 +297,13 @@ else
 fi
 grep -q '^WHATSAPP_AUTH_DIR=' "$ENV_FILE" || echo "WHATSAPP_AUTH_DIR=${DATA_DIR}/whatsapp-auth" >> "$ENV_FILE"
 grep -q '^WHATSAPP_PROVIDER=' "$ENV_FILE" || echo 'WHATSAPP_PROVIDER=wwebjs' >> "$ENV_FILE"
-if [[ -f "$SRC_DIR/.env" ]]; then
-  SRC_NV_KEY="$(grep -E '^NVIDIA_API_KEY=' "$SRC_DIR/.env" 2>/dev/null | head -n1 | cut -d= -f2- || true)"
-  if [[ -n "$SRC_NV_KEY" ]]; then
-    grep -q '^NVIDIA_API_KEY=' "$ENV_FILE" \
-      && sed -i "s|^NVIDIA_API_KEY=.*|NVIDIA_API_KEY=${SRC_NV_KEY}|" "$ENV_FILE" \
-      || echo "NVIDIA_API_KEY=${SRC_NV_KEY}" >> "$ENV_FILE"
-  fi
+if [[ -f "$SRC_DIR/.env" && ! "$SRC_DIR/.env" -ef "$ENV_FILE" ]]; then
+  for setting in NVIDIA_API_KEY OPENAI_API_KEY AI_PROVIDER_SWITCH_MS; do
+    if grep -qE "^${setting}=.+$" "$SRC_DIR/.env"; then
+      sed -i "/^${setting}=/d" "$ENV_FILE"
+      grep -E "^${setting}=.+$" "$SRC_DIR/.env" | tail -1 >> "$ENV_FILE"
+    fi
+  done
 fi
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 0600 "$ENV_FILE"

@@ -84,6 +84,8 @@ export class ModelRouter {
   private readonly unhealthy = new Set<ModelAlias>();
   private readonly retryAfter = new Map<ModelAlias, number>();
   private authHalted = false;
+  private lunaAuthHalted = false;
+  private preferLunaUntil = 0;
   private inFlight = 0;
   private classificationsInFlight = 0;
   private lastError?: string;
@@ -94,6 +96,8 @@ export class ModelRouter {
   constructor(
     private readonly opts: {
       transport?: NvidiaTransport;
+      openai?: NvidiaTransport;
+      switchMs?: number;
       modelIds?: Partial<Record<ModelAlias, string>>;
       initialMode?: RouterMode;
       fallbackEnabled?: boolean;
@@ -155,7 +159,13 @@ export class ModelRouter {
     const order: ModelAlias[] = isMultimodal ? ['super-vl','mistral','kimi','minimax']
       : ['kimi','ultra','minimax'].includes(primary) ? ['ultra','minimax','kimi','super-vl','deepseek','mistral']
       : ['deepseek','super-vl','mistral','ultra','kimi','minimax'];
-    const healthy = [...new Set([primary, ...order])].filter(alias =>
+    const candidates: ModelAlias[] = [primary, ...order];
+    if (this.opts.openai) {
+      const preferLuna = !preferred && !mode.startsWith('pinned:') && this.fallbackEnabled && this.preferLunaUntil > this.now();
+      candidates.splice(preferLuna ? 0 : 1, 0, 'luna');
+    }
+    const healthy = [...new Set(candidates)].filter(alias =>
+      (alias === 'luna' ? this.opts.openai && !this.lunaAuthHalted : !this.authHalted && (this.opts.transport || !this.opts.openai)) &&
       this.registry[alias].modalities.includes(modality) && !this.unhealthy.has(alias) && !this.retryAfter.has(alias));
     const chosen = healthy[0];
     if (!chosen) throw new Error(isMultimodal ? 'vision_model_unavailable' : 'no_healthy_model_available');
@@ -198,8 +208,8 @@ export class ModelRouter {
   }
 
   private async invokeAvailable(req: RouteRequest, preferred?: ModelAlias) {
-    if (this.authHalted) throw new Error('nvidia_auth_halted');
-    if (!this.opts.transport) throw new Error('nvidia_transport_not_configured');
+    if (this.authHalted && !this.opts.openai) throw new Error('nvidia_auth_halted');
+    if (!this.opts.transport && !this.opts.openai) throw new Error('ai_transport_not_configured');
 
     const decision = this.decide(req, preferred);
     const chain: ModelAlias[] = [decision.alias, ...decision.fallbacks];
@@ -209,6 +219,10 @@ export class ModelRouter {
     for (let idx = 0; idx < chain.length; idx++) {
       const alias = chain[idx]!;
       const spec = this.registry[alias];
+      const isLuna = alias === 'luna';
+      const transport = isLuna ? this.opts.openai : this.opts.transport;
+      if (!transport || (isLuna ? this.lunaAuthHalted : this.authHalted)) continue;
+      const switching = chain.slice(idx + 1).some(next => (next === 'luna') !== isLuna);
       const temperature =
         req.modality === 'image' || req.modality === 'video'
           ? (spec.visionTemperature ?? spec.defaultTemperature)
@@ -220,9 +234,9 @@ export class ModelRouter {
         const remaining = deadline - t0;
         if (remaining <= 0) throw new Error('response_timeout');
         const attemptBudget = idx < chain.length - 1 ? Math.ceil(remaining * 0.6) : remaining;
-        const timer = setTimeout(() => ctrl.abort(), Math.min(this.timeoutMs, attemptBudget));
+        const timer = setTimeout(() => ctrl.abort(), Math.min(this.timeoutMs, attemptBudget, switching ? this.opts.switchMs ?? 3500 : Infinity));
         try {
-          const res = await this.opts.transport.complete(
+          const res = await transport.complete(
             {
               model: spec.modelId,
               messages: req.messages,
@@ -267,18 +281,25 @@ export class ModelRouter {
 
           if (ctrl.signal.aborted) {
             this.retryAfter.set(alias, this.now() + 60_000);
+            if (switching) this.preferLunaUntil = isLuna ? 0 : this.now() + 60_000;
             break;
           }
           // Kredensial salah menghentikan semua model. Izin dan ketersediaan diperiksa per model.
           if (pErr.statusCode === 401) {
-            this.authHalted = true;
-            throw new Error(`nvidia_auth_error_${pErr.statusCode}`);
+            if (isLuna) this.lunaAuthHalted = true;
+            else this.authHalted = true;
+            if (switching) break;
+            throw new Error(isLuna ? 'openai_auth_error_401' : 'nvidia_auth_error_401');
           }
           if (pErr.statusCode === 403 || pErr.statusCode === 404) {
             this.retryAfter.set(alias, this.now() + 3600_000);
             break;
           }
           if (pErr.statusCode === 400 || pErr.statusCode === 422) {
+            break;
+          }
+          if (switching) {
+            this.preferLunaUntil = isLuna ? 0 : this.now() + 60_000;
             break;
           }
           // Retry hanya untuk timeout / 429 / 5xx.
@@ -324,6 +345,9 @@ export class ModelRouter {
   status(): RouterStatus {
     const mode = this.getEffectiveMode();
     const unavailable = new Set([...this.unhealthy, ...[...this.retryAfter].filter(([,time]) => time > this.now()).map(([alias]) => alias)]);
+    for (const alias of modelAliases) {
+      if (alias === 'luna' ? !this.opts.openai || this.lunaAuthHalted : !this.opts.transport || this.authHalted) unavailable.add(alias);
+    }
     return {
       mode,
       pinnedUntil: this.pinnedUntilMs ? new Date(this.pinnedUntilMs).toISOString() : undefined,

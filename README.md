@@ -49,10 +49,13 @@ Menu menampilkan perintah yang tersedia di chat tersebut. Gunakan `.help game ri
 
 Sapaan seperti `HdyBot halo`, `HdyBot menu`, dan `HdyBot tugas hari ini` mendapat jawaban lokal. Permintaan AI atau pencarian seperti `.ask` dan `.music` yang masih diproses setelah 1,5 detik menampilkan satu pemberitahuan sebelum hasil. Untuk memeriksa keterlambatan di VPS, jalankan `sudo journalctl -u hdybot -g 'Balasan WhatsApp lambat' -n 10 --no-pager`. Kolom `inboundAgeMs` mengukur usia pesan sejak waktu yang tercatat di WhatsApp hingga dispatcher menerimanya. Kolom `handledMs` mengukur waktu pemrosesan sampai pengiriman balasan selesai di sisi bot. Log ini hanya memuat jenis chat dan waktu, maksimal satu per menit untuk balasan lambat.
 
-Isi `NVIDIA_API_KEY` pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
+Untuk memakai dua penyedia, isi `NVIDIA_API_KEY` dan `OPENAI_API_KEY` dalam file `.env` pada mesin bot. Model OpenAI adalah `gpt-6-luna` (teks dan gambar). Dalam mode auto dengan fallback aktif, bot mulai di NVIDIA. Jika permintaan lambat atau gagal, bot mencoba Luna dalam sisa waktu permintaan yang sama. Setelah timeout NVIDIA, bot mengutamakan Luna selama 60 detik. Bila Luna lambat, NVIDIA mengambil alih kembali. Ambang percobaan awal adalah `AI_PROVIDER_SWITCH_MS=3500` milidetik dan dapat lebih singkat jika anggaran waktu fitur terbatas. Satu kunci saja juga didukung. Pesan dan lampiran yang memerlukan AI dapat diproses oleh kedua penyedia, dan percobaan API dapat dikenai biaya masing-masing.
+
+Isi kunci yang tersedia pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
 
 | Model utama | Pemakaian di WhatsApp |
 | --- | --- |
+| GPT-6 Luna (OpenAI) | Mengambil alih permintaan teks atau gambar ketika NVIDIA lambat atau gagal. Bisa dipilih sementara lewat `.ai model luna`. |
 | DeepSeek V4.1 Flash | Klasifikasi intent dan ringkasan singkat |
 | Nemotron Super-VL | Pertanyaan singkat dan tangkapan layar. Kirim gambar dengan caption `.ask jelaskan tabel ini`, atau kutip gambar dengan perintah itu. |
 | Mistral Large 4 | Penyuntingan dengan `.rapikan` dan draf tulisan |
@@ -103,7 +106,7 @@ sudo ./install.sh
 
 Untuk memperbarui instalasi systemd, jalankan `sudo bash install.sh` dari direktori source terbaru. Untuk memilih QR, jalankan `sudo bash install.sh --qr` di konsol privat VPS. Jika sesi belum terhubung dan masih memakai nomor pairing, perintah ini beralih ke QR dengan sesi yang tersimpan. Scan lewat WhatsApp → Perangkat tertaut → Tautkan perangkat. Jika sudah terhubung, konsol langsung memberi tahu.
 
-Untuk kode telepon, gunakan `sudo bash install.sh --pair 08xxxxxxxxxx`. Bot menyiapkan QR terlebih dahulu, kemudian meminta kode telepon. Jika permintaan kode gagal atau tidak menghasilkan kode dalam 25 detik, Chrome menyambung kembali dalam mode QR. Setelah scan atau pemulihan sesi, tunggu pesan sinkronisasi hingga WhatsApp siap. Bila status `logged_out` muncul kembali sesudah memilih QR, `sudo bash install.sh --reset-wa` mengarsipkan sesi lama dalam backup terenkripsi sebelum membuat sesi baru. Lihat log melalui `sudo bash install.sh --logs`.
+Untuk kode telepon, gunakan `sudo bash install.sh --pair 08xxxxxxxxxx`. Mode ini menampilkan kode telepon saja. Jika kode gagal atau tidak muncul dalam 25 detik sebelum HP mulai menautkan, bot beralih ke sesi QR baru. Sesudah HP mulai menautkan, terminal menarik kode yang lama dan menampilkan status sinkronisasi. Membuka kembali perintah QR atau kode saat sinkronisasi sudah berlangsung akan memantau proses yang sama. Memilih kode telepon mempertahankan profil yang ada. Bila status `logged_out` muncul kembali sesudah memilih QR, `sudo bash install.sh --reset-wa` mengarsipkan sesi lama dalam backup terenkripsi sebelum membuat sesi baru. Lihat log melalui `sudo bash install.sh --logs`.
 
 ---
 
@@ -3236,7 +3239,7 @@ Pengguna
 • Asisten AI Akademik & Sekretaris Kelas Digital untuk *Nursing Class A (Semester 5A)*
 • Owner & Admin Utama: *Hedy* (`<nomor owner>`)
 • Nomor Bot: *Dinamis / Bisa Ganti-Ganti via QR Code*
-• Mesin AI: *NVIDIA Build Auto-Router*
+• Mesin AI: *NVIDIA Build dan OpenAI*
 • Zona Waktu: *Asia/Jakarta*
 ~~~~
 
@@ -3249,7 +3252,7 @@ Pengguna · Alias: `.ingfo`
 • Asisten AI Akademik & Sekretaris Kelas Digital untuk *Nursing Class A (Semester 5A)*
 • Owner & Admin Utama: *Hedy* (`<nomor owner>`)
 • Nomor Bot: *Dinamis / Bisa Ganti-Ganti via QR Code*
-• Mesin AI: *NVIDIA Build Auto-Router*
+• Mesin AI: *NVIDIA Build dan OpenAI*
 • Zona Waktu: *Asia/Jakarta*
 ~~~~
 
@@ -3326,8 +3329,8 @@ DM admin terverifikasi
 ~~~~text
 📊 *DASHBOARD HDYBOT — Halo Hedy*
 • WhatsApp (mock): *connected*
-• NVIDIA AI: *Belum diisi* | Mode: *auto*
-• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning
+• OpenAI: belum diisi · NVIDIA: *Belum diisi* | Mode: *auto*
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning, luna
 • Grup sumber aktif: *1*
 • Pesan diproses hari ini: *1* (Penting: *1*)
 • Menunggu review Hedy: *1*
@@ -3450,8 +3453,8 @@ Worker pengingat belum terhubung ke database.
 DM admin terverifikasi · Alias: `.ai status`
 
 ~~~~text
-🧠 *NVIDIA Build · Model AI*
-• Kredensial: belum dikonfigurasi
+🧠 *NVIDIA & OpenAI · Model AI*
+• NVIDIA: belum dikonfigurasi · OpenAI: belum dikonfigurasi
 • Mode: *auto*
 • Fallback: ON | Total Panggilan: 0
 • *deepseek* · deepseek-ai/deepseek-v4.1-flash
@@ -3461,6 +3464,7 @@ DM admin terverifikasi · Alias: `.ai status`
 • *kimi* · moonshotai/kimi-k3.1-pro
 • *minimax* · minimaxai/minimax-m3.1-flash
 • *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
+• *luna* · gpt-6-luna (tidak tersedia)
 ~~~~
 
 **.ai models**
@@ -3468,8 +3472,8 @@ DM admin terverifikasi · Alias: `.ai status`
 DM admin terverifikasi
 
 ~~~~text
-🧠 *NVIDIA Build · Model AI*
-• Kredensial: belum dikonfigurasi
+🧠 *NVIDIA & OpenAI · Model AI*
+• NVIDIA: belum dikonfigurasi · OpenAI: belum dikonfigurasi
 • Mode: *auto*
 • Fallback: ON | Total Panggilan: 0
 • *deepseek* · deepseek-ai/deepseek-v4.1-flash
@@ -3479,6 +3483,7 @@ DM admin terverifikasi
 • *kimi* · moonshotai/kimi-k3.1-pro
 • *minimax* · minimaxai/minimax-m3.1-flash
 • *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
+• *luna* · gpt-6-luna (tidak tersedia)
 ~~~~
 
 **.ai model lightning**
@@ -3510,7 +3515,9 @@ DM admin terverifikasi
 DM admin terverifikasi
 
 ~~~~text
-🧪 *Hasil Uji NVIDIA (super-vl — nvidia/nemotron-3.5-super-vl-120b-a12b):*
+🧪 *Hasil uji NVIDIA*
+Model: nvidia/nemotron-3.5-super-vl-120b-a12b
+
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
@@ -3935,8 +3942,8 @@ DM admin terverifikasi · Alias: `.maintenance overview`
 ~~~~text
 📊 *DASHBOARD HDYBOT — Halo Hedy*
 • WhatsApp (mock): *connected*
-• NVIDIA AI: *Belum diisi* | Mode: *auto*
-• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning
+• OpenAI: belum diisi · NVIDIA: *Belum diisi* | Mode: *auto*
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning, luna
 • Grup sumber aktif: *1*
 • Pesan diproses hari ini: *1* (Penting: *1*)
 • Menunggu review Hedy: *1*
@@ -4015,8 +4022,8 @@ DM admin terverifikasi · Alias: `.maintenance`
 ~~~~text
 📊 *DASHBOARD HDYBOT — Halo Hedy*
 • WhatsApp (mock): *connected*
-• NVIDIA AI: *Belum diisi* | Mode: *auto*
-• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning
+• OpenAI: belum diisi · NVIDIA: *Belum diisi* | Mode: *auto*
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning, luna
 • Grup sumber aktif: *1*
 • Pesan diproses hari ini: *1* (Penting: *1*)
 • Menunggu review Hedy: *1*

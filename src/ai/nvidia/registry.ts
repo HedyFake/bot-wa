@@ -1,4 +1,4 @@
-export const modelAliases = ['deepseek', 'super-vl', 'mistral', 'ultra', 'kimi', 'minimax', 'lightning'] as const;
+export const modelAliases = ['deepseek', 'super-vl', 'mistral', 'ultra', 'kimi', 'minimax', 'lightning', 'luna'] as const;
 export type ModelAlias = typeof modelAliases[number];
 export function isModelAlias(value: string): value is ModelAlias {
   return modelAliases.some(alias => alias === value);
@@ -18,6 +18,7 @@ export interface ModelSpec {
 }
 
 export const DEFAULT_MODEL_IDS: Record<ModelAlias, string> = {
+  luna: 'gpt-6-luna',
   deepseek: 'deepseek-ai/deepseek-v4.1-flash',
   mistral: 'mistralai/mistral-large-4-1t-a52b',
   kimi: 'moonshotai/kimi-k3.1-pro',
@@ -33,6 +34,7 @@ export function createModelRegistry(overrides?: Partial<Record<ModelAlias, strin
     alias, lane, modalities, modelId: ids[alias], defaultTemperature: 0.6, topP: 0.95, maxTokens: 4096, supportsTools: false,
   });
   return {
+    luna: model('luna','fast',['text','image']),
     deepseek: model('deepseek','fast',['text']),
     mistral: model('mistral','vision',['text','image']),
     kimi: model('kimi','reasoning',['text','image','video']),

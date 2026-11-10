@@ -1,3 +1,4 @@
+import { LunaTransport } from './ai/openai/luna.js';
 import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -85,6 +86,8 @@ async function main() {
     initialMode: config.AI_ROUTER_MODE,
     fallbackEnabled: config.AI_FALLBACK_ENABLED,
     maxRetries: config.AI_MAX_RETRIES,
+    openai: config.OPENAI_API_KEY ? new LunaTransport(config.OPENAI_API_KEY) : undefined,
+    switchMs: config.AI_PROVIDER_SWITCH_MS,
     timeoutMs: config.NVIDIA_TIMEOUT_MS,
   });
 

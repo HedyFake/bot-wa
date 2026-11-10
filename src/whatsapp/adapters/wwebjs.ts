@@ -281,6 +281,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     const client = new Client(clientOptions);
     let phoneRequested = false;
     let authenticated = false;
+    let linking = false;
     this.client = client;
     this.qrCount = 0;
 
@@ -345,6 +346,22 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
 
             await page
               .exposeFunction('onAuthAppStateChangedEvent', async (state: unknown) => {
+                if (this.client !== client || authenticated) return;
+                if (state === 'PAIRING' || state === 'CONNECTED') {
+                  if (!linking) console.info('[WA] WhatsApp memulai penautan. Menunggu sinkronisasi perangkat.');
+                  linking = true;
+                  clearTimeout(phoneTimer);
+                  syncing();
+                  return;
+                }
+                if (linking && (state === 'UNPAIRED' || state === 'UNPAIRED_IDLE')) {
+                  console.warn('[WA] WhatsApp kembali ke status belum tertaut sebelum autentikasi selesai.');
+                  linking = false;
+                  if (phoneRequested) { retryWithQr(); return; }
+                  clearTimeout(syncTimer);
+                  syncTimer = undefined;
+                  this.writeStateFile('connecting');
+                }
                 if (state === 'UNPAIRED_IDLE' && !phoneRequested) {
                   try {
                     await page.evaluate(() => {
@@ -450,7 +467,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       });
     };
     const retryWithQr = () => {
-      if (this.client !== client || authenticated) return;
+      if (this.client !== client || authenticated || linking) return;
       this.qrOnly = true;
       restartClient('Kode telepon gagal atau tidak muncul dalam 25 detik. Menghubungkan ulang dalam mode QR.');
     };
@@ -458,18 +475,28 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       if (syncTimer || this.client !== client || this._state !== 'connecting') return;
       stopStartupTimer();
       this.writeStateFile('syncing');
+      rmSync(QR_CACHE_FILE, { force: true });
+      rmSync(PAIRING_CODE_CACHE_FILE, { force: true });
       syncTimer = setTimeout(() => restartClient('Sinkronisasi tidak selesai dalam enam menit. Memulai ulang Chrome.'), 360_000);
     };
     client.on('qr', (qrRaw: unknown) => {
       if (this.client !== client) return;
       const qr = String(qrRaw ?? '').trim();
-      if (!qr || authenticated) return;
+      if (!qr || authenticated || linking) return;
       if (syncTimer) {
         clearTimeout(syncTimer);
         syncTimer = undefined;
         this.writeStateFile('connecting');
       }
       this.qrCount += 1;
+      if (normalizedPairingPhone) {
+        if (!phoneRequested) {
+          phoneRequested = true;
+          phoneTimer = setTimeout(retryWithQr, 25_000);
+          void Promise.resolve().then(() => client.requestPairingCode(normalizedPairingPhone, true, 180_000)).catch(retryWithQr);
+        }
+        return;
+      }
       const nowSec = Math.floor(Date.now() / 1000);
       const timeLabel = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false });
 
@@ -481,7 +508,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
             ` 📱 SCAN QR CODE WHATSAPP BOT (Refresh #${this.qrCount} — ${timeLabel} WIB)`,
             '    ⚠️ PENTING: Scan QR PALING BAWAH / TERBARU ini dalam < 20 detik!',
             '    Buka WA Bot -> Perangkat Tertaut -> Tautkan Perangkat',
-            '    (Jika gagal/lama, ketik: sudo ./install.sh --reset-wa)',
+            '    Setelah dipindai, tunggu konfirmasi pada HP dan terminal.',
             '    (Atau pakai kode 8 digit: sudo ./install.sh --pair 08xxxxxxxxxx)',
 
             '===================================================================',
@@ -495,11 +522,6 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
             renameSync(QR_CACHE_FILE + '.tmp', QR_CACHE_FILE);
             stopStartupTimer();
             writeFileSync(QR_CACHE_TS_FILE, String(nowSec), { encoding: 'utf8', mode: 0o600 });
-            if (normalizedPairingPhone && !phoneRequested) {
-              phoneRequested = true;
-              phoneTimer = setTimeout(retryWithQr, 25_000);
-              void Promise.resolve().then(() => client.requestPairingCode(normalizedPairingPhone, true, 180_000)).catch(retryWithQr);
-            }
           } catch {
             console.error('[WA] Gagal menulis QR ke direktori WHATSAPP_AUTH_DIR.');
           }
@@ -513,7 +535,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     client.on('code', (codeRaw: unknown) => {
       if (this.client !== client) return;
       const raw = String(codeRaw ?? '').trim();
-      if (authenticated || !/^[a-z0-9]{8}$/i.test(raw)) return;
+      if (authenticated || linking || !phoneRequested || !/^[a-z0-9]{8}$/i.test(raw)) return;
       clearTimeout(phoneTimer);
       const formatted = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
       const banner = [

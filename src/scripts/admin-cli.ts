@@ -1,3 +1,4 @@
+import { LunaTransport } from '../ai/openai/luna.js';
 /**
  * CLI Simulasi Chat Pribadi Admin WhatsApp Hedy (`+6282233038659`).
  * Memungkinkan Hedy menguji perintah `.dashboard`, `.health`, `.status`, `.jadwal`,
@@ -51,6 +52,8 @@ async function main() {
     initialMode: config.AI_ROUTER_MODE,
     fallbackEnabled: config.AI_FALLBACK_ENABLED,
     maxRetries: config.AI_MAX_RETRIES,
+    openai: config.OPENAI_API_KEY ? new LunaTransport(config.OPENAI_API_KEY) : undefined,
+    switchMs: config.AI_PROVIDER_SWITCH_MS,
     timeoutMs: config.NVIDIA_TIMEOUT_MS,
   });
 

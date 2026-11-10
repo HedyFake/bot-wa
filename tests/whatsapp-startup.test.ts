@@ -7,6 +7,7 @@ import { WWebJsWhatsAppProvider } from '../src/whatsapp/adapters/wwebjs.js';
 
 let client: EventEmitter;
 let emitQr = true;
+let socketState: ((state: unknown) => Promise<void>) | undefined;
 const phone = vi.fn(async () => { client.emit('code', 'ABCD1234'); return 'ABCD1234'; });
 vi.mock('whatsapp-web.js', () => ({
   default: {
@@ -14,7 +15,13 @@ vi.mock('whatsapp-web.js', () => ({
     LocalAuth: class {},
     Client: class extends EventEmitter {
       constructor() { super(); client = this; }
-      async initialize() { if (emitQr) this.emit('qr', 'pairing-fixture'); }
+      pupPage = {
+        exposeFunction: async (name:string, callback:(state:unknown)=>Promise<void>) => {
+          if (name === 'onAuthAppStateChangedEvent') socketState = callback;
+        },
+      };
+      async inject() {}
+      async initialize() { await this.inject(); if (emitQr) this.emit('qr', 'pairing-fixture'); }
       requestPairingCode = phone;
       async destroy() {}
     },
@@ -48,6 +55,28 @@ it('menampilkan QR privat lalu menandai sesi siap dan memproses teks tanpa penca
     expect(getQuotedMessage).not.toHaveBeenCalled();
     await provider.disconnect();
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it.each(['','081234567890'])('menjaga sesi setelah HP mulai menautkan (%s)', async pairingPhone => {
+  const dir = mkdtempSync(join(tmpdir(),'hdybot-linking-'));
+  socketState = undefined;
+  vi.useFakeTimers();
+  try {
+    const provider = new WWebJsWhatsAppProvider({authDir:dir,pairingPhone});
+    if (pairingPhone) phone.mockImplementationOnce(async () => new Promise<string>(() => {}));
+    const connecting = provider.connect();
+    await vi.waitFor(() => expect(socketState).toBeTypeOf('function'));
+    await socketState!('PAIRING');
+    client.emit('qr','stale-qr'); client.emit('code','STALE123');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(readFileSync(join(dir,'connection-state'),'utf8')).toContain('syncing');
+    expect(existsSync(join(dir,'pairing-qr.txt'))).toBe(false);
+    expect(existsSync(join(dir,'pairing-code.txt'))).toBe(false);
+    client.emit('authenticated'); client.emit('ready');
+    await connecting;
+    expect(provider.state()).toBe('connected');
+    await provider.disconnect();
+  } finally { socketState = undefined; vi.useRealTimers(); rmSync(dir,{recursive:true,force:true}); }
 });
 
 it('menghasilkan kode setelah QR pertama dan menandai sinkronisasi sebelum ready', async () => {

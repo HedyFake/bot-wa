@@ -739,7 +739,7 @@ export class CommandDispatcher {
             `• Asisten AI Akademik & Sekretaris Kelas Digital untuk *${config.CLASS_NAME} (Semester 5A)*\n` +
             `• Owner & Admin Utama: *${config.OWNER_NAME}* (\`${config.OWNER_WHATSAPP}\`)\n` +
             `• Nomor Bot: *Dinamis / Bisa Ganti-Ganti via QR Code*\n` +
-            `• Mesin AI: *NVIDIA Build Auto-Router*\n` +
+            `• Mesin AI: *NVIDIA Build dan OpenAI*\n` +
             `• Zona Waktu: *${config.TIMEZONE}*`,
         );
 
@@ -838,7 +838,7 @@ export class CommandDispatcher {
         return textOnly(
           `📊 *DASHBOARD ${config.BOT_NAME.toUpperCase()} — Halo ${config.OWNER_NAME}*\n` +
             `• WhatsApp (${this.deps.whatsapp.name}): *${this.deps.whatsapp.state()}*\n` +
-            `• NVIDIA AI: *${config.NVIDIA_API_KEY ? 'Terkonfigurasi' : 'Belum diisi'}* | Mode: *${ai.mode}*\n` +
+            `• OpenAI: ${config.OPENAI_API_KEY ? 'tersedia' : 'belum diisi'} · NVIDIA: *${config.NVIDIA_API_KEY ? 'Terkonfigurasi' : 'Belum diisi'}* | Mode: *${ai.mode}*\n` +
             `• Model router: ${Object.keys(ai.models).join(', ')}\n` +
             `• Grup sumber aktif: *${gi.activeSources}*\n` +
             `• Pesan diproses hari ini: *${gi.processedToday}* (Penting: *${gi.importantCount}*)\n` +
@@ -854,8 +854,8 @@ export class CommandDispatcher {
       case 'ai.models': {
         const s = router.status();
         return textOnly(
-          `🧠 *NVIDIA Build · Model AI*\n` +
-            '• Kredensial: ' + (config.NVIDIA_API_KEY ? 'tersedia' : 'belum dikonfigurasi') + '\n' +
+          `🧠 *NVIDIA & OpenAI · Model AI*\n` +
+            '• NVIDIA: ' + (config.NVIDIA_API_KEY ? 'tersedia' : 'belum dikonfigurasi') + ' · OpenAI: ' + (config.OPENAI_API_KEY ? 'tersedia' : 'belum dikonfigurasi') + '\n' +
             `• Mode: *${s.mode}*${s.pinnedUntil ? ` (sampai ${s.pinnedUntil})` : ''}\n` +
             `• Fallback: ${s.fallbackEnabled ? 'ON' : 'OFF'} | Total Panggilan: ${s.totalCalls}\n` +
             Object.entries(s.models).map(([name, model]) => '• *' + name + '* · ' + model.modelId + (model.healthy ? '' : ' (tidak tersedia)')).join('\n'),
@@ -892,9 +892,9 @@ export class CommandDispatcher {
               { role: 'user', content: prompt },
             ],
           });
-          return textOnly(`🧪 *Hasil Uji NVIDIA (${out.alias} — ${out.modelId}):*\n${out.text}`);
+          return textOnly(`🧪 *Hasil uji ${out.alias === 'luna' ? 'OpenAI' : 'NVIDIA'}*\nModel: ${out.modelId}\n\n${out.text}`);
         } catch (e) {
-          return textOnly('⚠️ Uji NVIDIA gagal. Periksa konfigurasi provider.');
+          return textOnly('⚠️ Uji AI gagal. Periksa mode dan kredensial melalui .ai models.');
         }
       }
 
