@@ -2,7 +2,7 @@
 
 Pemeriksaan 10 November 2026. Entry point TypeScript di src/index.ts menghubungkan adapter whatsapp-web.js, CommandDispatcher, ModelRouter, OutboundGate dan worker Prisma/PostgreSQL. package.json dan lockfile menggunakan Cheerio untuk HTML. Proyek memiliki blueprint keamanan, katalog perintah, dokumentasi deployment dan pengujian di tests serta scripts/command-catalog.mjs.
 
-User menyimpan e164/JID tetapi tidak memiliki NIM. Daftar anggota kelas di FunAndUtilityService memiliki nama dan NIM tetapi tidak membuktikan kepemilikan nomor WhatsApp. Pengikatan nomor dan NIM perlu registrasi terpisah oleh owner. Password admin bot bukan kredensial LMS.
+User menyimpan e164/JID tetapi tidak memiliki NIM. Daftar anggota kelas di FunAndUtilityService memiliki nama dan NIM tetapi tidak membuktikan kepemilikan nomor WhatsApp. Pengikatan mandiri kini memakai verifikasi login portal sebelum menyimpan pasangan nomor pengirim dan NIM. Password admin bot bukan kredensial LMS.
 
 Drive memiliki otorisasi berbasis chat dan service account. Izin tersebut tidak berlaku untuk dokumen LMS pribadi. Ekstraktor src/modules/materials/extract.ts mendukung teks, PDF, dan OCR via Poppler/Tesseract. Lampiran dikirim memakai kontrak media WhatsApp yang sudah ada. systemd sudah mengelola proses dan backup PostgreSQL.
 

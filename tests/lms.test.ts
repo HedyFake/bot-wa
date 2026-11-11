@@ -43,6 +43,10 @@ describe('LMS privat',()=>{
     expect(wa.sent).toHaveLength(0);
     expect(await bot.handleInbound({...base,chatType:'private',chatJid:base.senderJid,providerMessageId:'p',text:'@bot buka lms hedy materi gerontik'})).toBe('LMS privat');
     expect(handle).toHaveBeenCalledTimes(1);
+    const info=await bot.handleInbound({...base,chatType:'group',chatJid:'kelas@g.us',providerMessageId:'g2',text:'.lms hedy'});
+    expect(info).toContain('chat pribadi');
+    expect(handle).toHaveBeenLastCalledWith(expect.objectContaining({chatType:'private',chatJid:'6281234567890@s.whatsapp.net'}),'hedy',false);
+    expect(wa.sent.at(-1)?.text).not.toContain('LMS privat');
     expect(ai).not.toHaveBeenCalled();
   });
   it('memvalidasi struktur PPTX dan DOCX serta tanggal Indonesia dalam WIB',async()=>{
@@ -100,7 +104,7 @@ describe('LMS privat',()=>{
     expect(()=>unseal(key,'B',cipher)).toThrow();
   });
   it('menegakkan izin, mengirim PDF hanya ke DM, memulihkan antrean dan menghapus sesi saat logout',async()=>{
-    const a:LmsAccount={phone,nim,alias:'hedy',consentAt:null,aiConsent:false,encrypted:null,revision:0,paused:false,notify:false,nextSyncAt:new Date(0),failures:0,loginAttempts:0,loginAfter:null};
+    const a:LmsAccount={phone,nim,alias:'hedy',consentAt:null,aiConsent:false,encrypted:null,autoLogin:null,revision:0,paused:false,notify:false,nextSyncAt:new Date(0),failures:0,loginAttempts:0,loginAfter:null};
     const update=(data:Record<string,unknown>)=>{for(const [k,v] of Object.entries(data)){
       const row=a as unknown as Record<string,unknown>;
       row[k]=v && typeof v==='object' && 'increment' in v?Number(row[k])+Number(v.increment):v;
@@ -137,7 +141,7 @@ describe('LMS privat',()=>{
     expect(dashboard).toContain('Kuis Aktif: 0');expect(dashboard).toContain('Gerontik · KGER.4');
     expect(await send('hedy dosen gerontik')).toContain('Dosen Uji');
     expect(a.encrypted).not.toContain('secret');
-    expect(await send('hedy materi','+62888888888')).toContain('belum terdaftar');
+    expect(await send('hedy materi','+62888888888')).toContain('Hubungkan akun LMS sekali');
     expect(await send('hedy materi gerontik')).toContain('Latihan A');
     expect(await send('hedy materi list KGER.4')).toContain('Latihan A');
     expect(pdfRequests).toBe(0);
@@ -152,6 +156,39 @@ describe('LMS privat',()=>{
     const morning=new Date('2026-11-10T02:00:00Z');await svc.tick(morning);await svc.tick(morning);
     expect(wa.sent.filter(m=>m.text.includes('Perubahan LMS'))).toHaveLength(1);
     expired=true;await svc.tick(morning);expect(a.encrypted).toBeNull();
+    expired=false;
+    expect(await send('hedy hubungkan secret')).toContain('Dashboard LMS');
+    expect(a.autoLogin).toBeTruthy();expect(a.autoLogin).not.toContain('secret');
+    expired=true;await svc.tick(morning);expect(a.encrypted).toBeNull();
+    svc=service();expired=false;
+    expect(await send('hedy')).toContain('Dashboard LMS');
     await send('hedy logout');expect(a.consentAt).toBeNull();expect(a.paused).toBe(true);
+    expect(a.autoLogin).toBeNull();
+  });
+  it('mengikat nomor pengirim setelah portal menerima password dan memverifikasi NIM', async()=>{
+    const create=vi.fn(async({data})=>({...data,revision:0}));
+    const db={auditLog:{create:vi.fn(),count:async()=>0},lmsAccount:{findUnique:async()=>null,create}} as unknown as PrismaClient;
+    const http:typeof fetch=async(url,init)=>{
+      if(init?.method==='POST'){
+        const fields=new URLSearchParams(String(init.body));
+        expect(fields.get('username')).toBe(nim);
+        if(fields.get('password')!=='fixture')return html(form);
+        return new Response(null,{status:302,headers:{location:demo,'set-cookie':'ci_session=fixture; Secure'}});
+      }
+      return html(String(url)===demo?portal:new URL(String(url)).pathname==='/'?form:classroom(''));
+    };
+    const wa=new MockWhatsAppProvider();await wa.connect();
+    const service=new LmsService(db,Buffer.alloc(32,1),new ModelRouter({}),new OutboundGate({provider:wa,outboundEnabled:true,dryRun:false}),
+      1800_000,1_000_000,c=>new LmsClient(c,http));
+    let sequence=0;
+    const send=(input:string)=>service.handle({chatType:'private',chatJid:phone,senderJid:phone,receivedAt:new Date(),text:'.lms '+input,providerMessageId:String(++sequence)},input,false);
+    expect(await send('hedy')).toContain('hubungkan <password LMS>');
+    expect(await send('namaasing')).toContain('hubungkan-nim');
+    expect(await send('hedy hubungkan salah')).toContain('belum terverifikasi');
+    expect(create).not.toHaveBeenCalled();
+    expect(await send('hedy hubungkan fixture')).toContain('Dashboard LMS');
+    const saved=create.mock.calls[0]![0].data;
+    expect(saved).toMatchObject({phone,nim,alias:'hedy'});
+    expect(saved.autoLogin).toBeTruthy();expect(JSON.stringify(saved)).not.toContain('fixture');
   });
 });

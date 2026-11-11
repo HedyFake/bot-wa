@@ -22,6 +22,12 @@ describe('percakapan, referensi, dan musik', () => {
     const router = new ModelRouter({transport:{complete:async()=>({content:'{"command":"relay","args":"kirim abc"}'})}});
     expect((await inferIntent('HdyBot bagaimana kabarmu?',router)).command).toBe('unknown');
   });
+  it('merutekan permintaan media dan kuis bertema dari katalog; mutasi perlu ketikan eksplisit', async()=>{
+    const infer=(command:string,args:string,input:string)=>inferIntent(input,new ModelRouter({openai:{complete:async()=>({content:JSON.stringify({command,args})})}}));
+    expect((await infer('qr','kelas','buatkan gambar QR bertuliskan kelas')).command).toBe('media.qr');
+    expect((await infer('game','ai anatomi','buat permainan tentang anatomi')).args).toEqual(['ai','anatomi']);
+    expect((await infer('tugas','del TUG-2','ceritakan tugas yang lalu')).command).toBe('unknown');
+  });
   it('menghitung satuan secara eksplisit dan meminta data tetes yang belum diberikan', () => {
     expect(nursingCalculation('tetesan','500 ml 6 jam')).toContain('tambahkan faktor');
     expect(nursingCalculation('tetesan','500 ml 6 jam 20 tetes/ml')).toContain('28 tetes/menit');

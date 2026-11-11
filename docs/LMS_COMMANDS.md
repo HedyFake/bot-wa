@@ -1,11 +1,11 @@
 # Command LMS di WhatsApp
 
-## Mulai dari DM
+## Mulai dari chat pribadi atau grup
 
-1. Owner yang sudah login mengonfirmasi pemilik nomor dan NIM. Di DM bot jalankan `.lms daftar <nomor> <NIM> <alias>`. Misalnya alias hedy. Data mahasiswa lain tidak dapat dibaca dengan mengubah alias.
-2. Mahasiswa memakai nomor tersebut untuk mengirim `.lms hedy setuju`, kemudian `.lms hedy login <password LMS>`. Password LMS dan password admin bot adalah dua kredensial terpisah. Hapus pesan kredensial dari riwayat WhatsApp setelah login.
-3. Gunakan `.lms hedy` atau `.lms hedy dashboard`. Tanggal pemeriksaan dalam WIB. `.lms hedy status` menampilkan status lokal.
-4. Untuk mencabut sesi, cache dan izin AI gunakan `.lms hedy logout`, `.lms hedy cabut` atau `.lms hedy hapus`.
+1. Ketik `.lms hedy` dari WhatsApp milikmu. Ganti `hedy` dengan nama panggilanmu. Dari grup, bot mengirim petunjuk atau hasil ke DM pengirim.
+2. Pada penggunaan pertama, baca persetujuan di DM. Jika namamu cocok dengan satu anggota daftar kelas, ketik `.lms hedy hubungkan <password LMS>` **di DM bot**. Jika namamu belum tercatat atau cocok dengan beberapa orang, gunakan `.lms <nama> hubungkan-nim <NIM sendiri> <password LMS>` sekali. Bot mengambil nomor dari WhatsApp dan memverifikasi NIM melalui dashboard kampus sebelum menyimpan ikatan akun.
+3. Setelah terhubung, ketik `.lms hedy` untuk membuka dashboard. Bot memakai sesi tersimpan dan bisa masuk ulang saat sesi berakhir. Perintah `hubungkan` mengizinkan penyimpanan password terenkripsi. Hapus pesan password di WhatsApp setelah login. Alur lama `setuju` dan `login` masih tersedia untuk akun terdaftar yang memilih penyimpanan sesi saja.
+4. Ketik `.lms hedy logout` di DM untuk menghapus kredensial, sesi, cache dan izin. Pengelolaan akun serta izin AI dilakukan di DM. Dari grup, kamu bisa meminta dashboard, daftar materi, tugas, kuis dan dokumen. Bot mengirim hasil ke nomor pengirim.
 
 ## Penelusuran
 

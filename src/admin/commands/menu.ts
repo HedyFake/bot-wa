@@ -13,6 +13,7 @@ const catalog: [string, string[]][] = [
 catalog[1]![1].push('jadwal senin','jadwal export csv');
 catalog[2]![1].push('drive files','askep <topik>','pengkajian <topik>','penunjang','ukom','kampus','kuisukom','highalert','safety','berita','ppni','mtb','ebook','imt <kg> <cm>','gcs E4 V5 M6','balance <masuk> <keluar>','tetesan 500 ml 6 jam 20 tetes/ml');
 catalog[3]![1].push('privacy gamification on');
+catalog[3]![1].push('game ai <topik>');
 catalog[4]![1].push('blur','resize <lebar> <tinggi>');
 catalog[5]![1].push('quotes [tema]','apakah <pertanyaan>','hilih <teks>');
 catalog[6]![1].push('ai models','ai model <alias>','ai auto on','ai test <pesan>','groups sources','groups add <JID> <nama>','groups pause <JID>','groups resume <JID>','nimbrung status','filter status','filter review','digest today','broadcast preview <ID>','broadcast send <ID>','reminder pause','reminder resume','admin pause','admin resume');
@@ -32,13 +33,21 @@ const pages = catalog.map(([title, usages]) => ({
 }));
 
 export function menuPage(page: string | undefined, admin: boolean, help = false, driveAllowed = false, scheduleWritable = false): string {
-  const sections = pages.filter(section => admin || !section.title.startsWith('🔐')).map(({title,entries}) => ({
+  const sections = availableSections(admin,driveAllowed,scheduleWritable);
+  return renderMenu(sections,page,help);
+}
+
+export function availableSections(admin:boolean,driveAllowed:boolean,scheduleWritable:boolean) {
+  return pages.filter(section => admin || !section.title.startsWith('🔐')).map(({title,entries}) => ({
     title, entries: entries.filter(({parsed}) => {
       if (['schedule.add','schedule.edit','schedule.delete','schedule.reset'].includes(parsed.command) && !scheduleWritable) return false;
       if (['download','document.ask','document.summary','drive.files'].includes(parsed.command) && !driveAllowed) return false;
       return parsed.command !== 'unknown' && (!parsed.adminOnly || admin);
     }),
   })).filter(section => section.entries.length);
+}
+
+function renderMenu(sections:ReturnType<typeof availableSections>,page:string|undefined,help:boolean) {
   if (help && page) {
     const query = parseCommand('.' + page.replace(/^\./,''));
     const matches = sections.flatMap(section => section.entries).filter(({parsed}) => parsed.command === query.command);

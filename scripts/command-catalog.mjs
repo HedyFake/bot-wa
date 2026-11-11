@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { mock } from 'node:test';
 import { parseCommand, commandRegistry } from '../dist/admin/commands/parser.js';
-import { menuPage } from '../dist/admin/commands/menu.js';
+import { availableSections, menuPage } from '../dist/admin/commands/menu.js';
+import { commandGuide, lmsGuide } from './command-guide.mjs';
+import CFB from 'cfb';
 import { CommandDispatcher } from '../dist/admin/commands/dispatcher.js';
 import { AdminAuthenticator } from '../dist/admin/authentication/authenticator.js';
 import { ConfirmationManager } from '../dist/admin/authorization/confirmation.js';
@@ -43,14 +45,22 @@ globalThis.fetch = async (url) => {
   return new Response(null,{status:503});
 };
 const config = loadConfig({ OWNER_WHATSAPP:'6280000000000', GOOGLE_DRIVE_ALLOWED_CHATS:owner, WHATSAPP_PRIMARY_GROUP_JID:group });
+const slides=CFB.utils.cfb_new();
+CFB.utils.cfb_add(slides,'[Content_Types].xml',Buffer.from('<Types/>'));
+CFB.utils.cfb_add(slides,'ppt/presentation.xml',Buffer.from('<p:presentation/>'));
+const slidesBytes=CFB.write(slides,{type:'buffer',fileType:'zip'});
 const drive = new DriveCatalog('ROOT',async()=>'test',async input=>{
   const url = new URL(String(input));
   if (url.pathname.endsWith('/ROOT')) return Response.json({mimeType:'application/vnd.google-apps.folder'});
   if (url.searchParams.has('alt')) return new Response(docText);
-  return Response.json({files:[{id:'M1',name:'Metode belajar.txt',mimeType:'text/plain',modifiedTime:'2026-11-08T00:00:00Z',capabilities:{canDownload:true}}]});
+  if(url.pathname.endsWith('/M2/export'))return new Response(slidesBytes);
+  return Response.json({files:[{id:'M1',name:'Metode belajar.txt',mimeType:'text/plain',modifiedTime:'2026-11-08T00:00:00Z',capabilities:{canDownload:true}},
+    {id:'M2',name:'Presentasi kelas',mimeType:'application/vnd.google-apps.presentation',capabilities:{canDownload:true}}]});
 });
 await drive.sync();
-const router = () => new ModelRouter({transport:{complete:async()=>({content:'Contoh respons NVIDIA untuk pengujian format.'})}});
+const router = () => new ModelRouter({transport:{complete:async req=>({content:String(req.messages[0]?.content).startsWith('Buat satu kuis belajar')
+  ? JSON.stringify({prompt:'Organ apa yang memompa darah?',answer:'jantung',hint:'Terletak di rongga dada.',explanation:'Jantung memompa darah ke seluruh tubuh.',level:'easy'})
+  : 'Contoh respons NVIDIA untuk pengujian format.'})}});
 let seq = 0;
 const example = (names, args='', note='') => ({ names:names.split('/'), args, note });
 const groups = [];
@@ -172,23 +182,39 @@ async function run(name,row) {
   return { key:parsed.command, output:sent.text+attachment, admin:parsed.adminOnly };
 }
 
-const descriptions = {
-  'Kelas, profil, dan jadwal':'Cari anggota dan dosen, lihat jadwal mingguan atau per tanggal, serta ekspor jadwal. Admin dapat mengubah slot lewat DM. Pratinjau terikat pada versi jadwal; konfirmasi membuat backup dan audit dalam transaksi PostgreSQL yang sama.',
-  'Tugas, catatan, dan pengingat':'Tambah dan selesaikan tugas berdasarkan ID. Filter hari dan minggu mengikuti WIB. Notifikasi tenggat baru dan pengingat harian H−3 sampai hari H masuk ke DM Hedy. Hedy memilih grup lalu mengonfirmasi teks sebelum pengiriman. Pengingat disimpan per chat oleh worker PostgreSQL pada produksi. Contoh lokal memakai pengingat JSON untuk kompatibilitas.',
-  'Materi, Drive, jurnal, dan AI':'Telusuri folder kelas, ambil file, atau tanyakan isi dokumen dengan rujukan. Pengiriman dokumen dibatasi ke chat yang disetujui owner. Perintah AI umum, ringkasan, kuis, kartu belajar, dan terjemahan juga tersedia.',
-  'Keperawatan dan Perawat.org':'Pencarian kategori mengembalikan artikel dan tautan sumber. Kalkulator menghitung langsung dari nilai dan satuan yang diberikan. Contoh artikel, cuaca, dan jawaban AI dalam katalog menggunakan data uji.',
-  'Media, musik, dan dokumen':'Balas gambar/stiker untuk konversi. Dokumen izin dan notulensi berupa draf teks; perintah PDF, QR, kartu ucapan dan kartu jadwal mengirim lampiran. TTS memerlukan espeak-ng. SoundCloud menyediakan tautan; koleksi MP3 lokal berizin dapat dikirim sebagai dokumen.',
-  'Utilitas dan hiburan':'Hitung IPK, BMI, ekspresi matematika, dan konversi satuan; cari cuaca, artikel, atau waktu salat. Kurs bawaan menggunakan angka referensi statis. URL check memeriksa format dan tujuan alamat. Alias shortlink tidak membuat tautan pendek.',
-  'Permainan, XP, dan statistik':'Setiap chat memiliki sesi sendiri. Buat ruang untuk memilih peserta, level dan batas waktu. Jawaban benar menghasilkan XP bagi peserta yang mengaktifkan gamifikasi. Riwayat, skor, status AFK dan mode grup disimpan dalam state lokal.',
-  'Grup, persetujuan, dan operasional':'Pantau koneksi, AI, database, worker dan log melalui DM admin. Mode grup memerlukan owner atau admin grup. Persetujuan dan pengiriman relay lintas grup hanya dapat dijalankan oleh owner lewat DM.',
-};
+groups.find(g=>g.title==='Permainan, XP, dan statistik').rows.push(example('game ai','anatomi jantung'));
+groups.find(g=>g.title==='Materi, Drive, jurnal, dan AI').rows.push(example('download','M2 pptx','Untuk Google Slides, tambahkan pptx agar bot mengirim PowerPoint. Tanpa pilihan format, ekspornya PDF.'));
+const cell = value => String(value).replaceAll('|','\\|').replaceAll('\n',' ');
 const covered = new Set(), heads = new Set();
 const buffer = ['## Katalog perintah dan contoh balasan','',
-  'Klik kategori untuk membuka transkrip. Setiap baris menampilkan contoh ketikan, alias, akses, dan balasan dari dispatcher melalui WhatsApp mock. Baris lampiran menunjukkan jenis file yang dihasilkan. Alias sebaris memakai contoh dari ejaan pertama.',
+  'Salin contoh dari kolom **Pesan WhatsApp**. Ganti nama, tanggal, kota, atau ID dengan datamu. Tanda pipa memisahkan kolom dalam satu pesan. Alias dalam satu baris menerima argumen yang sama. Di bawah tiap tabel, buka contoh balasan untuk melihat teks dan jenis lampirannya.',
   '', 'Contoh memakai Senin, 9 November 2026 pukul 07.30 WIB. Identitas, nonce, dan beberapa nilai yang berubah disamarkan. Respons NVIDIA, HTTP, serta dokumen Drive berasal dari fixture. Pratinjau jadwal memakai kelas uji tanpa menulis database. Program OS seperti OCR/TTS memerlukan instalasi di host. Balasan konfigurasi menunjukkan prasyarat. Pengujian PostgreSQL terisolasi tersedia melalui scripts/check-schedule-db.mjs.',
   '', 'Percakapan grup juga mengenali mention, nama bot, dan kutipan. Misalnya, “HdyBot, jadwal besok?” menjalankan rute jadwal. Pertanyaan bebas mendapat jawaban percakapan yang mengutip pengirim. Grup sumber mengirim pratinjau ke DM owner. Kutip pratinjau dan balas **ya** untuk mengirim teks yang disetujui atau **tidak** untuk menolak.', ''];
-for (const {title,rows} of groups) {
-  buffer.push('<details>', '<summary><strong>'+title+'</strong></summary>','',descriptions[title],'');
+const sections = availableSections(true,true,true).map(section=>({...section,rows:[]}));
+for (const row of groups.flatMap(g=>g.rows)) {
+  const query = parseCommand('.'+row.names[0]+' '+row.args);
+  const section = sections.find(s=>s.entries.some(e=>e.parsed.command===query.command && e.parsed.args[0]===query.args[0])) ??
+    sections.find(s=>s.entries.some(e=>e.parsed.command===query.command));
+  assert.ok(section,'Tidak ada halaman menu untuk '+row.names[0]);
+  section.rows.push(row);
+}
+const descriptions = [
+  'Data kelas berasal dari daftar dan jadwal yang dikonfigurasi di bot.',
+  'Gunakan waktu WIB. Pemberitahuan deadline H−3 hingga hari H masuk ke DM owner untuk ditinjau.',
+  'Akses Drive mengikuti izin chat. Jawaban LMS pribadi memerlukan izin mahasiswa. Gunakan satuan yang tercantum untuk kalkulator.',
+  'Mainkan ronde dan kirim jawaban di chat yang sama. XP dan peringkat mengikuti pengaturan privasi.',
+  'Kirim gambar atau stiker dengan caption perintah, atau balas pesan lampiran dengan perintah yang sesuai.',
+  'Contoh berikut menggunakan input uji. Untuk cuaca, musik dan ensiklopedia, hasil langsung bergantung pada layanan terkait.',
+  'Gunakan DM dari nomor admin terverifikasi. Baca tujuan dan isi pada pratinjau sebelum memberikan kode konfirmasi.',
+  'Gunakan DM dari nomor mahasiswa yang didaftarkan oleh owner.'
+];
+buffer.push('| Halaman menu admin | Panduan |','| --- | --- |',
+  ...sections.map((s,i)=>'| `.menu '+(i+1)+'` | ['+s.title+'](#panduan-menu-'+(i+1)+') |'),'',
+  'Nomor halaman di chat mengikuti izin kamu. Halaman administrasi tersedia di DM admin.','');
+for (const [page,{title,rows}] of sections.entries()) {
+  buffer.push('<a id="panduan-menu-'+(page+1)+'"></a>','','### '+title,'',descriptions[page],'',
+    '| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |','| --- | --- | --- | --- |');
+  const transcripts=[];
   for (const row of rows) {
     const names = expand(row);
     let first;
@@ -201,11 +227,16 @@ for (const {title,rows} of groups) {
     }
     const sample = '.' + names[0] + (row.args ? ' '+row.args.replaceAll('METPEN',seed.courses[0].code) : '');
     const access = first.admin ? 'DM admin terverifikasi' : first.key === 'group.nimbrung' ? 'Owner atau admin grup' : 'Pengguna';
-    buffer.push('**'+sample.replaceAll('*','\\*')+'**', '', access + (names.length>1 ? ' · Alias: '+names.slice(1).map(n=>'`.'+n+'`').join(', ') : '') + (row.note ? ' · '+row.note : ''), '');
+    const guide=commandGuide(sample.slice(1));
+    const place=first.key==='relay' || /^tugas (antrean|grup|tujuan|tolak|ulang|deadline)/.test(names[0]) ? 'DM owner' :
+      first.key==='lms' ? 'DM atau grup, hasil ke DM' : access;
+    buffer.push('| '+[names.map(n=>'`.'+n+'`').join(', '),guide.purpose,'`'+sample+'`',guide.usage+' '+(row.note?row.note+' ':'')+'**'+place+'**'].map(cell).join(' | ')+' |');
+    transcripts.push('**'+sample.replaceAll('*','\\*')+'**', '');
     let answer = first.output.replace(/(Ruang tersedia: )[\d,.]+ GiB/g,'$1<ruang disk> GiB').replace(/(RAM (?:proses|proses saat ini): )[\d,.]+ MiB/g,'$1<RAM> MiB').replaceAll(owner,'<JID pengguna>').replaceAll(config.OWNER_WHATSAPP,'<nomor owner>').replace(/\b[0-9A-F]{8}\b/g,'<nonce>').replace(/\b(?:08|628)\d{7,13}\b/g,'<nomor privat>');
-    buffer.push('~~~~text',answer.split('\n').map(line=>line.trimEnd()).join('\n').trimEnd(),'~~~~','');
+    transcripts.push('~~~~text',answer.split('\n').map(line=>line.trimEnd()).join('\n').trimEnd(),'~~~~','');
   }
-  buffer.push('</details>','');
+  if(rows.some(row=>row.names.includes('lms'))) buffer.push('', ...lmsGuide());
+  buffer.push('','<details>','<summary>Contoh balasan · '+title+'</summary>','',...transcripts,'</details>','');
 }
 buffer.push('<details>', '<summary><strong>Percakapan grup dan pratinjau relay</strong></summary>', '');
 const groupWa = new MockWhatsAppProvider(); await groupWa.connect();

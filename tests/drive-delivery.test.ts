@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import CFB from 'cfb';
+import { PDFDocument } from 'pdf-lib';
 import { loadConfig } from '../src/config/env.js';
 import { AdminAuthenticator } from '../src/admin/authentication/authenticator.js';
 import { ConfirmationManager } from '../src/admin/authorization/confirmation.js';
@@ -18,12 +20,32 @@ describe('pengiriman dokumen melalui dispatcher', () => {
     await wa.connect();
     let accessible = true;
     let calls = 0;
+    const pdf=await PDFDocument.create();pdf.addPage();
+    const presentation=CFB.utils.cfb_new();
+    CFB.utils.cfb_add(presentation,'PowerPoint Document',Buffer.from([0,0,232,3,0,0,0,0]));
+    CFB.utils.cfb_add(presentation,'Current User',Buffer.from('fixture'));
+    const ppt=CFB.write(presentation,{type:'buffer',fileType:'cfb'});
+    const office=CFB.utils.cfb_new();
+    CFB.utils.cfb_add(office,'[Content_Types].xml',Buffer.from('<Types/>'));
+    CFB.utils.cfb_add(office,'ppt/presentation.xml',Buffer.from('<p:presentation/>'));
+    const pptx=CFB.write(office,{type:'buffer',fileType:'zip'});
+    const pptxMime='application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    const files=[
+      {id:'abc',name:'Modul.pdf',mimeType:'application/pdf',bytes:Buffer.from(await pdf.save())},
+      {id:'ppt',name:'Slide.ppt',mimeType:'application/vnd.ms-powerpoint',bytes:ppt},
+      {id:'pptx',name:'Slide.pptx',mimeType:pptxMime,bytes:pptx},
+      {id:'slides',name:'Slide Google',mimeType:'application/vnd.google-apps.presentation',bytes:pptx},
+    ];
     const drive = new DriveCatalog('ROOT', async () => 'fixture', async input => {
       calls++;
       const url = new URL(String(input));
       if (url.pathname.endsWith('/ROOT')) return Response.json({ mimeType: 'application/vnd.google-apps.folder' });
-      if (url.searchParams.has('alt')) return new Response('%PDF-test');
-      return Response.json({ files: accessible ? [{ id: 'abc', name: 'Modul.pdf', mimeType: 'application/pdf', capabilities: { canDownload: true } }] : [] });
+      if (url.pathname.endsWith('/slides/export')) {
+        expect(url.searchParams.get('mimeType')).toBe(pptxMime);
+        return new Response(new Uint8Array(pptx));
+      }
+      if (url.searchParams.has('alt')) return new Response(new Uint8Array(files.find(f=>url.pathname.endsWith('/'+f.id))!.bytes));
+      return Response.json({files:accessible?files.map(({id,name,mimeType})=>({id,name,mimeType,capabilities:{canDownload:true}})):[]});
     });
     const delivery: string[] = [];
     const dispatcher = new CommandDispatcher({ config, whatsapp: wa, drive,
@@ -44,6 +66,14 @@ describe('pengiriman dokumen melalui dispatcher', () => {
     await dispatcher.handleInbound(message('c', group));
     expect(delivery).toEqual(['sent', 'failed']);
     expect(wa.sent.at(-1)?.text).toContain('belum terkirim');
+    for(const f of files){
+      const slide=f.id==='slides';
+      await dispatcher.handleInbound({...message('attachment-'+f.id,group),text:'.download '+f.id+(slide?' pptx':'')});
+      const attachment=wa.sent.at(-1)?.media;
+      expect(attachment).toMatchObject({asDocument:true,mimeType:slide?pptxMime:f.mimeType,
+        filename:slide?'Slide Google.pptx':f.name});
+      expect(Buffer.compare(attachment!.data,Buffer.from(f.bytes))).toBe(0);
+    }
     accessible = false;
     expect(await dispatcher.handleInbound(message('d', group))).toContain('tidak ditemukan');
     expect(wa.sent.at(-1)?.media).toBeUndefined();

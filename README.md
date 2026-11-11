@@ -3,11 +3,13 @@
 Versi revisi 10 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Menu .keperawatan memakai Perawat.org, dan .music mencari SoundCloud. Untuk fitur aktif, batas pengujian, konfigurasi Drive, dan pemulihan, lihat [laporan implementasi](IMPLEMENTATION_STATUS.md) dan [audit proyek](PROJECT_AUDIT.md). Installer memakai systemd dan memakai password admin default `hedyfake`. QR hanya ditampilkan lewat akses lokal privat.
 
 > **Asisten AI WhatsApp Akademik, Sekretaris Kelas Digital, & Pengelola Informasi Grup Cerdas (24/7 Daemon)**  
-> Dirancang khusus untuk **Nursing Class A (S1 Ilmu Keperawatan — Semester 5A)** dengan pusat kendali penuh melalui WhatsApp pribadi **Hedy (`082233038659`)** dan ditenagai oleh **NVIDIA Nemotron Auto-Router AI**.
+> Dirancang khusus untuk **Nursing Class A (S1 Ilmu Keperawatan — Semester 5A)** dengan pusat kendali penuh melalui WhatsApp pribadi **Hedy (`082233038659`)** dengan **OpenAI sebagai penyedia AI utama** dan **NVIDIA sebagai cadangan** untuk teks dan gambar dalam mode otomatis.
 
 ---
 
 [Buka katalog perintah dan contoh balasan](#katalog-perintah-dan-contoh-balasan) · [Pengujian dan batas verifikasi](IMPLEMENTATION_STATUS.md)
+
+Di grup, sebut atau tag HdyBot untuk meminta fitur dengan bahasa sehari-hari, misalnya “HdyBot, buatkan kuis tentang anatomi jantung”. Di DM, langsung tulis permintaanmu. Perintah bertitik seperti `.jadwal senin` langsung memakai handler jadwal. Tindakan admin, perubahan data sensitif dan penerusan ke grup mengikuti pemeriksaan izin dan konfirmasi masing-masing. Data fitur disimpan melalui layanan aplikasi. Perubahan struktur database mengikuti migrasi Prisma.
 
 ## 📋 1. Identitas & Konfigurasi Inti Proyek
 
@@ -21,7 +23,7 @@ Versi revisi 10 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Men
 | **📲 Nomor WA Bot** | **Bebas / Random / Dinamis** | Bisa ganti nomor kapan saja cukup scan QR baru |
 | **🏥 Grup Utama (Target)** | **Nursing Class A** (Semester 5A) | Grup tujuan pengumuman & asisten kelas |
 | **📡 Grup Sumber Otomatis** | **PJMK Semester 5** | JID terdaftar. Pesan penting menunggu persetujuan Hedy melalui DM |
-| **🧠 Mesin AI Utama** | **NVIDIA Nemotron Auto-Router** | `lightning` (30B), `super-vl` (120B Vision), `ultra` (550B) |
+| **🧠 Mesin AI Utama** | **OpenAI dan NVIDIA** | Mode otomatis mengutamakan GPT-6 Luna untuk teks dan gambar. |
 | **🌏 Zona Waktu & Bahasa** | `Asia/Jakarta` (WIB) — Bahasa Indonesia (`id-ID`) | Akurat lintas tengah malam UTC |
 | **🛡️ Keamanan VPS** | **Tanpa `ufw` & Tanpa `fail2ban` & Tanpa Port HTTP** | Installer tidak mengubah akses SSH. Monitoring melalui WhatsApp privat |
 
@@ -35,7 +37,7 @@ Anggota dapat mengetik perintah titik atau menandai HdyBot dan mengajukan pertan
 
 ### Autentikasi dan router AI
 
-Admin yang terdaftar membuka sesi lewat DM untuk perintah terbatas dan menguncinya dengan .logout. Router NVIDIA memilih model berdasarkan tugas dan modalitas. OCR lokal menggunakan Tesseract. Perubahan model memerlukan perintah admin tersendiri.
+Admin yang terdaftar membuka sesi lewat DM untuk perintah terbatas dan menguncinya dengan .logout. Router memilih model sesuai tugas, jenis masukan dan ketersediaan penyedia. OCR lokal menggunakan Tesseract. Perubahan model memerlukan perintah admin tersendiri.
 
 ## 🌟 3. Penjelasan Rinci Fitur Operasional Unggulan
 
@@ -45,7 +47,7 @@ Contoh: `.menu`, `@HdyBot jadwal besok?`, `.keperawatan`, `.sdki nyeri akut`, da
 
 ### LMS mahasiswa
 
-Di DM, ketik `.lms help` untuk menghubungkan akun pribadi. Owner perlu mendaftarkan pasangan nomor dan NIM terlebih dahulu. Installer menyiapkan kunci enkripsi untuk sesi dan menjalankan migrasi PostgreSQL. Lihat [panduan command LMS](docs/LMS_COMMANDS.md) dan [status pengujian](LMS_IMPLEMENTATION_STATUS.md).
+Ketik `.lms hedy` di DM atau grup untuk membuka LMS sendiri. Saat pertama kali, hubungkan akun lewat DM. Nomor berasal dari WhatsApp dan nama yang unik di daftar kelas menentukan NIM. Untuk penggunaan berikutnya, cukup ketik nama. Hasil dan file dikirim lewat DM. Installer menyiapkan kunci enkripsi untuk sesi dan menjalankan migrasi PostgreSQL. Lihat [panduan command LMS](docs/LMS_COMMANDS.md) dan [status pengujian](LMS_IMPLEMENTATION_STATUS.md).
 
 ### Model AI otomatis
 
@@ -71,7 +73,7 @@ Pada 10 November 2026, NVIDIA menampilkan Kimi K3.1 Pro sebagai preview tanpa ak
 
 ### Tugas, tenggat, dan pengingat H−3 sampai hari H
 
-HdyBot memeriksa pesan penugasan atau tenggat di grup kelas, grup PJMK, dan grup sumber yang admin daftarkan melalui `.groups add <JID> <nama>`, serta DM Hedy yang sudah terautentikasi. NVIDIA membedakan pengumuman dari obrolan. Tugas hasil deteksi masuk ke antrean privat. Jika tanggal, dosen, atau PJ tidak disebutkan, bot menandainya belum tercatat. Pesan biasa tidak memicu pengumuman ke grup.
+HdyBot memeriksa pesan penugasan atau tenggat di grup kelas, grup PJMK, dan grup sumber yang admin daftarkan melalui `.groups add <JID> <nama>`, serta DM Hedy yang sudah terautentikasi. Router AI membantu membedakan pengumuman dari obrolan. Tugas hasil deteksi masuk ke antrean privat. Jika tanggal, dosen, atau PJ tidak disebutkan, bot menandainya belum tercatat. Pesan biasa tidak memicu pengumuman ke grup.
 
 Contoh penambahan manual: `.tugas add Keperawatan Gerontik|Makalah lansia|2026-11-16 14:00|Presentasi kelompok|Ibu Sari|Ani`. Gunakan `.tugas detail TUG-3` untuk membaca satu tugas. Hedy menerima pengingat pribadi pada H−3, H−2, H−1, dan hari H. Misalnya, untuk tenggat Senin 16 November pukul 14.00 WIB, pengingat datang tanggal 13, 14, 15, dan 16 November pukul 14.00 WIB. Jika hanya ada tanggal, jadwal hariannya pukul 09.00 WIB. Tugas yang baru tercatat di dalam periode itu langsung diberitahukan. Setelah restart, bot melewati hari yang sudah lewat. Setiap pengiriman ke grup memerlukan konfirmasi baru.
 
@@ -123,7 +125,7 @@ npm install
 # 2. Salin konfigurasi environment
 cp .env.example .env
 
-# 3. Edit .env (pastikan OWNER_WHATSAPP=082233038659, ADMIN_PASSWORD=hedyfake, dan isi NVIDIA_API_KEY)
+# 3. Edit .env (pastikan OWNER_WHATSAPP=082233038659, ADMIN_PASSWORD=hedyfake, dan isi OPENAI_API_KEY serta NVIDIA_API_KEY untuk kedua penyedia)
 nano .env
 
 # 4. Generate Prisma Client & build TypeScript ke folder dist/
@@ -211,20 +213,46 @@ pm2 logs hdybot --lines 100
 <!-- COMMAND-CATALOG -->
 ## Katalog perintah dan contoh balasan
 
-Klik kategori untuk membuka transkrip. Setiap baris menampilkan contoh ketikan, alias, akses, dan balasan dari dispatcher melalui WhatsApp mock. Baris lampiran menunjukkan jenis file yang dihasilkan. Alias sebaris memakai contoh dari ejaan pertama.
+Salin contoh dari kolom **Pesan WhatsApp**. Ganti nama, tanggal, kota, atau ID dengan datamu. Tanda pipa memisahkan kolom dalam satu pesan. Alias dalam satu baris menerima argumen yang sama. Di bawah tiap tabel, buka contoh balasan untuk melihat teks dan jenis lampirannya.
 
 Contoh memakai Senin, 9 November 2026 pukul 07.30 WIB. Identitas, nonce, dan beberapa nilai yang berubah disamarkan. Respons NVIDIA, HTTP, serta dokumen Drive berasal dari fixture. Pratinjau jadwal memakai kelas uji tanpa menulis database. Program OS seperti OCR/TTS memerlukan instalasi di host. Balasan konfigurasi menunjukkan prasyarat. Pengujian PostgreSQL terisolasi tersedia melalui scripts/check-schedule-db.mjs.
 
 Percakapan grup juga mengenali mention, nama bot, dan kutipan. Misalnya, “HdyBot, jadwal besok?” menjalankan rute jadwal. Pertanyaan bebas mendapat jawaban percakapan yang mengutip pengirim. Grup sumber mengirim pratinjau ke DM owner. Kutip pratinjau dan balas **ya** untuk mengirim teks yang disetujui atau **tidak** untuk menolak.
 
-<details>
-<summary><strong>Kelas, profil, dan jadwal</strong></summary>
+| Halaman menu admin | Panduan |
+| --- | --- |
+| `.menu 1` | [📚 Informasi kelas](#panduan-menu-1) |
+| `.menu 2` | [🕒 Jadwal dan tugas](#panduan-menu-2) |
+| `.menu 3` | [🧠 Belajar dan materi](#panduan-menu-3) |
+| `.menu 4` | [🎮 Permainan](#panduan-menu-4) |
+| `.menu 5` | [🎨 Media](#panduan-menu-5) |
+| `.menu 6` | [🛠️ Utilitas](#panduan-menu-6) |
+| `.menu 7` | [🔐 Administrasi](#panduan-menu-7) |
+| `.menu 8` | [🎓 LMS STIKES Husada Jombang](#panduan-menu-8) |
 
-Cari anggota dan dosen, lihat jadwal mingguan atau per tanggal, serta ekspor jadwal. Admin dapat mengubah slot lewat DM. Pratinjau terikat pada versi jadwal; konfirmasi membuat backup dan audit dalam transaksi PostgreSQL yang sama.
+Nomor halaman di chat mengikuti izin kamu. Halaman administrasi tersedia di DM admin.
+
+<a id="panduan-menu-1"></a>
+
+### 📚 Informasi kelas
+
+Data kelas berasal dari daftar dan jadwal yang dikonfigurasi di bot.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.kelas`, `.semester`, `.tahunajaran` | Melihat identitas dan ringkasan kelas. | `.kelas` | Kirim tanpa argumen. **Pengguna** |
+| `.anggota`, `.mahasiswa`, `.nim` | Mencari nama dan NIM anggota kelas. | `.anggota Contoh` | Kosongkan nama untuk daftar lengkap atau tulis potongan nama. **Pengguna** |
+| `.pengurus`, `.ketuakelas`, `.komting`, `.wakilkomting`, `.sekretaris`, `.bendahara`, `.wali`, `.pjmk` | Melihat susunan pengurus dan PJ mata kuliah. | `.pengurus` | Kirim perintah atau pilih alias jabatan. **Pengguna** |
+| `.rules`, `.aturan` | Membaca aturan kelas. | `.rules` | Kirim tanpa argumen. **Pengguna** |
+| `.faq` | Membaca pertanyaan yang sering diajukan. | `.faq` | Kirim tanpa argumen. **Pengguna** |
+| `.matkul` | Melihat daftar mata kuliah beserta jadwal dan pengampu. | `.matkul` | Kirim tanpa argumen. **Pengguna** |
+| `.dosen`, `.nomordosen`, `.kontakdosen` | Melihat kontak dan data pengampu. | `.dosen Contoh` | Tulis nama dosen atau kosongkan untuk daftar. **Pengguna** |
+| `.kalender`, `.agenda` | Melihat agenda akademik. | `.kalender` | Kirim tanpa argumen. **Pengguna** |
+
+<details>
+<summary>Contoh balasan · 📚 Informasi kelas</summary>
 
 **.kelas**
-
-Pengguna · Alias: `.semester`, `.tahunajaran`
 
 ~~~~text
 🏥 *Profil Kelas — Nursing Class A*
@@ -240,15 +268,11 @@ Pengguna · Alias: `.semester`, `.tahunajaran`
 
 **.anggota Contoh**
 
-Pengguna · Alias: `.mahasiswa`, `.nim`
-
 ~~~~text
 ⚠️ Tidak ditemukan anggota kelas dengan kata kunci: *Contoh*. Ketik `.anggota` untuk melihat seluruh 36 mahasiswa.
 ~~~~
 
 **.pengurus**
-
-Pengguna · Alias: `.ketuakelas`, `.komting`, `.wakilkomting`, `.sekretaris`, `.bendahara`, `.wali`, `.pjmk`
 
 ~~~~text
 👥 *PENGURUS KELAS — NURSING CLASS A (Semester 5A)*
@@ -268,8 +292,6 @@ Pengguna · Alias: `.ketuakelas`, `.komting`, `.wakilkomting`, `.sekretaris`, `.
 
 **.rules**
 
-Pengguna · Alias: `.aturan`
-
 ~~~~text
 📜 *Tata Tertib Grup & Penggunaan HdyBot*
 1. Gunakan bahasa yang sopan, jelas, dan saling menghormati sesama mahasiswa & dosen.
@@ -280,8 +302,6 @@ Pengguna · Alias: `.aturan`
 
 **.faq**
 
-Pengguna
-
 ~~~~text
 ❓ *FAQ — HdyBot — Nursing Class A Assistant*
 • *Bagaimana cara cek jadwal kuliah?* Ketik `.jadwal`, `.besok`, atau `.jadwal senin`.
@@ -290,21 +310,7 @@ Pengguna
 • *Bagaimana cara login admin?* Chat pribadi ke bot dari nomor admin (<nomor privat>) lalu balas password ketika diminta.
 ~~~~
 
-**.profile**
-
-Pengguna · Alias: `.me`
-
-~~~~text
-🪪 *Profil Pengguna*
-• JID: `<JID pengguna>`
-• Nama Tampilan: *Mahasiswa 5A*
-• Konteks Chat: *private*
-• Status Admin: *Admin Terotorisasi*
-~~~~
-
 **.matkul**
-
-Pengguna
 
 ~~~~text
 *MATA KULIAH · Semester 5A*
@@ -356,26 +362,68 @@ Total: 22 SKS
 
 **.dosen Contoh**
 
-Pengguna · Alias: `.nomordosen`, `.kontakdosen`
-
 ~~~~text
 📭 Tidak ditemukan nomor dosen dengan kata kunci: *Contoh*. Ketik `.dosen` atau `.nomordosen` untuk daftar lengkap 23 dosen.
 ~~~~
 
-**.groupid**
-
-Pengguna · Alias: `.id`
+**.kalender**
 
 ~~~~text
-🆔 *Informasi Chat/Grup*
-• Chat JID: `<JID pengguna>`
-• Tipe: *private*
-• Pengirim Terdeteksi: `<JID pengguna>`
+🗓️ Belum ada tanggal kalender akademik resmi yang dikonfirmasi di database.
 ~~~~
 
-**.jadwal**
+</details>
 
-Pengguna · Alias: `.schedule`
+<a id="panduan-menu-2"></a>
+
+### 🕒 Jadwal dan tugas
+
+Gunakan waktu WIB. Pemberitahuan deadline H−3 hingga hari H masuk ke DM owner untuk ditinjau.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.jadwal`, `.schedule` | Melihat sesi kuliah hari ini, termasuk jam, dosen dan ruang yang tercatat. | `.jadwal` | Kirim di chat bot atau grup kelas. **Pengguna** |
+| `.jadwal hariini`, `.schedule hariini` | Melihat sesi kuliah hari ini, termasuk jam, dosen dan ruang yang tercatat. | `.jadwal hariini` | Kirim di chat bot atau grup kelas. **Pengguna** |
+| `.jadwal senin`, `.schedule senin` | Melihat jadwal untuk hari tertentu. | `.jadwal senin` | Ganti senin dengan nama hari. Gunakan nama hari untuk tanggal terdekat. Bentuk .jadwal minggu menunjukkan pekan berjalan. **Pengguna** |
+| `.besok` | Melihat jadwal besok menurut WIB. | `.besok` | Kirim tanpa tanggal. **Pengguna** |
+| `.jadwal besok`, `.schedule besok` | Melihat jadwal besok menurut WIB. | `.jadwal besok` | Kirim tanpa tanggal. **Pengguna** |
+| `.mingguini` | Melihat sesi selama pekan berjalan. | `.mingguini` | Kirim sekali untuk ringkasan sepekan. **Pengguna** |
+| `.jadwal minggu`, `.jadwal mingguini`, `.schedule minggu`, `.schedule mingguini` | Melihat sesi selama pekan berjalan. | `.jadwal minggu` | Kirim sekali untuk ringkasan sepekan. **Pengguna** |
+| `.kuliahberikutnya` | Mencari sesi terjadwal berikutnya. | `.kuliahberikutnya` | Kirim saat ingin mengetahui jam kuliah terdekat. **Pengguna** |
+| `.cekjadwal` | Melihat jadwal pada tanggal tertentu. | `.cekjadwal 2026-11-10` | Masukkan tanggal YYYY-MM-DD. **Pengguna** |
+| `.matkulhariini` | Melihat sesi kuliah hari ini, termasuk jam, dosen dan ruang yang tercatat. | `.matkulhariini` | Kirim di chat bot atau grup kelas. **Pengguna** |
+| `.dosenhariini` | Melihat sesi kuliah hari ini, termasuk jam, dosen dan ruang yang tercatat. | `.dosenhariini` | Kirim di chat bot atau grup kelas. **Pengguna** |
+| `.ruanganhariini` | Melihat sesi kuliah hari ini, termasuk jam, dosen dan ruang yang tercatat. | `.ruanganhariini` | Kirim di chat bot atau grup kelas. **Pengguna** |
+| `.jadwal export`, `.schedule export` | Mengekspor data jadwal. | `.jadwal export csv` | Pilih csv atau json setelah kata export. **Pengguna** |
+| `.jadwal export`, `.schedule export` | Mengekspor data jadwal. | `.jadwal export json` | Pilih csv atau json setelah kata export. **Pengguna** |
+| `.tasks`, `.tugas`, `.deadline`, `.mytask`, `.progress` | Menampilkan daftar tugas di chat. | `.tasks` | Gunakan ID pada kartu untuk membuka detail. **Pengguna** |
+| `.tugas list`, `.tasks list`, `.deadline list`, `.mytask list`, `.progress list` | Menampilkan daftar tugas di chat. | `.tugas list` | Gunakan ID pada kartu untuk membuka detail. **Pengguna** |
+| `.tugas all`, `.tugas semua`, `.tasks all`, `.deadline all`, `.mytask all`, `.progress all`, `.tasks semua`, `.deadline semua`, `.mytask semua`, `.progress semua` | Melihat tugas aktif dan selesai. | `.tugas all` | Gunakan ketika mencari tugas lama. **Pengguna** |
+| `.tugas aktif`, `.tasks aktif`, `.deadline aktif`, `.mytask aktif`, `.progress aktif` | Menampilkan tugas yang belum selesai. | `.tugas aktif` | Kirim tanpa judul tugas. **Pengguna** |
+| `.tugas hariini`, `.tasks hariini`, `.deadline hariini`, `.mytask hariini`, `.progress hariini` | Memfilter tugas menurut tenggat hari atau pekan ini. | `.tugas hariini` | Pilih periode sesuai kebutuhan. **Pengguna** |
+| `.tugas mingguini`, `.tasks mingguini`, `.deadline mingguini`, `.mytask mingguini`, `.progress mingguini` | Memfilter tugas menurut tenggat hari atau pekan ini. | `.tugas mingguini` | Pilih periode sesuai kebutuhan. **Pengguna** |
+| `.tugas detail`, `.tasks detail`, `.deadline detail`, `.mytask detail`, `.progress detail` | Membuka kartu lengkap satu tugas. | `.tugas detail TUG-1` | Ganti TUG-1 dengan ID dari daftar tugas. **Pengguna** |
+| `.tugas add`, `.tugas tambah`, `.tasks add`, `.deadline add`, `.mytask add`, `.progress add`, `.tasks tambah`, `.deadline tambah`, `.mytask tambah`, `.progress tambah` | Mencatat tugas beserta tenggat, dosen, dan PJ. | `.tugas add Metodologi\|Makalah\|2026-11-16 14:00\|Kelompok 1\|Ibu Sari\|Ani` | Pisahkan matkul, judul, tenggat WIB, catatan, dosen dan PJ dengan tanda pipa. **Pengguna** |
+| `.tambahtugas` | Mencatat tugas beserta tenggat, dosen, dan PJ. | `.tambahtugas Metodologi\|Makalah\|2026-11-16 14:00\|Kelompok 1\|Ibu Sari\|Ani` | Pisahkan matkul, judul, tenggat WIB, catatan, dosen dan PJ dengan tanda pipa. **Pengguna** |
+| `.tugas done`, `.tugas selesai`, `.tasks done`, `.deadline done`, `.mytask done`, `.progress done`, `.tasks selesai`, `.deadline selesai`, `.mytask selesai`, `.progress selesai` | Menandai tugas sebagai selesai. | `.tugas done TUG-1` | Gunakan ID tugas yang sudah dikumpulkan. **Pengguna** |
+| `.selesaitugas` | Menandai tugas sebagai selesai. | `.selesaitugas TUG-1` | Gunakan ID tugas yang sudah dikumpulkan. **Pengguna** |
+| `.tugasaktif` | Menampilkan tugas yang belum selesai. | `.tugasaktif` | Kirim tanpa judul tugas. **Pengguna** |
+| `.tugas ulang`, `.tasks ulang`, `.deadline ulang`, `.mytask ulang`, `.progress ulang` | Mengulang pemberitahuan pribadi yang gagal atau belum pasti. | `.tugas ulang TUG-1.1.h3` | Cek riwayat pengiriman sebelum menggunakan ID pemberitahuan. **DM owner** |
+| `.tugas del`, `.tugas delete`, `.tugas hapus`, `.tasks del`, `.deadline del`, `.mytask del`, `.progress del`, `.tasks delete`, `.deadline delete`, `.mytask delete`, `.progress delete`, `.tasks hapus`, `.deadline hapus`, `.mytask hapus`, `.progress hapus` | Menghapus tugas dari daftar. | `.tugas del TUG-1` | Gunakan ID tugas yang benar. **Pengguna** |
+| `.reminder`, `.reminders` | Melihat pengingat chat saat ini. | `.reminder` | Kirim di chat tempat pengingat dibuat. **Pengguna** |
+| `.reminder settings`, `.reminders settings` | Memeriksa pengaturan pengingat. | `.reminder settings` | Kirim di chat yang ingin diperiksa. **Pengguna** |
+| `.reminder add`, `.reminder tambah`, `.reminders add`, `.reminders tambah` | Membuat pengingat. | `.reminder add 2026-11-10 08:00\|Diskusi` | Pisahkan tanggal dan jam WIB dari isi pesan dengan tanda pipa. Tenggat akademik masuk alur review owner. **Pengguna** |
+| `.reminder add`, `.reminders add` | Membuat pengingat. | `.reminder add 2026-11-16 14:00\|Deadline pendaftaran seminar` | Pisahkan tanggal dan jam WIB dari isi pesan dengan tanda pipa. Tenggat akademik masuk alur review owner. **Pengguna** |
+| `.reminder snooze`, `.reminders snooze` | Menunda pengingat. | `.reminder snooze REM-1 15` | Masukkan ID dan jumlah menit. **Pengguna** |
+| `.reminder delete`, `.reminder del`, `.reminder hapus`, `.reminders delete`, `.reminders del`, `.reminders hapus` | Membatalkan pengingat terjadwal. | `.reminder delete REM-1` | Gunakan ID dari daftar pengingat. **Pengguna** |
+| `.note`, `.catatan` | Melihat catatan chat. | `.note` | Gunakan .note list untuk daftar. **Pengguna** |
+| `.note add`, `.note tambah`, `.catatan add`, `.catatan tambah` | Menambahkan catatan. | `.note add Rapat\|Bawa catatan` | Pisahkan judul dan isi dengan tanda pipa. **Pengguna** |
+| `.note del`, `.note delete`, `.note hapus`, `.catatan del`, `.catatan delete`, `.catatan hapus` | Menghapus catatan. | `.note del NOTE-1` | Ganti NOTE-1 dengan ID dari daftar. **Pengguna** |
+
+<details>
+<summary>Contoh balasan · 🕒 Jadwal dan tugas</summary>
+
+**.jadwal**
 
 ~~~~text
 *MK Senin 9 November 2026*
@@ -400,8 +448,6 @@ Pengguna · Alias: `.schedule`
 
 **.jadwal hariini**
 
-Pengguna · Alias: `.schedule hariini`
-
 ~~~~text
 *MK Senin 9 November 2026*
 
@@ -424,8 +470,6 @@ Pengguna · Alias: `.schedule hariini`
 ~~~~
 
 **.jadwal senin**
-
-Pengguna · Alias: `.schedule senin` · Gunakan nama hari untuk tanggal terdekat. Bentuk .jadwal minggu menunjukkan pekan berjalan.
 
 ~~~~text
 *MK Senin 9 November 2026*
@@ -450,8 +494,6 @@ Pengguna · Alias: `.schedule senin` · Gunakan nama hari untuk tanggal terdekat
 
 **.besok**
 
-Pengguna
-
 ~~~~text
 *MK Selasa 10 November 2026*
 
@@ -475,8 +517,6 @@ Pengguna
 
 **.jadwal besok**
 
-Pengguna · Alias: `.schedule besok`
-
 ~~~~text
 *MK Selasa 10 November 2026*
 
@@ -499,8 +539,6 @@ Pengguna · Alias: `.schedule besok`
 ~~~~
 
 **.mingguini**
-
-Pengguna
 
 ~~~~text
 *MK Senin 9 November 2026*
@@ -621,8 +659,6 @@ Tidak ada kuliah terjadwal.
 
 **.jadwal minggu**
 
-Pengguna · Alias: `.jadwal mingguini`, `.schedule minggu`, `.schedule mingguini`
-
 ~~~~text
 *MK Senin 9 November 2026*
 
@@ -742,8 +778,6 @@ Tidak ada kuliah terjadwal.
 
 **.kuliahberikutnya**
 
-Pengguna
-
 ~~~~text
 *MK Senin 9 November 2026*
 
@@ -756,8 +790,6 @@ Pengguna
 ~~~~
 
 **.cekjadwal 2026-11-10**
-
-Pengguna
 
 ~~~~text
 *MK Selasa 10 November 2026*
@@ -782,8 +814,6 @@ Pengguna
 
 **.matkulhariini**
 
-Pengguna
-
 ~~~~text
 *MK Senin 9 November 2026*
 
@@ -806,8 +836,6 @@ Pengguna
 ~~~~
 
 **.dosenhariini**
-
-Pengguna
 
 ~~~~text
 *MK Senin 9 November 2026*
@@ -832,8 +860,6 @@ Pengguna
 
 **.ruanganhariini**
 
-Pengguna
-
 ~~~~text
 *MK Senin 9 November 2026*
 
@@ -856,8 +882,6 @@ Pengguna
 ~~~~
 
 **.jadwal export csv**
-
-Pengguna · Alias: `.schedule export`
 
 ~~~~text
 📤 *Export Jadwal 5A (CSV):*
@@ -882,8 +906,6 @@ Jumat,12:30,14:10,ENT2,"Entrepreneurship 2",4
 ~~~~
 
 **.jadwal export json**
-
-Pengguna · Alias: `.schedule export`
 
 ~~~~text
 📤 *Export Jadwal 5A (JSON):*
@@ -1172,89 +1194,7 @@ Pengguna · Alias: `.schedule export`
 ```
 ~~~~
 
-**.tambahjadwal minggu|07:00|08:00|METPEN|Lab**
-
-DM admin terverifikasi · Alias: `.jadwal add`, `.jadwal tambah`, `.schedule add`, `.schedule tambah`
-
-~~~~text
-*Pratinjau perubahan jadwal*
-Tambahkan minggu 07:00–08:00 WIB · Metodologi Penelitian · Lab
-
-Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
-~~~~
-
-**.editjadwal minggu|07:00|minggu|08:00|09:00|METPEN|Lab**
-
-DM admin terverifikasi · Alias: `.jadwal edit`, `.jadwal ubah`, `.schedule edit`, `.schedule ubah`
-
-~~~~text
-*Pratinjau perubahan jadwal*
-Ubah minggu 07:00 menjadi minggu 08:00–09:00 WIB · Metodologi Penelitian · Lab
-
-Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
-~~~~
-
-**.hapusjadwal minggu|07:00**
-
-DM admin terverifikasi · Alias: `.jadwal delete`, `.jadwal hapus`, `.schedule delete`, `.schedule hapus`
-
-~~~~text
-*Pratinjau perubahan jadwal*
-Hapus sesi minggu 07:00 beserta 0 pengecualian tanggal.
-
-Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
-~~~~
-
-**.resetjadwal**
-
-DM admin terverifikasi · Alias: `.jadwal reset`, `.schedule reset`
-
-~~~~text
-*Pratinjau perubahan jadwal*
-Pulihkan 15 sesi mingguan dari seed. 1 sesi saat ini dan seluruh pengecualian tanggalnya akan diganti.
-
-Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
-~~~~
-
-**.kelompok 2 Ani,Budi,Citra,Deni**
-
-Pengguna · Alias: `.buatkelompok`
-
-~~~~text
-👥 *Hasil Pembagian Kelompok Adil (2 Kelompok — Total 4 Mahasiswa)*
-*Kelompok 1* (Ketua: Ani):
-Anggota: Ani, Citra
-
-*Kelompok 2* (Ketua: Budi):
-Anggota: Budi, Deni
-~~~~
-
-**.kalender**
-
-Pengguna · Alias: `.agenda`
-
-~~~~text
-🗓️ Belum ada tanggal kalender akademik resmi yang dikonfirmasi di database.
-~~~~
-
-**.countdown 2026-11-16**
-
-Pengguna
-
-~~~~text
-⏳ Hitung mundur menuju *2026-11-16*: *7 hari*.
-~~~~
-
-</details>
-
-<details>
-<summary><strong>Tugas, catatan, dan pengingat</strong></summary>
-
-Tambah dan selesaikan tugas berdasarkan ID. Filter hari dan minggu mengikuti WIB. Notifikasi tenggat baru dan pengingat harian H−3 sampai hari H masuk ke DM Hedy. Hedy memilih grup lalu mengonfirmasi teks sebelum pengiriman. Pengingat disimpan per chat oleh worker PostgreSQL pada produksi. Contoh lokal memakai pengingat JSON untuk kompatibilitas.
-
 **.tasks**
-
-Pengguna · Alias: `.tugas`, `.deadline`, `.mytask`, `.progress`
 
 ~~~~text
 *LIST TUGAS*
@@ -1270,8 +1210,6 @@ ID: TUG-1 · Aktif
 
 **.tugas list**
 
-Pengguna · Alias: `.tasks list`, `.deadline list`, `.mytask list`, `.progress list`
-
 ~~~~text
 *LIST TUGAS*
 
@@ -1285,8 +1223,6 @@ ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas all**
-
-Pengguna · Alias: `.tugas semua`, `.tasks all`, `.deadline all`, `.mytask all`, `.progress all`, `.tasks semua`, `.deadline semua`, `.mytask semua`, `.progress semua`
 
 ~~~~text
 *LIST TUGAS*
@@ -1302,8 +1238,6 @@ ID: TUG-1 · Aktif
 
 **.tugas aktif**
 
-Pengguna · Alias: `.tasks aktif`, `.deadline aktif`, `.mytask aktif`, `.progress aktif`
-
 ~~~~text
 *LIST TUGAS*
 
@@ -1317,8 +1251,6 @@ ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas hariini**
-
-Pengguna · Alias: `.tasks hariini`, `.deadline hariini`, `.mytask hariini`, `.progress hariini`
 
 ~~~~text
 *LIST TUGAS*
@@ -1334,8 +1266,6 @@ ID: TUG-1 · Aktif
 
 **.tugas mingguini**
 
-Pengguna · Alias: `.tasks mingguini`, `.deadline mingguini`, `.mytask mingguini`, `.progress mingguini`
-
 ~~~~text
 *LIST TUGAS*
 
@@ -1350,8 +1280,6 @@ ID: TUG-1 · Aktif
 
 **.tugas detail TUG-1**
 
-Pengguna · Alias: `.tasks detail`, `.deadline detail`, `.mytask detail`, `.progress detail`
-
 ~~~~text
 *LIST TUGAS*
 
@@ -1365,8 +1293,6 @@ ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas add Metodologi|Makalah|2026-11-16 14:00|Kelompok 1|Ibu Sari|Ani**
-
-Pengguna · Alias: `.tugas tambah`, `.tasks add`, `.deadline add`, `.mytask add`, `.progress add`, `.tasks tambah`, `.deadline tambah`, `.mytask tambah`, `.progress tambah`
 
 ~~~~text
 ✅ Tugas tersimpan.
@@ -1383,8 +1309,6 @@ ID: TUG-2 · Aktif
 
 **.tambahtugas Metodologi|Makalah|2026-11-16 14:00|Kelompok 1|Ibu Sari|Ani**
 
-Pengguna
-
 ~~~~text
 ✅ Tugas tersimpan.
 
@@ -1400,23 +1324,17 @@ ID: TUG-2 · Aktif
 
 **.tugas done TUG-1**
 
-Pengguna · Alias: `.tugas selesai`, `.tasks done`, `.deadline done`, `.mytask done`, `.progress done`, `.tasks selesai`, `.deadline selesai`, `.mytask selesai`, `.progress selesai`
-
 ~~~~text
 ✅ Tugas *TUG-1* (Diskusi) ditandai *SELESAI*.
 ~~~~
 
 **.selesaitugas TUG-1**
 
-Pengguna
-
 ~~~~text
 ✅ Tugas *TUG-1* (Diskusi) ditandai *SELESAI*.
 ~~~~
 
 **.tugasaktif**
-
-Pengguna
 
 ~~~~text
 *LIST TUGAS*
@@ -1430,80 +1348,19 @@ Pengguna
 ID: TUG-1 · Aktif
 ~~~~
 
-**.tugas antrean**
-
-DM admin terverifikasi · Alias: `.tasks antrean`, `.deadline antrean`, `.mytask antrean`, `.progress antrean`
-
-~~~~text
-*Antrean tenggat*
-
-TUG-1.1.baru · Diskusi
-
-Pilih grup dengan .tugas tujuan <ID> <nama atau JID grup>.
-~~~~
-
-**.tugas grup**
-
-DM admin terverifikasi · Alias: `.tasks grup`, `.deadline grup`, `.mytask grup`, `.progress grup`
-
-~~~~text
-*Grup yang dikenali HdyBot*
-
-kelas-uji@g.us
-kelas-uji@g.us
-~~~~
-
-**.tugas tujuan TUG-1.1.h3 kelas-uji@g.us**
-
-DM admin terverifikasi · Alias: `.tasks tujuan`, `.deadline tujuan`, `.mytask tujuan`, `.progress tujuan`
-
-~~~~text
-Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
-~~~~
-
-**.tugas tolak TUG-1.1.h3**
-
-DM admin terverifikasi · Alias: `.tasks tolak`, `.deadline tolak`, `.mytask tolak`, `.progress tolak`
-
-~~~~text
-Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
-~~~~
-
 **.tugas ulang TUG-1.1.h3**
 
-DM admin terverifikasi · Alias: `.tasks ulang`, `.deadline ulang`, `.mytask ulang`, `.progress ulang`
-
 ~~~~text
 Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
-~~~~
-
-**.tugas deadline TUG-1 2026-11-16 14:00**
-
-DM admin terverifikasi · Alias: `.tasks deadline`, `.deadline deadline`, `.mytask deadline`, `.progress deadline`
-
-~~~~text
-Deadline tersimpan.
-
-*1.*
-📑 Tugas: Diskusi
-🗓️ Deadline: 16 November 2026, pukul 14:00 WIB
-🧑‍🏫 Dari dosen: Ibu Sari
-📖 Matkul: Metodologi
-👨‍🎓 Penanggung jawab: Ani
-ID: TUG-1 · Aktif
 ~~~~
 
 **.tugas del TUG-1**
-
-Pengguna · Alias: `.tugas delete`, `.tugas hapus`, `.tasks del`, `.deadline del`, `.mytask del`, `.progress del`, `.tasks delete`, `.deadline delete`, `.mytask delete`, `.progress delete`, `.tasks hapus`, `.deadline hapus`, `.mytask hapus`, `.progress hapus`
 
 ~~~~text
 🗑️ Tugas *TUG-1* dihapus.
 ~~~~
 
 **.reminder**
-
-Pengguna · Alias: `.reminders`
 
 ~~~~text
 ⏰ *Daftar Pengingat Kustom (1)*
@@ -1512,15 +1369,11 @@ Pengguna · Alias: `.reminders`
 
 **.reminder settings**
 
-Pengguna · Alias: `.reminders settings`
-
 ~~~~text
 Zona waktu Asia/Jakarta. Worker database belum terhubung.
 ~~~~
 
 **.reminder add 2026-11-10 08:00|Diskusi**
-
-Pengguna · Alias: `.reminder tambah`, `.reminders add`, `.reminders tambah`
 
 ~~~~text
 ⏰ Pengingat *REM-2* dijadwalkan pada *2026-11-10 08:00 WIB*: _Diskusi_
@@ -1528,15 +1381,11 @@ Pengguna · Alias: `.reminder tambah`, `.reminders add`, `.reminders tambah`
 
 **.reminder add 2026-11-16 14:00|Deadline pendaftaran seminar**
 
-Pengguna · Alias: `.reminders add`
-
 ~~~~text
 Tenggat tersimpan untuk ditinjau Hedy. ID: TUG-2
 ~~~~
 
 **.reminder snooze REM-1 15**
-
-Pengguna · Alias: `.reminders snooze`
 
 ~~~~text
 💤 Pengingat *REM-1* ditunda 15 menit.
@@ -1544,50 +1393,11 @@ Pengguna · Alias: `.reminders snooze`
 
 **.reminder delete REM-1**
 
-Pengguna · Alias: `.reminder del`, `.reminder hapus`, `.reminders delete`, `.reminders del`, `.reminders hapus`
-
 ~~~~text
 🗑️ Pengingat *REM-1* dibatalkan.
 ~~~~
 
-**.reminder pause**
-
-DM admin terverifikasi · Alias: `.reminders pause`
-
-~~~~text
-Worker pengingat belum terhubung ke database.
-~~~~
-
-**.reminder resume**
-
-DM admin terverifikasi · Alias: `.reminders resume`
-
-~~~~text
-Worker pengingat belum terhubung ke database.
-~~~~
-
-**.announce**
-
-Pengguna · Alias: `.pengumuman`
-
-~~~~text
-📢 Belum ada riwayat draft pengumuman. Buat dengan `.announce draft penting|Judul|Isi`.
-~~~~
-
-**.announce draft penting|Diskusi|Bawa catatan**
-
-Pengguna · Alias: `.announce create`, `.pengumuman draft`, `.pengumuman create`
-
-~~~~text
-📢 *Draft Pengumuman Dibuat (ANN-1)*
-• Prioritas: *PENTING*
-• Judul: *Diskusi*
-• Isi: Bawa catatan
-~~~~
-
 **.note**
-
-Pengguna · Alias: `.catatan`
 
 ~~~~text
 📝 *Daftar Catatan Kelas (1)*
@@ -1596,15 +1406,11 @@ Pengguna · Alias: `.catatan`
 
 **.note add Rapat|Bawa catatan**
 
-Pengguna · Alias: `.note tambah`, `.catatan add`, `.catatan tambah`
-
 ~~~~text
 📝 Catatan *NOTE-2* (Rapat) berhasil disimpan.
 ~~~~
 
 **.note del NOTE-1**
-
-Pengguna · Alias: `.note delete`, `.note hapus`, `.catatan del`, `.catatan delete`, `.catatan hapus`
 
 ~~~~text
 🗑️ Catatan *NOTE-1* dihapus.
@@ -1612,14 +1418,60 @@ Pengguna · Alias: `.note delete`, `.note hapus`, `.catatan del`, `.catatan dele
 
 </details>
 
-<details>
-<summary><strong>Materi, Drive, jurnal, dan AI</strong></summary>
+<a id="panduan-menu-3"></a>
 
-Telusuri folder kelas, ambil file, atau tanyakan isi dokumen dengan rujukan. Pengiriman dokumen dibatasi ke chat yang disetujui owner. Perintah AI umum, ringkasan, kuis, kartu belajar, dan terjemahan juga tersedia.
+### 🧠 Belajar dan materi
+
+Akses Drive mengikuti izin chat. Jawaban LMS pribadi memerlukan izin mahasiswa. Gunakan satuan yang tercantum untuk kalkulator.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.dokumen`, `.materi` | Menampilkan katalog materi. | `.dokumen` | Buka di chat yang mendapat izin jika memakai Drive. **Pengguna** |
+| `.carimateri` | Mencari materi berdasarkan kata kunci. | `.carimateri belajar` | Ketik kata yang muncul pada judul atau metadata. **Pengguna** |
+| `.materi cari` | Mencari materi berdasarkan kata kunci. | `.materi cari belajar` | Ketik kata yang muncul pada judul atau metadata. **Pengguna** |
+| `.materi detail` | Membaca metadata satu materi. | `.materi detail M1` | Salin ID dari hasil pencarian. **Pengguna** |
+| `.materi terbaru` | Melihat materi terbaru. | `.materi terbaru` | Kirim di chat yang memiliki akses materi. **Pengguna** |
+| `.materi minggu1` | Memfilter materi menurut minggu. | `.materi minggu1` | Gunakan nomor minggu yang dicari. **Pengguna** |
+| `.materi halaman` | Membuka halaman katalog. | `.materi halaman 1` | Isi nomor halaman yang diinginkan. **Pengguna** |
+| `.drive files` | Menampilkan file dari folder yang diizinkan. | `.drive files` | Salin ID file untuk perintah unduh. **Pengguna** |
+| `.drive search` | Mencari materi berdasarkan kata kunci. | `.drive search belajar` | Ketik kata yang muncul pada judul atau metadata. **Pengguna** |
+| `.ambilmateri`, `.download` | Mengirim file Drive ke WhatsApp. | `.ambilmateri M1` | Tulis ID dari katalog dalam chat yang diizinkan. File asli PDF/PPT/PPTX dikirim sebagai dokumen bila tersedia. **Pengguna** |
+| `.ringkasdokumen` | Merangkum dokumen Drive yang dapat diekstrak. | `.ringkasdokumen M1` | Masukkan ID materi dari katalog. **Pengguna** |
+| `.tanyadokumen` | Bertanya berdasarkan isi dokumen Drive. | `.tanyadokumen M1 Apa metode belajar?` | Ketik ID, spasi, lalu pertanyaan. **Pengguna** |
+| `.jurnal`, `.carijurnal`, `.journal`, `.scholar`, `.googlescholar`, `.pubmed`, `.garuda` | Mencari artikel ilmiah dan mengirim ringkasan pencarian dalam PDF. | `.jurnal belajar` | Ketik topik atau kutip teks yang ingin dicari. **Pengguna** |
+| `.ask`, `.tanya`, `.brainly` | Menjawab pertanyaan belajar. | `.ask Bagaimana cara belajar?` | Tulis pertanyaan atau sertakan gambar dengan caption .ask. **Pengguna** |
+| `.ask materi` | Bertanya berdasarkan isi dokumen Drive. | `.ask materi M1 Apa metode belajar?` | Ketik ID, spasi, lalu pertanyaan. **Pengguna** |
+| `.rapikan`, `.perbaiki`, `.rewrite`, `.parafrase`, `.koreksi` | Menyunting tulisan. | `.rapikan besok bawa buku` | Kirim teks setelah perintah atau kutip pesan yang akan disunting. **Pengguna** |
+| `.summarize`, `.ringkas` | Membuat ringkasan teks. | `.summarize Belajar bersama. Catat hasil diskusi.` | Tempel teks atau balas pesan yang ingin diringkas. **Pengguna** |
+| `.flashcard` | Membuat bahan latihan belajar dari topik. | `.flashcard belajar` | Tulis topik. Untuk ronde interaktif yang dapat dijawab, gunakan .game ai. **Pengguna** |
+| `.quiz`, `.kuis` | Membuat bahan latihan belajar dari topik. | `.quiz belajar` | Tulis topik. Untuk ronde interaktif yang dapat dijawab, gunakan .game ai. **Pengguna** |
+| `.translate`, `.tr` | Menerjemahkan teks. | `.translate en Terima kasih` | Masukkan bahasa tujuan lalu teks. **Pengguna** |
+| `.download` | Mengirim file Drive atau mengekspor Google Slides. | `.download M2 pptx` | Ganti M2 dengan ID presentasi dalam chat berizin. Untuk Google Slides, tambahkan pptx agar bot mengirim PowerPoint. Tanpa pilihan format, ekspornya PDF. **Pengguna** |
+| `.keperawatan` | Membuka daftar fitur keperawatan. | `.keperawatan` | Pilih kategori atau kalkulator dari balasan. **Pengguna** |
+| `.sdki` | Mencari diagnosis keperawatan SDKI. | `.sdki nyeri akut` | Tulis nama diagnosis. **Pengguna** |
+| `.sop` | Mencari prosedur keperawatan. | `.sop pasang infus` | Tulis tindakan yang ingin dipelajari. **Pengguna** |
+| `.askep` | Mencari sumber asuhan atau pengkajian keperawatan. | `.askep stroke` | Tulis penyakit, kelompok pasien, atau topik. **Pengguna** |
+| `.pengkajian` | Mencari sumber asuhan atau pengkajian keperawatan. | `.pengkajian anak` | Tulis penyakit, kelompok pasien, atau topik. **Pengguna** |
+| `.penunjang` | Membuka informasi pada kategori keperawatan terkait. | `.penunjang` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.ukom` | Membuka informasi pada kategori keperawatan terkait. | `.ukom` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.kampus` | Membuka informasi pada kategori keperawatan terkait. | `.kampus` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.kuisukom`, `.kuis ukom` | Menampilkan latihan Ukom. | `.kuisukom` | Kirim tanpa argumen untuk contoh latihan. **Pengguna** |
+| `.highalert`, `.high alert` | Mencari materi obat high alert. | `.highalert` | Kirim perintah untuk membaca ringkasan dan sumber. **Pengguna** |
+| `.safety`, `.patient safety` | Membuka informasi pada kategori keperawatan terkait. | `.safety` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.berita` | Membuka informasi pada kategori keperawatan terkait. | `.berita` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.ppni` | Membuka informasi pada kategori keperawatan terkait. | `.ppni` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.mtb`, `.bias` | Membuka informasi pada kategori keperawatan terkait. | `.mtb` | Pilih pemeriksaan penunjang, Ukom, kampus, berita, PPNI, edukasi tanpa bias atau keselamatan pasien. **Pengguna** |
+| `.ebook`, `.download` | Mencari publikasi untuk diunduh. | `.ebook` | Gunakan tanpa ID. Untuk file Drive, .download harus diikuti ID. **Pengguna** |
+| `.imt` | Menghitung indeks massa tubuh. | `.imt 65 170` | Isi berat dalam kg dan tinggi dalam cm. **Pengguna** |
+| `.gcs` | Menjumlahkan skor Glasgow Coma Scale. | `.gcs E4 V5 M6` | Isi komponen E, V dan M. **Pengguna** |
+| `.balance` | Menghitung selisih cairan masuk dan keluar. | `.balance 1800 1500` | Masukkan volume masuk lalu keluar dengan satuan yang sama. **Pengguna** |
+| `.tetesan` | Menghitung tetesan infus untuk latihan. | `.tetesan 500 ml 6 jam 20` | Isi volume mL, durasi jam, dan faktor tetes per mL. **Pengguna** |
+| `.kalkulatorperawat`, `.kalkulator` | Melihat pilihan kalkulator keperawatan. | `.kalkulatorperawat` | Pilih perhitungan dan isi satuan seperti contoh. **Pengguna** |
+
+<details>
+<summary>Contoh balasan · 🧠 Belajar dan materi</summary>
 
 **.dokumen**
-
-Pengguna · Alias: `.materi`
 
 ~~~~text
 📂 *Materi kelas*
@@ -1627,12 +1479,13 @@ Pengguna · Alias: `.materi`
 Metode belajar.txt
 Folder utama · M1
 
+Presentasi kelas
+Folder utama · M2
+
 Halaman 1/1
 ~~~~
 
 **.carimateri belajar**
-
-Pengguna
 
 ~~~~text
 📂 *Materi kelas*
@@ -1645,8 +1498,6 @@ Halaman 1/1
 
 **.materi cari belajar**
 
-Pengguna
-
 ~~~~text
 📂 *Materi kelas*
 
@@ -1657,8 +1508,6 @@ Halaman 1/1
 ~~~~
 
 **.materi detail M1**
-
-Pengguna
 
 ~~~~text
 📂 *Materi kelas*
@@ -1673,20 +1522,19 @@ Unduhan diizinkan
 
 **.materi terbaru**
 
-Pengguna
-
 ~~~~text
 📂 *Materi kelas*
 
 Metode belajar.txt
 Folder utama · M1
 
+Presentasi kelas
+Folder utama · M2
+
 Halaman 1/1
 ~~~~
 
 **.materi minggu1**
-
-Pengguna
 
 ~~~~text
 📂 *Materi kelas*
@@ -1696,53 +1544,33 @@ Tidak ada dokumen yang cocok.
 
 **.materi halaman 1**
 
-Pengguna
-
 ~~~~text
 📂 *Materi kelas*
 
 Metode belajar.txt
 Folder utama · M1
+
+Presentasi kelas
+Folder utama · M2
 
 Halaman 1/1
 ~~~~
 
-**.drive status**
-
-DM admin terverifikasi · Alias: `.drive errors`
-
-~~~~text
-Sinkronisasi berhasil.
-Jumlah dokumen: 1
-Indeks terakhir: 9/11/2026, 07.30.00
-~~~~
-
-**.drive sync**
-
-DM admin terverifikasi
-
-~~~~text
-Sinkronisasi berhasil.
-Jumlah dokumen: 1
-Indeks terakhir: 9/11/2026, 07.30.00
-~~~~
-
 **.drive files**
-
-Pengguna
 
 ~~~~text
 📂 *Materi kelas*
 
 Metode belajar.txt
 Folder utama · M1
+
+Presentasi kelas
+Folder utama · M2
 
 Halaman 1/1
 ~~~~
 
 **.drive search belajar**
-
-Pengguna
 
 ~~~~text
 📂 *Materi kelas*
@@ -1755,16 +1583,12 @@ Halaman 1/1
 
 **.ambilmateri M1**
 
-Pengguna · Alias: `.download`
-
 ~~~~text
 Metode belajar.txt · Belum dikategorikan
 [Lampiran text/plain · Metode belajar.txt]
 ~~~~
 
 **.ringkasdokumen M1**
-
-Pengguna
 
 ~~~~text
 Contoh respons NVIDIA untuk pengujian format.
@@ -1775,8 +1599,6 @@ Bagian teks: bagian 1
 
 **.tanyadokumen M1 Apa metode belajar?**
 
-Pengguna
-
 ~~~~text
 Contoh respons NVIDIA untuk pengujian format.
 
@@ -1785,8 +1607,6 @@ Bagian teks: bagian 1
 ~~~~
 
 **.jurnal belajar**
-
-Pengguna · Alias: `.carijurnal`, `.journal`, `.scholar`, `.googlescholar`, `.pubmed`, `.garuda`
 
 ~~~~text
 🎓 *PENCARIAN JURNAL ILMIAH AI & GOOGLE SCHOLAR*
@@ -1810,16 +1630,12 @@ Belum ditemukan artikel terverifikasi untuk kueri ini. Tautan di bawah membuka p
 
 **.ask Bagaimana cara belajar?**
 
-Pengguna · Alias: `.tanya`, `.brainly`
-
 ~~~~text
 🤖 *Jawaban AI umum*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.ask materi M1 Apa metode belajar?**
-
-Pengguna
 
 ~~~~text
 Contoh respons NVIDIA untuk pengujian format.
@@ -1830,8 +1646,6 @@ Bagian teks: bagian 1
 
 **.rapikan besok bawa buku**
 
-Pengguna · Alias: `.perbaiki`, `.rewrite`, `.parafrase`, `.koreksi`
-
 ~~~~text
 ✍️ *Hasil perbaikan teks*
 
@@ -1839,8 +1653,6 @@ Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.summarize Belajar bersama. Catat hasil diskusi.**
-
-Pengguna · Alias: `.ringkas`
 
 ~~~~text
 📝 *Ringkasan Materi (HdyBot Study Assistant)*
@@ -1851,16 +1663,12 @@ _Label: Hasil ringkasan bantu belajar._
 
 **.flashcard belajar**
 
-Pengguna
-
 ~~~~text
 📚 *Latihan belajar*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.quiz belajar**
-
-Pengguna · Alias: `.kuis`
 
 ~~~~text
 📚 *Latihan belajar*
@@ -1869,47 +1677,19 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.translate en Terima kasih**
 
-Pengguna · Alias: `.tr`
-
 ~~~~text
 🌐 *Terjemahan*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
-</details>
-
-<details>
-<summary><strong>LMS STIKES Husada Jombang</strong></summary>
-
-
-
-**.lms help**
-
-Pengguna
+**.download M2 pptx**
 
 ~~~~text
-🎓 *LMS pribadi*
-
-.lms <nama> setuju
-.lms <nama> login <password LMS>
-.lms <nama> dashboard | matkul | materi | tugas | deadline | kuis
-.lms <nama> materi detail <ID>
-.lms <nama> materi kirim <ID> [nomor file]
-.lms <nama> sync | status | logout
-
-Tambahkan page 2 untuk halaman berikutnya. Gunakan DM dari nomor yang didaftarkan.
+Presentasi kelas · Belum dikategorikan
+[Lampiran application/vnd.openxmlformats-officedocument.presentationml.presentation · Presentasi kelas.pptx]
 ~~~~
 
-</details>
-
-<details>
-<summary><strong>Keperawatan dan Perawat.org</strong></summary>
-
-Pencarian kategori mengembalikan artikel dan tautan sumber. Kalkulator menghitung langsung dari nilai dan satuan yang diberikan. Contoh artikel, cuaca, dan jawaban AI dalam katalog menggunakan data uji.
-
 **.keperawatan**
-
-Pengguna
 
 ~~~~text
 *Perpustakaan keperawatan*
@@ -1926,8 +1706,6 @@ Dokumen dan e-book · .download
 
 **.sdki nyeri akut**
 
-Pengguna
-
 ~~~~text
 *Artikel contoh*
 
@@ -1938,8 +1716,6 @@ https://perawat.org/nyeri-akut/
 
 **.sop pasang infus**
 
-Pengguna
-
 ~~~~text
 *Artikel contoh*
 
@@ -1949,8 +1725,6 @@ https://perawat.org/sop-pemasangan-infus/
 ~~~~
 
 **.askep stroke**
-
-Pengguna
 
 ~~~~text
 *ASKEP · Perawat.org*
@@ -1976,8 +1750,6 @@ https://perawat.org/?s=askep%20stroke
 
 **.pengkajian anak**
 
-Pengguna
-
 ~~~~text
 *Artikel contoh*
 
@@ -1994,8 +1766,6 @@ https://perawat.org/pengkajian-pasien-baru/
 
 **.penunjang**
 
-Pengguna
-
 ~~~~text
 *PENUNJANG · Perawat.org*
 
@@ -2009,8 +1779,6 @@ https://perawat.org/category/pemeriksaan-penunjang/
 ~~~~
 
 **.ukom**
-
-Pengguna
 
 ~~~~text
 *UKOM · Perawat.org*
@@ -2026,8 +1794,6 @@ https://perawat.org/category/ukom/
 
 **.kampus**
 
-Pengguna
-
 ~~~~text
 *KAMPUS · Perawat.org*
 
@@ -2042,8 +1808,6 @@ https://perawat.org/category/kampus/
 
 **.kuisukom**
 
-Pengguna · Alias: `.kuis ukom`
-
 ~~~~text
 *Latihan Ukom · Hitung cairan*
 
@@ -2056,8 +1820,6 @@ Soal latihan buatan HdyBot. Materi: https://perawat.org/risiko-ketidakseimbangan
 
 **.highalert**
 
-Pengguna · Alias: `.high alert`
-
 ~~~~text
 *Artikel contoh*
 
@@ -2067,8 +1829,6 @@ https://perawat.org/3-jenis-obat-high-alert-yang-perlu-diwaspadai-perawat/
 ~~~~
 
 **.safety**
-
-Pengguna · Alias: `.patient safety`
 
 ~~~~text
 *SAFETY · Perawat.org*
@@ -2084,8 +1844,6 @@ https://perawat.org/tag/patient-safety/
 
 **.berita**
 
-Pengguna
-
 ~~~~text
 *BERITA · Perawat.org*
 
@@ -2100,8 +1858,6 @@ https://perawat.org/category/berita/
 
 **.ppni**
 
-Pengguna
-
 ~~~~text
 *PPNI · Perawat.org*
 
@@ -2115,8 +1871,6 @@ https://perawat.org/category/pojok-ppni/
 ~~~~
 
 **.mtb**
-
-Pengguna · Alias: `.bias`
 
 ~~~~text
 *MTB · Perawat.org*
@@ -2134,8 +1888,6 @@ Seri e-book Merawat Tanpa Bias · https://tanpabias.perawat.org/perpustakaan-mtb
 
 **.ebook**
 
-Pengguna · Alias: `.download`
-
 ~~~~text
 *EBOOK · Perawat.org*
 
@@ -2149,8 +1901,6 @@ Seri e-book Merawat Tanpa Bias · https://tanpabias.perawat.org/perpustakaan-mtb
 
 **.imt 65 170**
 
-Pengguna
-
 ~~~~text
 IMT = 22,49 kg/m²
 https://perawat.org/kalkulator-indeks-massa-tubuh-imt/
@@ -2158,16 +1908,12 @@ https://perawat.org/kalkulator-indeks-massa-tubuh-imt/
 
 **.gcs E4 V5 M6**
 
-Pengguna
-
 ~~~~text
 E4 V5 M6 = GCS 15/15
 https://perawat.org/pengkajian-tingkat-kesadaran-gcs-glasgow-coma-scale/
 ~~~~
 
 **.balance 1800 1500**
-
-Pengguna
 
 ~~~~text
 Balance cairan tercatat: 300 mL
@@ -2177,8 +1923,6 @@ https://perawat.org/risiko-ketidakseimbangan-cairan/
 
 **.tetesan 500 ml 6 jam 20**
 
-Pengguna
-
 ~~~~text
 28 tetes/menit
 500 mL × 20 tetes/mL ÷ 360 menit.
@@ -2187,8 +1931,6 @@ https://perawat.org/kalkulator-tetesan-infus/
 ~~~~
 
 **.kalkulatorperawat**
-
-Pengguna · Alias: `.kalkulator`
 
 ~~~~text
 *KALKULATOR · Perawat.org*
@@ -2204,14 +1946,466 @@ https://perawat.org/category/kalkulator/
 
 </details>
 
-<details>
-<summary><strong>Media, musik, dan dokumen</strong></summary>
+<a id="panduan-menu-4"></a>
 
-Balas gambar/stiker untuk konversi. Dokumen izin dan notulensi berupa draf teks; perintah PDF, QR, kartu ucapan dan kartu jadwal mengirim lampiran. TTS memerlukan espeak-ng. SoundCloud menyediakan tautan; koleksi MP3 lokal berizin dapat dikirim sebagai dokumen.
+### 🎮 Permainan
+
+Mainkan ronde dan kirim jawaban di chat yang sama. XP dan peringkat mengikuti pengaturan privasi.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.faktaunik` | Membaca fakta singkat. | `.faktaunik` | Kirim tanpa argumen. **Pengguna** |
+| `.doaharian`, `.ayatkursi` | Membuka doa atau daftar surah. | `.doaharian` | Pilih perintah sesuai bacaan yang dicari. **Pengguna** |
+| `.listsurah`, `.quran` | Membuka doa atau daftar surah. | `.listsurah` | Pilih perintah sesuai bacaan yang dicari. **Pengguna** |
+| `.jadwalsholat` | Mencari jadwal salat. | `.jadwalsholat Jakarta` | Tulis nama kota. **Pengguna** |
+| `.truth` | Meminta pertanyaan atau tantangan permainan. | `.truth` | Kirim saat mendapat giliran. **Pengguna** |
+| `.dare` | Meminta pertanyaan atau tantangan permainan. | `.dare` | Kirim saat mendapat giliran. **Pengguna** |
+| `.koin`, `.flipcoin` | Mengundi angka dadu atau sisi koin. | `.koin` | Kirim setiap kali ingin mengundi. **Pengguna** |
+| `.suit` | Bermain batu, gunting, kertas. | `.suit batu` | Tulis pilihanmu setelah perintah. **Pengguna** |
+| `.afk` | Mengatur atau mengakhiri status AFK. | `.afk belajar` | Sertakan alasan saat AFK, lalu kirim .unafk saat kembali. **Pengguna** |
+| `.unafk` | Mengatur atau mengakhiri status AFK. | `.unafk` | Sertakan alasan saat AFK, lalu kirim .unafk saat kembali. **Pengguna** |
+| `.game` | Membuka daftar permainan dan kategori. | `.game` | Pilih kategori untuk memulai ronde. **Pengguna** |
+| `.game list` | Membuka daftar permainan dan kategori. | `.game list` | Pilih kategori untuk memulai ronde. **Pengguna** |
+| `.game` | Membuka ruang bermain di chat. | `.game buat 2` | Isi jumlah peserta 2–50 atau gunakan duel untuk dua orang. **Pengguna** |
+| `.game` | Masuk atau keluar dari ruang permainan. | `.game gabung` | Kirim di chat tempat sesi dibuat. **Pengguna** |
+| `.game` | Masuk atau keluar dari ruang permainan. | `.game keluar` | Kirim di chat tempat sesi dibuat. **Pengguna** |
+| `.game` | Memulai ronde ruang. | `.game mulai antonim` | Pembuat sesi memilih kategori. Peserta membalas lewat .jawab. **Pengguna** |
+| `.game` | Menghentikan ruang bermain. | `.game stop` | Jalankan sebagai pembuat sesi atau admin. **Pengguna** |
+| `.game` | Mengatur kesulitan, kategori, atau durasi ronde. | `.game level easy` | Gunakan pada ruang aktif sebelum memulai ronde. **Pengguna** |
+| `.game` | Mengatur kesulitan, kategori, atau durasi ronde. | `.game kategori antonim` | Gunakan pada ruang aktif sebelum memulai ronde. **Pengguna** |
+| `.game` | Mengatur kesulitan, kategori, atau durasi ronde. | `.game waktu 45` | Gunakan pada ruang aktif sebelum memulai ronde. **Pengguna** |
+| `.game` | Membaca riwayat permainanmu. | `.game riwayat` | Kirim di chat tempat bermain. **Pengguna** |
+| `.game` | Memulai soal dari bank permainan. | `.game acak easy` | Tentukan kategori dan tingkat kesulitan yang tersedia. **Pengguna** |
+| `.sinonim` | Memulai ronde sesuai jenis teka-teki. | `.sinonim` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.antonim` | Memulai ronde sesuai jenis teka-teki. | `.antonim` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.anagram` | Memulai ronde sesuai jenis teka-teki. | `.anagram` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.tebakemoji` | Memulai ronde sesuai jenis teka-teki. | `.tebakemoji` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.deretangka` | Memulai ronde sesuai jenis teka-teki. | `.deretangka` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.asahotak` | Memulai ronde sesuai jenis teka-teki. | `.asahotak` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.tebakpola` | Memulai ronde sesuai jenis teka-teki. | `.tebakpola` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.tebakkata` | Memulai ronde sesuai jenis teka-teki. | `.tebakkata` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.caklontong` | Memulai ronde sesuai jenis teka-teki. | `.caklontong` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.family100` | Memulai ronde sesuai jenis teka-teki. | `.family100` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.mathquiz` | Memulai ronde sesuai jenis teka-teki. | `.mathquiz` | Kirim nama permainan lalu balas .jawab di chat yang sama. **Pengguna** |
+| `.game komputer` | Memulai soal dari bank permainan. | `.game komputer medium` | Tentukan kategori dan tingkat kesulitan yang tersedia. **Pengguna** |
+| `.game matematika` | Memulai soal dari bank permainan. | `.game matematika hard` | Tentukan kategori dan tingkat kesulitan yang tersedia. **Pengguna** |
+| `.hint` | Melihat petunjuk ronde aktif. | `.hint` | Kirim setelah permainan dimulai. **Pengguna** |
+| `.dailychallenge` | Memulai tantangan harian. | `.dailychallenge` | Jawab sebelum waktu habis. **Pengguna** |
+| `.score` | Melihat XP pribadi atau peringkat. | `.score` | Aktifkan penyimpanan skor melalui pengaturan privasi jika diperlukan. **Pengguna** |
+| `.jawab` | Mengirim tebakan untuk ronde aktif. | `.jawab abstrak` | Ganti contoh dengan jawabanmu. **Pengguna** |
+| `.nyerah`, `.skip` | Menyerah dan membuka jawaban. | `.nyerah` | Kirim di chat tempat ronde berlangsung. **Pengguna** |
+| `.leaderboard`, `.lb`, `.level`, `.lvl` | Melihat XP pribadi atau peringkat. | `.leaderboard` | Aktifkan penyimpanan skor melalui pengaturan privasi jika diperlukan. **Pengguna** |
+| `.privacy`, `.privacy gamification` | Mengatur penyimpanan skor permainan. | `.privacy on` | Gunakan on untuk ikut atau off untuk menonaktifkan. **Pengguna** |
+| `.privacy gamification` | Mengatur penyimpanan skor permainan. | `.privacy gamification off` | Gunakan on untuk ikut atau off untuk menonaktifkan. **Pengguna** |
+| `.game ai` | Membuat soal baru bertema dengan GPT atau NVIDIA. | `.game ai anatomi jantung` | Tulis topik. Ketik .hint untuk petunjuk dan .jawab di chat yang sama. **Pengguna** |
+
+<details>
+<summary>Contoh balasan · 🎮 Permainan</summary>
+
+**.faktaunik**
+
+~~~~text
+🧬 *Fakta Unik Kesehatan & Sains*
+Jantung manusia rata-rata berdetak sekitar 100.000 kali per hari dan memompa sekitar 7.500 liter darah.
+~~~~
+
+**.doaharian**
+
+~~~~text
+🤲 *Doa Sebelum Belajar:*
+“Rabbi zidnii ‘ilman warzuqnii fahman, waj’alnii minash-shaalihiin.”
+(Ya Allah, tambahkanlah ilmu kepadaku, berikanlah aku pemahaman, dan jadikanlah aku termasuk golongan orang-orang yang saleh).
+~~~~
+
+**.listsurah**
+
+~~~~text
+📖 *Daftar Surah Pilihan Al-Qur'an*
+1. Al-Fatihah (Pembukaan — 7 ayat)
+2. Al-Baqarah (Sapi Betina — 286 ayat)
+18. Al-Kahfi (Penghuni Gua — 110 ayat)
+36. Yasin (Yasin — 83 ayat)
+55. Ar-Rahman (Yang Maha Pemurah — 78 ayat)
+56. Al-Waqi’ah (Hari Kiamat — 96 ayat)
+67. Al-Mulk (Kerajaan — 30 ayat)
+93. Ad-Dhuha (Waktu Dhuha — 11 ayat)
+94. Al-Insyirah (Kelapangan — 8 ayat)
+112. Al-Ikhlas (Ikhlas — 4 ayat)
+113. Al-Falaq (Waktu Subuh — 5 ayat)
+114. An-Nas (Manusia — 6 ayat)
+
+_Ketik `.doaharian` untuk doa belajar & klinik._
+~~~~
+
+**.jadwalsholat Jakarta**
+
+~~~~text
+🕌 *Jadwal salat · Jakarta*
+09-11-2026 · Asia/Jakarta
+
+Subuh · 04:11
+Zuhur · 11:42
+Asar · 15:00
+Magrib · 17:53
+Isya · 19:03
+
+Sumber: AlAdhan · metode Kemenag RI
+~~~~
+
+**.truth**
+
+~~~~text
+🎯 *TRUTH (Jujur):*
+Apa kebiasaan belajar terbaik yang ingin kamu mulai minggu ini?
+~~~~
+
+**.dare**
+
+~~~~text
+🔥 *DARE (Tantangan Aman):*
+Buat 1 pantun semangat belajar untuk teman-teman Nursing Class A!
+~~~~
+
+**.koin**
+
+~~~~text
+🪙 *Lempar Koin:* Hasilnya adalah *GAMBAR (Tails)*!
+~~~~
+
+**.suit batu**
+
+~~~~text
+✊✌️✋ *Suit Jepang*
+• Kamu: *BATU*
+• HdyBot: *GUNTING*
+• Hasil: *KAMU MENANG! 🎉*
+~~~~
+
+**.afk belajar**
+
+~~~~text
+💤 Status *AFK* diaktifkan untuk `<JID pengguna>`
+• Alasan: _belajar_
+~~~~
+
+**.unafk**
+
+~~~~text
+👋 Selamat datang kembali! Status AFK Anda telah dinonaktifkan.
+~~~~
+
+**.game**
+
+~~~~text
+🎮 *Permainan kelas*
+• .tebakkata
+• .caklontong
+• .family100
+• .mathquiz
+• .game ai <topik>
+
+.game <kategori> [easy|medium|hard]
+sinonim (easy), antonim (easy), anagram (easy), tebakemoji (easy), deretangka (medium), asahotak (medium), tebakpola (hard), komputer (medium), matematika (hard)
+
+Jawab melalui .jawab <teks>.
+~~~~
+
+**.game list**
+
+~~~~text
+🎮 *Permainan kelas*
+• .tebakkata
+• .caklontong
+• .family100
+• .mathquiz
+• .game ai <topik>
+
+.game <kategori> [easy|medium|hard]
+sinonim (easy), antonim (easy), anagram (easy), tebakemoji (easy), deretangka (medium), asahotak (medium), tebakpola (hard), komputer (medium), matematika (hard)
+
+Jawab melalui .jawab <teks>.
+~~~~
+
+**.game buat 2**
+
+~~~~text
+🎮 Sesi dibuat. Peserta dapat mengetik .game gabung. Pembuat memulai dengan .game mulai.
+~~~~
+
+**.game gabung**
+
+~~~~text
+Anda sudah tergabung.
+~~~~
+
+**.game keluar**
+
+~~~~text
+Sesi ditutup.
+~~~~
+
+**.game mulai antonim**
+
+~~~~text
+🎮 *antonim · easy*
+Apa lawan kata konkret?
+Petunjuk: Diawali huruf A.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.game stop**
+
+~~~~text
+Sesi ditutup.
+~~~~
+
+**.game level easy**
+
+~~~~text
+🎮 Peserta 1/2 · acak · easy · 60 detik
+~~~~
+
+**.game kategori antonim**
+
+~~~~text
+🎮 Peserta 1/2 · antonim · semua level · 60 detik
+~~~~
+
+**.game waktu 45**
+
+~~~~text
+🎮 Peserta 1/2 · acak · semua level · 45 detik
+~~~~
+
+**.game riwayat**
+
+~~~~text
+Belum ada riwayat permainan Anda di chat ini.
+~~~~
+
+**.game acak easy**
+
+~~~~text
+🎮 *tebakemoji · easy*
+📚 + 🐛 mengingatkan pada ungkapan apa untuk orang yang gemar membaca?
+Petunjuk: Dua kata.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.sinonim**
+
+~~~~text
+🎮 *sinonim · easy*
+Apa sinonim cermat yang diawali huruf T?
+Petunjuk: Enam huruf.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.antonim**
+
+~~~~text
+🎮 *antonim · easy*
+Apa lawan kata konkret?
+Petunjuk: Diawali huruf A.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.anagram**
+
+~~~~text
+🎮 *anagram · easy*
+Susun I — S — R — U — K menjadi nama benda.
+Petunjuk: Digunakan untuk duduk.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.tebakemoji**
+
+~~~~text
+🎮 *tebakemoji · easy*
+📚 + 🐛 mengingatkan pada ungkapan apa untuk orang yang gemar membaca?
+Petunjuk: Dua kata.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.deretangka**
+
+~~~~text
+🎮 *deretangka · medium*
+Lanjutkan pola 3, 6, 11, 18, …
+Petunjuk: Perhatikan selisih antarangka.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.asahotak**
+
+~~~~text
+🎮 *asahotak · medium*
+Ada 5 tim. Setiap pasang tim bertemu satu kali. Berapa pertandingan?
+Petunjuk: Setiap tim menghadapi empat lawan.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.tebakpola**
+
+~~~~text
+🎮 *tebakpola · hard*
+A, C, F, J, O, … Huruf berikutnya?
+Petunjuk: Jarak lompatan bertambah satu.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.tebakkata**
+
+~~~~text
+🧩 *Tebak Kata Keperawatan*
+Huruf Acak: *D - E - G - I - L - M - O - O - O - T*
+Petunjuk: _Ilmu tentang metode atau cara sistematis dalam melaksanakan penelitian ilmiah._
+Balas dengan `.jawab <kata>`
+~~~~
+
+**.caklontong**
+
+~~~~text
+😂 *Teka-Teki Cak Lontong*
+Soal: *Orang yang sakit biasanya dibawa ke...*
+Petunjuk: Kalau di rumah sakit pun tetap masuk ke ruangan/kamar dulu.
+Balas dengan `.jawab <jawaban>`
+~~~~
+
+**.family100**
+
+~~~~text
+👨‍👩‍👧‍👦 *Survei Family 100 Kelas 5A*
+Pertanyaan: *Sebutkan alat yang selalu dibawa mahasiswa keperawatan saat praktikum!*
+Petunjuk: Alat pengukur tekanan darah.
+Balas dengan `.jawab <jawaban>`
+~~~~
+
+**.mathquiz**
+
+~~~~text
+🧮 *Kuis Matematika Cepat*
+Soal: *Berapakah hasil dari 12 × 10 + 10 ?*
+Balas dengan `.jawab <angka>`
+~~~~
+
+**.game komputer medium**
+
+~~~~text
+🎮 *komputer · medium*
+Bilangan biner 1011 bernilai berapa dalam desimal?
+Petunjuk: Bobot digit dari kanan: 1, 2, 4, 8.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.game matematika hard**
+
+~~~~text
+🎮 *matematika · hard*
+Dua dadu adil dilempar. Berapa pasangan berurutan yang jumlahnya delapan?
+Petunjuk: Mulai dari (2,6).
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.hint**
+
+~~~~text
+Diawali huruf A.
+~~~~
+
+**.dailychallenge**
+
+~~~~text
+🎮 *tebakemoji · easy*
+📚 + 🐛 mengingatkan pada ungkapan apa untuk orang yang gemar membaca?
+Petunjuk: Dua kata.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+**.score**
+
+~~~~text
+🏅 Skor XP Anda: 0
+~~~~
+
+**.jawab abstrak**
+
+~~~~text
+🎉 *BENAR!* Jawabannya adalah *ABSTRAK* — Konkret dapat diamati secara langsung. Abstrak merujuk pada gagasan.
+~~~~
+
+**.nyerah**
+
+~~~~text
+🏳️ Kuis dihentikan. Jawaban yang benar adalah: *ABSTRAK*. Konkret dapat diamati secara langsung. Abstrak merujuk pada gagasan.
+~~~~
+
+**.leaderboard**
+
+~~~~text
+🏆 *Leaderboard Akademik (Opt-In)*
+1. <JID pengguna> — 25 XP (Level 1)
+~~~~
+
+**.privacy on**
+
+~~~~text
+✅ Anda telah *opt-in* ke fitur XP & Gamification akademik.
+~~~~
+
+**.privacy gamification off**
+
+~~~~text
+🔒 Fitur Gamification Anda telah *dinonaktifkan (opt-out)* dan data XP Anda dihapus.
+~~~~
+
+**.game ai anatomi jantung**
+
+~~~~text
+🎮 *Kuis AI · easy*
+Organ apa yang memompa darah?
+Petunjuk: Terletak di rongga dada.
+Waktu 60 detik. Balas dengan .jawab <jawaban>.
+~~~~
+
+</details>
+
+<a id="panduan-menu-5"></a>
+
+### 🎨 Media
+
+Kirim gambar atau stiker dengan caption perintah, atau balas pesan lampiran dengan perintah yang sesuai.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.suratizin` | Membuat draf surat izin. | `.suratizin Ani\|Metodologi\|2026-11-10\|Kegiatan kampus` | Masukkan nama, matkul, tanggal dan alasan, dipisahkan tanda pipa. **Pengguna** |
+| `.doc create`, `.doc permission`, `.pdf create`, `.pdf permission` | Membuat draf surat izin. | `.doc create Ani\|Metodologi\|2026-11-10\|Kegiatan kampus` | Masukkan nama, matkul, tanggal dan alasan, dipisahkan tanda pipa. **Pengguna** |
+| `.notulensi` | Membuat draf notulensi. | `.notulensi Diskusi\|2026-11-09\|Cek jadwal` | Isi judul rapat, tanggal dan catatan. **Pengguna** |
+| `.doc minutes`, `.pdf minutes` | Membuat draf notulensi. | `.doc minutes Diskusi\|2026-11-09\|Cek jadwal` | Isi judul rapat, tanggal dan catatan. **Pengguna** |
+| `.doc pdf`, `.pdf`, `.pdf pdf` | Membuat lampiran PDF dari teks. | `.doc pdf Agenda\|Belajar bersama` | Pisahkan judul dan isi dengan tanda pipa. **Pengguna** |
+| `.sticker`, `.stiker`, `.s`, `.stickerwm` | Membuat stiker gambar. | `.sticker` | Kirim perintah bersama gambar atau kutip gambar. Dengan gambar. **Pengguna** |
+| `.ttp`, `.attp` | Membuat stiker teks. | `.ttp Kelas A` | Tulis kalimat pendek setelah perintah. **Pengguna** |
+| `.toimg` | Mengubah stiker menjadi gambar PNG. | `.toimg` | Balas stiker dengan perintah ini. Dengan stiker WebP. **Pengguna** |
+| `.blur` | Mengolah gambar. | `.blur` | Kutip gambar lalu pilih efek: kaburkan, balik warna, abu-abu, balik vertikal, balik horizontal, atau kompres. Dengan gambar. **Pengguna** |
+| `.invert` | Mengolah gambar. | `.invert` | Kutip gambar lalu pilih efek: kaburkan, balik warna, abu-abu, balik vertikal, balik horizontal, atau kompres. Dengan gambar. **Pengguna** |
+| `.grayscale`, `.hitamputih` | Mengolah gambar. | `.grayscale` | Kutip gambar lalu pilih efek: kaburkan, balik warna, abu-abu, balik vertikal, balik horizontal, atau kompres. Dengan gambar. **Pengguna** |
+| `.flip` | Mengolah gambar. | `.flip` | Kutip gambar lalu pilih efek: kaburkan, balik warna, abu-abu, balik vertikal, balik horizontal, atau kompres. Dengan gambar. **Pengguna** |
+| `.flop` | Mengolah gambar. | `.flop` | Kutip gambar lalu pilih efek: kaburkan, balik warna, abu-abu, balik vertikal, balik horizontal, atau kompres. Dengan gambar. **Pengguna** |
+| `.resize` | Mengubah ukuran gambar. | `.resize 128 128` | Kutip gambar lalu tulis lebar dan tinggi dalam piksel. Dengan gambar. **Pengguna** |
+| `.compress` | Mengolah gambar. | `.compress` | Kutip gambar lalu pilih efek: kaburkan, balik warna, abu-abu, balik vertikal, balik horizontal, atau kompres. Dengan gambar. **Pengguna** |
+| `.quotemaker`, `.makequote`, `.quotesmaker` | Membuat kartu kutipan. | `.quotemaker Tetap belajar\|Kelas A` | Pisahkan kutipan dan nama penulis dengan tanda pipa. **Pengguna** |
+| `.kartujadwal` | Membuat kartu jadwal bergambar. | `.kartujadwal senin` | Tambahkan hari, atau gunakan jadwal hari ini. **Pengguna** |
+| `.kartuucapan` | Membuat kartu ucapan bergambar. | `.kartuucapan Semangat` | Tulis isi ucapan setelah perintah. **Pengguna** |
+| `.gambar`, `.carigambar`, `.img`, `.image`, `.foto`, `.carifoto`, `.pinterest` | Mencari gambar untuk suatu topik. | `.gambar kelas` | Tulis objek yang dicari; periksa sumber pada caption. **Pengguna** |
+| `.qr`, `.qrcode` | Membuat gambar QR dari teks atau tautan. | `.qr Halo kelas` | Tempel konten setelah .qr. QR masuk akun WhatsApp tersedia melalui installer VPS. **Pengguna** |
+| `.ocr` | Membaca teks pada gambar. | `.ocr` | Kirim atau kutip gambar yang tulisannya terbaca. Perlu gambar dan Tesseract pada server. **Pengguna** |
+| `.tts`, `.say` | Mengubah teks menjadi audio. | `.tts Halo kelas` | Tulis kalimat yang ingin dibacakan. Memerlukan espeak-ng dengan suara Indonesia. **Pengguna** |
+
+<details>
+<summary>Contoh balasan · 🎨 Media</summary>
 
 **.suratizin Ani|Metodologi|2026-11-10|Kegiatan kampus**
-
-Pengguna
 
 ~~~~text
 [DRAFT OTOMATIS HDYBOT — BELUM DISAHKAN / BUKAN DOKUMEN RESMI KAMPUS / TANPA TANDA TANGAN DOSEN]
@@ -2234,8 +2428,6 @@ Demikian surat permohonan ini dibuat untuk ditinjau dan ditandatangani secara sa
 
 **.doc create Ani|Metodologi|2026-11-10|Kegiatan kampus**
 
-Pengguna · Alias: `.doc permission`, `.pdf create`, `.pdf permission`
-
 ~~~~text
 [DRAFT OTOMATIS HDYBOT — BELUM DISAHKAN / BUKAN DOKUMEN RESMI KAMPUS / TANPA TANDA TANGAN DOSEN]
 
@@ -2257,8 +2449,6 @@ Demikian surat permohonan ini dibuat untuk ditinjau dan ditandatangani secara sa
 
 **.notulensi Diskusi|2026-11-09|Cek jadwal**
 
-Pengguna
-
 ~~~~text
 [DRAFT OTOMATIS HDYBOT — BELUM DISAHKAN / BUKAN DOKUMEN RESMI KAMPUS / TANPA TANDA TANGAN DOSEN]
 
@@ -2274,8 +2464,6 @@ Keputusan / Ringkasan:
 ~~~~
 
 **.doc minutes Diskusi|2026-11-09|Cek jadwal**
-
-Pengguna · Alias: `.pdf minutes`
 
 ~~~~text
 [DRAFT OTOMATIS HDYBOT — BELUM DISAHKAN / BUKAN DOKUMEN RESMI KAMPUS / TANPA TANDA TANGAN DOSEN]
@@ -2293,16 +2481,12 @@ Keputusan / Ringkasan:
 
 **.doc pdf Agenda|Belajar bersama**
 
-Pengguna · Alias: `.pdf`, `.pdf pdf`
-
 ~~~~text
 📄 *Dokumen PDF Draft Siap:* Agenda _(DRAFT — perlu review sebelum dikirim resmi)_
 [Lampiran application/pdf · agenda-draft.pdf]
 ~~~~
 
 **.sticker**
-
-Pengguna · Alias: `.stiker`, `.s`, `.stickerwm` · Dengan gambar.
 
 ~~~~text
 🎨 Stiker berhasil dibuat!
@@ -2311,16 +2495,12 @@ Pengguna · Alias: `.stiker`, `.s`, `.stickerwm` · Dengan gambar.
 
 **.ttp Kelas A**
 
-Pengguna · Alias: `.attp`
-
 ~~~~text
 🎨 Stiker teks: *Kelas A*
 [Lampiran image/webp]
 ~~~~
 
 **.toimg**
-
-Pengguna · Dengan stiker WebP.
 
 ~~~~text
 🖼️ Stiker berhasil dikonversi menjadi gambar PNG.
@@ -2329,16 +2509,12 @@ Pengguna · Dengan stiker WebP.
 
 **.blur**
 
-Pengguna · Dengan gambar.
-
 ~~~~text
 🖼️ Efek gambar *BLUR* selesai diproses.
 [Lampiran image/png · hdybot-blur.png]
 ~~~~
 
 **.invert**
-
-Pengguna · Dengan gambar.
 
 ~~~~text
 🖼️ Efek gambar *INVERT* selesai diproses.
@@ -2347,16 +2523,12 @@ Pengguna · Dengan gambar.
 
 **.grayscale**
 
-Pengguna · Alias: `.hitamputih` · Dengan gambar.
-
 ~~~~text
 🖼️ Efek gambar *GRAYSCALE* selesai diproses.
 [Lampiran image/png · hdybot-grayscale.png]
 ~~~~
 
 **.flip**
-
-Pengguna · Dengan gambar.
 
 ~~~~text
 🖼️ Efek gambar *FLIP* selesai diproses.
@@ -2365,16 +2537,12 @@ Pengguna · Dengan gambar.
 
 **.flop**
 
-Pengguna · Dengan gambar.
-
 ~~~~text
 🖼️ Efek gambar *FLOP* selesai diproses.
 [Lampiran image/png · hdybot-flop.png]
 ~~~~
 
 **.resize 128 128**
-
-Pengguna · Dengan gambar.
 
 ~~~~text
 🖼️ Efek gambar *RESIZE* selesai diproses.
@@ -2383,16 +2551,12 @@ Pengguna · Dengan gambar.
 
 **.compress**
 
-Pengguna · Dengan gambar.
-
 ~~~~text
 🖼️ Efek gambar *COMPRESS* selesai diproses.
 [Lampiran image/jpeg · hdybot-compress.jpg]
 ~~~~
 
 **.quotemaker Tetap belajar|Kelas A**
-
-Pengguna · Alias: `.makequote`, `.quotesmaker`
 
 ~~~~text
 🖼️ Kartu Kutipan: “Tetap belajar” — Kelas A
@@ -2401,8 +2565,6 @@ Pengguna · Alias: `.makequote`, `.quotesmaker`
 
 **.kartujadwal senin**
 
-Pengguna
-
 ~~~~text
 🖼️ Kartu visual *JADWAL KULIAH 5A — SENIN*
 [Lampiran image/png · jadwal-5a.png]
@@ -2410,16 +2572,12 @@ Pengguna
 
 **.kartuucapan Semangat**
 
-Pengguna
-
 ~~~~text
 Kartu ucapan kelas
 [Lampiran image/png · ucapan.png]
 ~~~~
 
 **.gambar kelas**
-
-Pengguna · Alias: `.carigambar`, `.img`, `.image`, `.foto`, `.carifoto`, `.pinterest`
 
 ~~~~text
 🖼️ *Ilustrasi & Pencarian Gambar — kelas*
@@ -2430,8 +2588,6 @@ Pengguna · Alias: `.carigambar`, `.img`, `.image`, `.foto`, `.carifoto`, `.pint
 
 **.qr Halo kelas**
 
-Pengguna · Alias: `.qrcode`
-
 ~~~~text
 🔳 QR Code untuk: `Halo kelas`
 [Lampiran image/png · qrcode.png]
@@ -2439,39 +2595,135 @@ Pengguna · Alias: `.qrcode`
 
 **.ocr**
 
-Pengguna · Perlu gambar dan Tesseract pada server.
-
 ~~~~text
 ⚠️ Kirim gambar/foto catatan dengan caption `.ocr` (atau balas gambar dengan `.ocr`) untuk mengekstrak teks.
 ~~~~
 
 **.tts Halo kelas**
 
-Pengguna · Alias: `.say` · Memerlukan espeak-ng dengan suara Indonesia.
-
 ~~~~text
 Sintesis suara belum tersedia. Periksa instalasi espeak-ng di server.
 ~~~~
 
-**.music fals**
+</details>
 
-Pengguna · Alias: `.musik` · Hasil API memerlukan kredensial SoundCloud. MP3 hanya berasal dari koleksi lokal berizin.
+<a id="panduan-menu-6"></a>
+
+### 🛠️ Utilitas
+
+Contoh berikut menggunakan input uji. Untuk cuaca, musik dan ensiklopedia, hasil langsung bergantung pada layanan terkait.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.profile`, `.me` | Melihat profil pengirim. | `.profile` | Jalankan dari akun WhatsApp sendiri. **Pengguna** |
+| `.groupid`, `.id` | Menampilkan ID chat saat ini. | `.groupid` | Kirim di grup yang JID-nya ingin diketahui. **Pengguna** |
+| `.kelompok`, `.buatkelompok` | Membagi peserta ke dalam kelompok. | `.kelompok 2 Ani,Budi,Citra,Deni` | Masukkan jumlah kelompok lalu nama peserta, dipisahkan koma. **Pengguna** |
+| `.countdown` | Menghitung selisih hari menuju tanggal tujuan. | `.countdown 2026-11-16` | Gunakan format YYYY-MM-DD. **Pengguna** |
+| `.announce`, `.pengumuman` | Membuka bantuan pengumuman. | `.announce` | Gunakan draft untuk menyiapkan isi. **Pengguna** |
+| `.announce draft`, `.announce create`, `.pengumuman draft`, `.pengumuman create` | Menyiapkan draf pengumuman kelas. | `.announce draft penting\|Diskusi\|Bawa catatan` | Pisahkan tingkat kepentingan, judul, dan isi dengan tanda pipa. **Pengguna** |
+| `.music`, `.musik` | Mencari musik dan mengirim MP3 lokal yang cocok. | `.music fals` | Tulis judul atau musisi. Tanpa koleksi MP3, balasan berupa hasil atau tautan pencarian. Hasil API memerlukan kredensial SoundCloud. MP3 hanya berasal dari koleksi lokal berizin. **Pengguna** |
+| `.ipk`, `.gpa` | Menghitung rata-rata nilai berbobot SKS. | `.ipk 4:4.0, 2:3.5` | Tulis pasangan SKS:nilai, pisahkan tiap matkul dengan koma. **Pengguna** |
+| `.bmi` | Menghitung indeks massa tubuh. | `.bmi 65 170` | Isi berat dalam kg dan tinggi dalam cm. **Pengguna** |
+| `.calc`, `.hitung`, `.kalkulator` | Menghitung ekspresi aritmetika. | `.calc (2+3)*4` | Tulis rumus dengan angka dan operator. **Pengguna** |
+| `.convert`, `.konversi`, `.kurs` | Mengonversi satuan. | `.convert 5 km m` | Urutkan nilai, satuan asal, lalu satuan tujuan. **Pengguna** |
+| `.jam`, `.waktu`, `.clock` | Melihat waktu saat ini. | `.jam` | Kirim tanpa argumen. **Pengguna** |
+| `.cuaca`, `.weather` | Memeriksa cuaca lokasi. | `.cuaca Jakarta` | Tulis nama kota. **Pengguna** |
+| `.wiki`, `.wikipedia`, `.kbbi` | Mencari ringkasan ensiklopedia. | `.wiki belajar` | Tulis istilah yang ingin dicari. **Pengguna** |
+| `.urlcheck`, `.shortlink` | Memeriksa kelayakan URL menurut aturan bot. | `.urlcheck https://perawat.org` | Tempel URL lengkap; hasilnya bukan pemindaian malware. **Pengguna** |
+| `.pantun` | Membuat pantun. | `.pantun nasehat` | Tambahkan tema jika diinginkan. **Pengguna** |
+| `.quotes`, `.quoterandom`, `.katabijak` | Meminta kutipan, motivasi, atau kata hari ini. | `.quotes lucu` | Pilih jenisnya; tambahkan tema jika tersedia. **Pengguna** |
+| `.quotesislami` | Meminta kutipan, motivasi, atau kata hari ini. | `.quotesislami` | Pilih jenisnya; tambahkan tema jika tersedia. **Pengguna** |
+| `.quotesmotivasi`, `.quotesnasehat` | Meminta kutipan, motivasi, atau kata hari ini. | `.quotesmotivasi` | Pilih jenisnya; tambahkan tema jika tersedia. **Pengguna** |
+| `.motivasi` | Meminta kutipan, motivasi, atau kata hari ini. | `.motivasi tema belajar` | Pilih jenisnya; tambahkan tema jika tersedia. **Pengguna** |
+| `.katahariini` | Meminta kutipan, motivasi, atau kata hari ini. | `.katahariini tema belajar` | Pilih jenisnya; tambahkan tema jika tersedia. **Pengguna** |
+| `.tebak-tebakan` | Meminta konten hiburan sesuai jenis perintah. | `.tebak-tebakan tema belajar` | Ketik tema untuk tebak-tebakan, candaan, rayuan atau cerita. **Pengguna** |
+| `.roasting` | Meminta konten hiburan sesuai jenis perintah. | `.roasting tema belajar` | Ketik tema untuk tebak-tebakan, candaan, rayuan atau cerita. **Pengguna** |
+| `.gombal` | Meminta konten hiburan sesuai jenis perintah. | `.gombal tema belajar` | Ketik tema untuk tebak-tebakan, candaan, rayuan atau cerita. **Pengguna** |
+| `.rayuan` | Meminta konten hiburan sesuai jenis perintah. | `.rayuan tema belajar` | Ketik tema untuk tebak-tebakan, candaan, rayuan atau cerita. **Pengguna** |
+| `.cerpen` | Meminta konten hiburan sesuai jenis perintah. | `.cerpen tema belajar` | Ketik tema untuk tebak-tebakan, candaan, rayuan atau cerita. **Pengguna** |
+| `.cerita` | Meminta konten hiburan sesuai jenis perintah. | `.cerita tema belajar` | Ketik tema untuk tebak-tebakan, candaan, rayuan atau cerita. **Pengguna** |
+| `.dadu` | Mengundi angka dadu atau sisi koin. | `.dadu` | Kirim setiap kali ingin mengundi. **Pengguna** |
+| `.apakah` | Memberi jawaban atau penilaian untuk hiburan. | `.apakah belajar bersama` | Ketik pertanyaan atau hal yang ingin dinilai. **Pengguna** |
+| `.kapankah` | Memberi jawaban atau penilaian untuk hiburan. | `.kapankah belajar bersama` | Ketik pertanyaan atau hal yang ingin dinilai. **Pengguna** |
+| `.bisakah` | Memberi jawaban atau penilaian untuk hiburan. | `.bisakah belajar bersama` | Ketik pertanyaan atau hal yang ingin dinilai. **Pengguna** |
+| `.kerangajaib` | Memberi jawaban atau penilaian untuk hiburan. | `.kerangajaib belajar bersama` | Ketik pertanyaan atau hal yang ingin dinilai. **Pengguna** |
+| `.rate` | Memberi jawaban atau penilaian untuk hiburan. | `.rate belajar bersama` | Ketik pertanyaan atau hal yang ingin dinilai. **Pengguna** |
+| `.hilih` | Mengubah gaya atau susunan teks. | `.hilih Ani` | Tulis teks setelah nama efek. **Pengguna** |
+| `.alay` | Mengubah gaya atau susunan teks. | `.alay Ani` | Tulis teks setelah nama efek. **Pengguna** |
+| `.besarkecil` | Mengubah gaya atau susunan teks. | `.besarkecil Ani` | Tulis teks setelah nama efek. **Pengguna** |
+| `.balikhuruf` | Mengubah gaya atau susunan teks. | `.balikhuruf Ani` | Tulis teks setelah nama efek. **Pengguna** |
+| `.namaninja` | Mengubah gaya atau susunan teks. | `.namaninja Ani` | Tulis teks setelah nama efek. **Pengguna** |
+| `.stats`, `.activity`, `.report` | Melihat statistik aktivitas. | `.stats week` | Tambahkan periode yang didukung, misalnya week. **Pengguna** |
+| `.owner` | Melihat identitas owner yang dikonfigurasi. | `.owner` | Kirim tanpa argumen. **Pengguna** |
+| `.about` | Membaca informasi tentang bot. | `.about` | Kirim tanpa argumen. **Pengguna** |
+| `.info`, `.ingfo` | Membaca informasi tentang bot. | `.info` | Kirim tanpa argumen. **Pengguna** |
+| `.menu`, `.allmenu` | Membuka menu yang sesuai akses pengirim. | `.menu` | Ketik .menu lalu nomor untuk berpindah halaman. **Pengguna** |
+| `.help` | Membaca cara pakai suatu perintah. | `.help calc` | Tulis nama perintah atau subperintah setelah .help. **Pengguna** |
+| `.cekpesan`, `.klasifikasi` | Menilai isi pesan kelas. | `.cekpesan Perubahan jadwal besok` | Masukkan teks yang ingin diperiksa. **Pengguna** |
+| `.admin menu`, `.maintenance menu` | Membuka menu yang sesuai akses pengirim. | `.admin menu` | Ketik .menu lalu nomor untuk berpindah halaman. **Pengguna** |
+
+<details>
+<summary>Contoh balasan · 🛠️ Utilitas</summary>
+
+**.profile**
+
+~~~~text
+🪪 *Profil Pengguna*
+• JID: `<JID pengguna>`
+• Nama Tampilan: *Mahasiswa 5A*
+• Konteks Chat: *private*
+• Status Admin: *Admin Terotorisasi*
+~~~~
+
+**.groupid**
+
+~~~~text
+🆔 *Informasi Chat/Grup*
+• Chat JID: `<JID pengguna>`
+• Tipe: *private*
+• Pengirim Terdeteksi: `<JID pengguna>`
+~~~~
+
+**.kelompok 2 Ani,Budi,Citra,Deni**
+
+~~~~text
+👥 *Hasil Pembagian Kelompok Adil (2 Kelompok — Total 4 Mahasiswa)*
+*Kelompok 1* (Ketua: Ani):
+Anggota: Ani, Citra
+
+*Kelompok 2* (Ketua: Budi):
+Anggota: Budi, Deni
+~~~~
+
+**.countdown 2026-11-16**
+
+~~~~text
+⏳ Hitung mundur menuju *2026-11-16*: *7 hari*.
+~~~~
+
+**.announce**
+
+~~~~text
+📢 Belum ada riwayat draft pengumuman. Buat dengan `.announce draft penting|Judul|Isi`.
+~~~~
+
+**.announce draft penting|Diskusi|Bawa catatan**
+
+~~~~text
+📢 *Draft Pengumuman Dibuat (ANN-1)*
+• Prioritas: *PENTING*
+• Judul: *Diskusi*
+• Isi: Bawa catatan
+~~~~
+
+**.music fals**
 
 ~~~~text
 Cari “fals” di SoundCloud
 https://soundcloud.com/search/sounds?q=fals
 ~~~~
 
-</details>
-
-<details>
-<summary><strong>Utilitas dan hiburan</strong></summary>
-
-Hitung IPK, BMI, ekspresi matematika, dan konversi satuan; cari cuaca, artikel, atau waktu salat. Kurs bawaan menggunakan angka referensi statis. URL check memeriksa format dan tujuan alamat. Alias shortlink tidak membuat tautan pendek.
-
 **.ipk 4:4.0, 2:3.5**
-
-Pengguna · Alias: `.gpa`
 
 ~~~~text
 🎓 *Kalkulator IP/IPK*: Total *6 SKS* → IP = *3.83*
@@ -2479,15 +2731,11 @@ Pengguna · Alias: `.gpa`
 
 **.bmi 65 170**
 
-Pengguna
-
 ~~~~text
 ⚖️ *Kalkulator BMI Edukatif*: BMI = *22.5* (Kategori: *Normal*).
 ~~~~
 
 **.calc (2+3)\*4**
-
-Pengguna · Alias: `.hitung`, `.kalkulator`
 
 ~~~~text
 🧮 *Hasil Kalkulator:*
@@ -2496,15 +2744,11 @@ Pengguna · Alias: `.hitung`, `.kalkulator`
 
 **.convert 5 km m**
 
-Pengguna · Alias: `.konversi`, `.kurs`
-
 ~~~~text
 📏 *Konversi Panjang:* 5 km = *5000 m*
 ~~~~
 
 **.jam**
-
-Pengguna · Alias: `.waktu`, `.clock`
 
 ~~~~text
 🕒 *Informasi Waktu Nasional & Dunia*
@@ -2516,8 +2760,6 @@ Pengguna · Alias: `.waktu`, `.clock`
 
 **.cuaca Jakarta**
 
-Pengguna · Alias: `.weather`
-
 ~~~~text
 🌤️ *Cuaca Saat Ini — Jakarta*
 • Suhu: *28 °C*
@@ -2528,8 +2770,6 @@ _Sumber: Open-Meteo (Asia/Jakarta)_
 
 **.wiki belajar**
 
-Pengguna · Alias: `.wikipedia`, `.kbbi`
-
 ~~~~text
 📖 *Wikipedia Bahasa Indonesia — Belajar*
 Contoh ringkasan untuk pengujian.
@@ -2538,8 +2778,6 @@ Contoh ringkasan untuk pengujian.
 ~~~~
 
 **.urlcheck https://perawat.org**
-
-Pengguna · Alias: `.shortlink`
 
 ~~~~text
 🔍 *Pemeriksaan Keamanan URL/Domain*
@@ -2551,16 +2789,12 @@ Pengguna · Alias: `.shortlink`
 
 **.pantun nasehat**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.quotes lucu**
-
-Pengguna · Alias: `.quoterandom`, `.katabijak`
 
 ~~~~text
 🎭 *Hiburan kelas*
@@ -2569,16 +2803,12 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.quotesislami**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.quotesmotivasi**
-
-Pengguna · Alias: `.quotesnasehat`
 
 ~~~~text
 🎭 *Hiburan kelas*
@@ -2587,16 +2817,12 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.motivasi tema belajar**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.katahariini tema belajar**
-
-Pengguna
 
 ~~~~text
 🎭 *Hiburan kelas*
@@ -2605,16 +2831,12 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.tebak-tebakan tema belajar**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.roasting tema belajar**
-
-Pengguna
 
 ~~~~text
 🎭 *Hiburan kelas*
@@ -2623,16 +2845,12 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.gombal tema belajar**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
 **.rayuan tema belajar**
-
-Pengguna
 
 ~~~~text
 🎭 *Hiburan kelas*
@@ -2641,8 +2859,6 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.cerpen tema belajar**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
@@ -2650,119 +2866,18 @@ Contoh respons NVIDIA untuk pengujian format.
 
 **.cerita tema belajar**
 
-Pengguna
-
 ~~~~text
 🎭 *Hiburan kelas*
 Contoh respons NVIDIA untuk pengujian format.
 ~~~~
 
-**.faktaunik**
-
-Pengguna
-
-~~~~text
-🧬 *Fakta Unik Kesehatan & Sains*
-Jantung manusia rata-rata berdetak sekitar 100.000 kali per hari dan memompa sekitar 7.500 liter darah.
-~~~~
-
-**.doaharian**
-
-Pengguna · Alias: `.ayatkursi`
-
-~~~~text
-🤲 *Doa Sebelum Belajar:*
-“Rabbi zidnii ‘ilman warzuqnii fahman, waj’alnii minash-shaalihiin.”
-(Ya Allah, tambahkanlah ilmu kepadaku, berikanlah aku pemahaman, dan jadikanlah aku termasuk golongan orang-orang yang saleh).
-~~~~
-
-**.listsurah**
-
-Pengguna · Alias: `.quran`
-
-~~~~text
-📖 *Daftar Surah Pilihan Al-Qur'an*
-1. Al-Fatihah (Pembukaan — 7 ayat)
-2. Al-Baqarah (Sapi Betina — 286 ayat)
-18. Al-Kahfi (Penghuni Gua — 110 ayat)
-36. Yasin (Yasin — 83 ayat)
-55. Ar-Rahman (Yang Maha Pemurah — 78 ayat)
-56. Al-Waqi’ah (Hari Kiamat — 96 ayat)
-67. Al-Mulk (Kerajaan — 30 ayat)
-93. Ad-Dhuha (Waktu Dhuha — 11 ayat)
-94. Al-Insyirah (Kelapangan — 8 ayat)
-112. Al-Ikhlas (Ikhlas — 4 ayat)
-113. Al-Falaq (Waktu Subuh — 5 ayat)
-114. An-Nas (Manusia — 6 ayat)
-
-_Ketik `.doaharian` untuk doa belajar & klinik._
-~~~~
-
-**.jadwalsholat Jakarta**
-
-Pengguna
-
-~~~~text
-🕌 *Jadwal salat · Jakarta*
-09-11-2026 · Asia/Jakarta
-
-Subuh · 04:11
-Zuhur · 11:42
-Asar · 15:00
-Magrib · 17:53
-Isya · 19:03
-
-Sumber: AlAdhan · metode Kemenag RI
-~~~~
-
-**.truth**
-
-Pengguna
-
-~~~~text
-🎯 *TRUTH (Jujur):*
-Apa kebiasaan belajar terbaik yang ingin kamu mulai minggu ini?
-~~~~
-
-**.dare**
-
-Pengguna
-
-~~~~text
-🔥 *DARE (Tantangan Aman):*
-Buat 1 pantun semangat belajar untuk teman-teman Nursing Class A!
-~~~~
-
 **.dadu**
 
-Pengguna
-
 ~~~~text
-🎲 *Lempar Dadu:* Kamu mendapatkan angka *6*!
-~~~~
-
-**.koin**
-
-Pengguna · Alias: `.flipcoin`
-
-~~~~text
-🪙 *Lempar Koin:* Hasilnya adalah *GAMBAR (Tails)*!
-~~~~
-
-**.suit batu**
-
-Pengguna
-
-~~~~text
-✊✌️✋ *Suit Jepang*
-• Kamu: *BATU*
-• HdyBot: *GUNTING*
-• Hasil: *KAMU MENANG! 🎉*
+🎲 *Lempar Dadu:* Kamu mendapatkan angka *2*!
 ~~~~
 
 **.apakah belajar bersama**
-
-Pengguna
 
 ~~~~text
 🐚 *Kerang Ajaib HdyBot*
@@ -2772,16 +2887,12 @@ Pengguna
 
 **.kapankah belajar bersama**
 
-Pengguna
-
 ~~~~text
 🔮 *Pertanyaan:* Kapankah belajar bersama?
 *Jawaban:* Besok pagi
 ~~~~
 
 **.bisakah belajar bersama**
-
-Pengguna
 
 ~~~~text
 🐚 *Kerang Ajaib HdyBot*
@@ -2791,8 +2902,6 @@ Pengguna
 
 **.kerangajaib belajar bersama**
 
-Pengguna
-
 ~~~~text
 🐚 *Kerang Ajaib HdyBot*
 • Pertanyaan: _belajar bersama_
@@ -2801,15 +2910,11 @@ Pengguna
 
 **.rate belajar bersama**
 
-Pengguna
-
 ~~~~text
 📊 *Penilaian HdyBot untuk "belajar bersama":* *6/100* ⭐
 ~~~~
 
 **.hilih Ani**
-
-Pengguna
 
 ~~~~text
 ✨ *Hasil (hilih):*
@@ -2818,16 +2923,12 @@ Ini
 
 **.alay Ani**
 
-Pengguna
-
 ~~~~text
 ✨ *Hasil (alay):*
 4n1
 ~~~~
 
 **.besarkecil Ani**
-
-Pengguna
 
 ~~~~text
 ✨ *Hasil (besarkecil):*
@@ -2836,8 +2937,6 @@ AnI
 
 **.balikhuruf Ani**
 
-Pengguna
-
 ~~~~text
 ✨ *Hasil (balikhuruf):*
 inA
@@ -2845,370 +2944,12 @@ inA
 
 **.namaninja Ani**
 
-Pengguna
-
 ~~~~text
 ✨ *Hasil (namaninja):*
 katoki
 ~~~~
 
-**.afk belajar**
-
-Pengguna
-
-~~~~text
-💤 Status *AFK* diaktifkan untuk `<JID pengguna>`
-• Alasan: _belajar_
-~~~~
-
-**.unafk**
-
-Pengguna
-
-~~~~text
-👋 Selamat datang kembali! Status AFK Anda telah dinonaktifkan.
-~~~~
-
-</details>
-
-<details>
-<summary><strong>Permainan, XP, dan statistik</strong></summary>
-
-Setiap chat memiliki sesi sendiri. Buat ruang untuk memilih peserta, level dan batas waktu. Jawaban benar menghasilkan XP bagi peserta yang mengaktifkan gamifikasi. Riwayat, skor, status AFK dan mode grup disimpan dalam state lokal.
-
-**.game**
-
-Pengguna
-
-~~~~text
-🎮 *Permainan kelas*
-• .tebakkata
-• .caklontong
-• .family100
-• .mathquiz
-
-.game <kategori> [easy|medium|hard]
-sinonim (easy), antonim (easy), anagram (easy), tebakemoji (easy), deretangka (medium), asahotak (medium), tebakpola (hard), komputer (medium), matematika (hard)
-
-Jawab melalui .jawab <teks>.
-~~~~
-
-**.game list**
-
-Pengguna
-
-~~~~text
-🎮 *Permainan kelas*
-• .tebakkata
-• .caklontong
-• .family100
-• .mathquiz
-
-.game <kategori> [easy|medium|hard]
-sinonim (easy), antonim (easy), anagram (easy), tebakemoji (easy), deretangka (medium), asahotak (medium), tebakpola (hard), komputer (medium), matematika (hard)
-
-Jawab melalui .jawab <teks>.
-~~~~
-
-**.game buat 2**
-
-Pengguna
-
-~~~~text
-🎮 Sesi dibuat. Peserta dapat mengetik .game gabung. Pembuat memulai dengan .game mulai.
-~~~~
-
-**.game gabung**
-
-Pengguna
-
-~~~~text
-Anda sudah tergabung.
-~~~~
-
-**.game keluar**
-
-Pengguna
-
-~~~~text
-Sesi ditutup.
-~~~~
-
-**.game mulai antonim**
-
-Pengguna
-
-~~~~text
-🎮 *antonim · easy*
-Apa lawan kata konkret?
-Petunjuk: Diawali huruf A.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.game stop**
-
-Pengguna
-
-~~~~text
-Sesi ditutup.
-~~~~
-
-**.game level easy**
-
-Pengguna
-
-~~~~text
-🎮 Peserta 1/2 · acak · easy · 60 detik
-~~~~
-
-**.game kategori antonim**
-
-Pengguna
-
-~~~~text
-🎮 Peserta 1/2 · antonim · semua level · 60 detik
-~~~~
-
-**.game waktu 45**
-
-Pengguna
-
-~~~~text
-🎮 Peserta 1/2 · acak · semua level · 45 detik
-~~~~
-
-**.game riwayat**
-
-Pengguna
-
-~~~~text
-Belum ada riwayat permainan Anda di chat ini.
-~~~~
-
-**.game acak easy**
-
-Pengguna
-
-~~~~text
-🎮 *sinonim · easy*
-Apa sinonim cermat yang diawali huruf T?
-Petunjuk: Enam huruf.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.sinonim**
-
-Pengguna
-
-~~~~text
-🎮 *sinonim · easy*
-Apa sinonim cermat yang diawali huruf T?
-Petunjuk: Enam huruf.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.antonim**
-
-Pengguna
-
-~~~~text
-🎮 *antonim · easy*
-Apa lawan kata konkret?
-Petunjuk: Diawali huruf A.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.anagram**
-
-Pengguna
-
-~~~~text
-🎮 *anagram · easy*
-Susun I — S — R — U — K menjadi nama benda.
-Petunjuk: Digunakan untuk duduk.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.tebakemoji**
-
-Pengguna
-
-~~~~text
-🎮 *tebakemoji · easy*
-📚 + 🐛 mengingatkan pada ungkapan apa untuk orang yang gemar membaca?
-Petunjuk: Dua kata.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.deretangka**
-
-Pengguna
-
-~~~~text
-🎮 *deretangka · medium*
-Lanjutkan pola 3, 6, 11, 18, …
-Petunjuk: Perhatikan selisih antarangka.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.asahotak**
-
-Pengguna
-
-~~~~text
-🎮 *asahotak · medium*
-Ada 5 tim. Setiap pasang tim bertemu satu kali. Berapa pertandingan?
-Petunjuk: Setiap tim menghadapi empat lawan.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.tebakpola**
-
-Pengguna
-
-~~~~text
-🎮 *tebakpola · hard*
-A, C, F, J, O, … Huruf berikutnya?
-Petunjuk: Jarak lompatan bertambah satu.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.tebakkata**
-
-Pengguna
-
-~~~~text
-🧩 *Tebak Kata Keperawatan*
-Huruf Acak: *E - K - O - O - P - S - S - T - T*
-Petunjuk: _Alat medis untuk mendengarkan suara jantung dan paru-paru (auskultasi)._
-Balas dengan `.jawab <kata>`
-~~~~
-
-**.caklontong**
-
-Pengguna
-
-~~~~text
-😂 *Teka-Teki Cak Lontong*
-Soal: *Orang yang sakit biasanya dibawa ke...*
-Petunjuk: Kalau di rumah sakit pun tetap masuk ke ruangan/kamar dulu.
-Balas dengan `.jawab <jawaban>`
-~~~~
-
-**.family100**
-
-Pengguna
-
-~~~~text
-👨‍👩‍👧‍👦 *Survei Family 100 Kelas 5A*
-Pertanyaan: *Sebutkan alat yang selalu dibawa mahasiswa keperawatan saat praktikum!*
-Petunjuk: Alat pengukur tekanan darah.
-Balas dengan `.jawab <jawaban>`
-~~~~
-
-**.mathquiz**
-
-Pengguna
-
-~~~~text
-🧮 *Kuis Matematika Cepat*
-Soal: *Berapakah hasil dari 14 × 9 + 10 ?*
-Balas dengan `.jawab <angka>`
-~~~~
-
-**.game komputer medium**
-
-Pengguna
-
-~~~~text
-🎮 *komputer · medium*
-Bilangan biner 1011 bernilai berapa dalam desimal?
-Petunjuk: Bobot digit dari kanan: 1, 2, 4, 8.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.game matematika hard**
-
-Pengguna
-
-~~~~text
-🎮 *matematika · hard*
-Dua dadu adil dilempar. Berapa pasangan berurutan yang jumlahnya delapan?
-Petunjuk: Mulai dari (2,6).
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.hint**
-
-Pengguna
-
-~~~~text
-Diawali huruf A.
-~~~~
-
-**.dailychallenge**
-
-Pengguna
-
-~~~~text
-🎮 *tebakemoji · easy*
-📚 + 🐛 mengingatkan pada ungkapan apa untuk orang yang gemar membaca?
-Petunjuk: Dua kata.
-Waktu 60 detik. Balas dengan .jawab <jawaban>.
-~~~~
-
-**.score**
-
-Pengguna
-
-~~~~text
-🏅 Skor XP Anda: 0
-~~~~
-
-**.jawab abstrak**
-
-Pengguna
-
-~~~~text
-🎉 *BENAR!* Jawabannya adalah *ABSTRAK* — Konkret dapat diamati secara langsung. Abstrak merujuk pada gagasan.
-~~~~
-
-**.nyerah**
-
-Pengguna · Alias: `.skip`
-
-~~~~text
-🏳️ Kuis dihentikan. Jawaban yang benar adalah: *ABSTRAK*. Konkret dapat diamati secara langsung. Abstrak merujuk pada gagasan.
-~~~~
-
-**.leaderboard**
-
-Pengguna · Alias: `.lb`, `.level`, `.lvl`
-
-~~~~text
-🏆 *Leaderboard Akademik (Opt-In)*
-1. <JID pengguna> — 25 XP (Level 1)
-~~~~
-
-**.privacy on**
-
-Pengguna · Alias: `.privacy gamification`
-
-~~~~text
-✅ Anda telah *opt-in* ke fitur XP & Gamification akademik.
-~~~~
-
-**.privacy gamification off**
-
-Pengguna
-
-~~~~text
-🔒 Fitur Gamification Anda telah *dinonaktifkan (opt-out)* dan data XP Anda dihapus.
-~~~~
-
 **.stats week**
-
-Pengguna · Alias: `.activity`, `.report`
 
 ~~~~text
 📈 *Laporan Analitik Kelas (WEEK) — Nursing Class A*
@@ -3220,33 +2961,7 @@ Pengguna · Alias: `.activity`, `.report`
 _Data agregat kelas (privasi terjaga)._
 ~~~~
 
-</details>
-
-<details>
-<summary><strong>Grup, persetujuan, dan operasional</strong></summary>
-
-Pantau koneksi, AI, database, worker dan log melalui DM admin. Mode grup memerlukan owner atau admin grup. Persetujuan dan pengiriman relay lintas grup hanya dapat dijalankan oleh owner lewat DM.
-
-**.login**
-
-Pengguna · Alias: `.password`, `.pass`, `.auth` · Password disembunyikan.
-
-~~~~text
-🔐 *Verifikasi Admin HdyBot*
-Silakan balas pesan ini dengan password admin Anda:
-~~~~
-
-**.logout**
-
-Pengguna · Alias: `.lock`
-
-~~~~text
-🔒 Sesi admin telah dikunci. Ketika Anda chat kembali, bot akan meminta password admin.
-~~~~
-
 **.owner**
-
-Pengguna
 
 ~~~~text
 👤 *Identitas Owner & Konfigurasi*
@@ -3260,8 +2975,6 @@ Pengguna
 
 **.about**
 
-Pengguna
-
 ~~~~text
 🤖 *Tentang HdyBot — Nursing Class A Assistant*
 • Asisten AI Akademik & Sekretaris Kelas Digital untuk *Nursing Class A (Semester 5A)*
@@ -3273,8 +2986,6 @@ Pengguna
 
 **.info**
 
-Pengguna · Alias: `.ingfo`
-
 ~~~~text
 🤖 *Tentang HdyBot — Nursing Class A Assistant*
 • Asisten AI Akademik & Sekretaris Kelas Digital untuk *Nursing Class A (Semester 5A)*
@@ -3285,8 +2996,6 @@ Pengguna · Alias: `.ingfo`
 ~~~~
 
 **.menu**
-
-Pengguna · Alias: `.allmenu`
 
 ~~~~text
 *📚 Informasi kelas*
@@ -3306,344 +3015,13 @@ Cara pakai: .help <perintah>
 
 **.help calc**
 
-Pengguna
-
 ~~~~text
 💡 *Cara menggunakan*
 
 .calc <rumus>
 ~~~~
 
-**.status**
-
-DM admin terverifikasi
-
-~~~~text
-🩺 *Health & Ready Check HdyBot (via WA Admin)*
-• Kesehatan: *OK* (uptime 0s)
-• WhatsApp (mock): *connected*
-• Database: ok
-• NVIDIA AI: mode=auto | calls=0
-• Drive: Sinkronisasi berhasil.
-Jumlah dokumen: 1
-Indeks terakhir: 9/11/2026, 07.30.00
-• Scheduler: belum tersedia
-• RAM proses: <RAM> MiB
-• Outbound: DISABLED | Dry-Run: ON | EmergencyStop: OFF
-~~~~
-
-**.system**
-
-DM admin terverifikasi
-
-~~~~text
-🩺 *Health & Ready Check HdyBot (via WA Admin)*
-• Kesehatan: *OK* (uptime 0s)
-• WhatsApp (mock): *connected*
-• Database: ok
-• NVIDIA AI: mode=auto | calls=0
-• Drive: Sinkronisasi berhasil.
-Jumlah dokumen: 1
-Indeks terakhir: 9/11/2026, 07.30.00
-• Scheduler: belum tersedia
-• RAM proses: <RAM> MiB
-• Outbound: DISABLED | Dry-Run: ON | EmergencyStop: OFF
-~~~~
-
-**.dashboard**
-
-DM admin terverifikasi
-
-~~~~text
-📊 *DASHBOARD HDYBOT — Halo Hedy*
-• WhatsApp (mock): *connected*
-• OpenAI: belum diisi · NVIDIA: *Belum diisi* | Mode: *auto*
-• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning, luna
-• Grup sumber aktif: *1*
-• Pesan diproses hari ini: *1* (Penting: *1*)
-• Menunggu review Hedy: *1*
-• Kuliah berikutnya: *Metodologi Penelitian (Senin 08:00–09:40 WIB)*
-• Outbound Emergency Stop: *Normal*
-• Error terakhir: tidak ada | Health: OK
-~~~~
-
-**.health**
-
-DM admin terverifikasi
-
-~~~~text
-🩺 *Health & Ready Check HdyBot (via WA Admin)*
-• Kesehatan: *OK* (uptime 0s)
-• WhatsApp (mock): *connected*
-• Database: ok
-• NVIDIA AI: mode=auto | calls=0
-• Drive: Sinkronisasi berhasil.
-Jumlah dokumen: 1
-Indeks terakhir: 9/11/2026, 07.30.00
-• Scheduler: belum tersedia
-• RAM proses: <RAM> MiB
-• Outbound: DISABLED | Dry-Run: ON | EmergencyStop: OFF
-~~~~
-
-**.ping**
-
-DM admin terverifikasi
-
-~~~~text
-🏓 Pong! HdyBot — Nursing Class A Assistant aktif.
-~~~~
-
-**.runtime**
-
-DM admin terverifikasi
-
-~~~~text
-⏱️ Runtime HdyBot: 0 detik | Timezone: Asia/Jakarta | Mode WA: mock
-~~~~
-
-**.logs 10**
-
-DM admin terverifikasi
-
-~~~~text
-📋 *Log operasional*
-Belum ada kejadian yang sesuai sejak proses dimulai.
-~~~~
-
-**.errors today**
-
-DM admin terverifikasi
-
-~~~~text
-⚠️ *Laporan kendala*
-Belum ada kejadian yang sesuai sejak proses dimulai.
-~~~~
-
-**.audit**
-
-DM admin terverifikasi
-
-~~~~text
-📋 Belum ada entri audit log.
-~~~~
-
-**.backup status**
-
-DM admin terverifikasi
-
-~~~~text
-Direktori backup tidak tersedia.
-~~~~
-
-**.storage**
-
-DM admin terverifikasi
-
-~~~~text
-💾 Ruang tersedia: <ruang disk> GiB
-RAM proses: <RAM> MiB
-~~~~
-
-**.pair**
-
-DM admin terverifikasi · Adapter mendukung bootstrap sekali pakai. Startup produksi saat ini tidak menerbitkan bootstrap, sehingga perintah mengembalikan penolakan.
-
-~~~~text
-❌ Pairing ditolak (bootstrap_unavailable).
-~~~~
-
-**.db status**
-
-DM admin terverifikasi
-
-~~~~text
-✅ Database merespons.
-~~~~
-
-**.whatsapp status**
-
-DM admin terverifikasi
-
-~~~~text
-WhatsApp · connected
-~~~~
-
-**.scheduler status**
-
-DM admin terverifikasi · Alias: `.workers`, `.queue`
-
-~~~~text
-Worker pengingat belum terhubung ke database.
-~~~~
-
-**.ai**
-
-DM admin terverifikasi · Alias: `.ai status`
-
-~~~~text
-🧠 *NVIDIA & OpenAI · Model AI*
-• NVIDIA: belum dikonfigurasi · OpenAI: belum dikonfigurasi
-• Mode: *auto*
-• Fallback: ON | Total Panggilan: 0
-• *deepseek* · deepseek-ai/deepseek-v4.1-flash
-• *super-vl* · nvidia/nemotron-3.5-super-vl-120b-a12b
-• *mistral* · mistralai/mistral-large-4-1t-a52b
-• *ultra* · nvidia/nemotron-3-ultra-550b-a55b
-• *kimi* · moonshotai/kimi-k3.1-pro
-• *minimax* · minimaxai/minimax-m3.1-flash
-• *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
-• *luna* · gpt-6-luna (tidak tersedia)
-~~~~
-
-**.ai models**
-
-DM admin terverifikasi
-
-~~~~text
-🧠 *NVIDIA & OpenAI · Model AI*
-• NVIDIA: belum dikonfigurasi · OpenAI: belum dikonfigurasi
-• Mode: *auto*
-• Fallback: ON | Total Panggilan: 0
-• *deepseek* · deepseek-ai/deepseek-v4.1-flash
-• *super-vl* · nvidia/nemotron-3.5-super-vl-120b-a12b
-• *mistral* · mistralai/mistral-large-4-1t-a52b
-• *ultra* · nvidia/nemotron-3-ultra-550b-a55b
-• *kimi* · moonshotai/kimi-k3.1-pro
-• *minimax* · minimaxai/minimax-m3.1-flash
-• *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
-• *luna* · gpt-6-luna (tidak tersedia)
-~~~~
-
-**.ai model lightning**
-
-DM admin terverifikasi · Alias: `.ai pin`
-
-~~~~text
-✅ Model di-pin sementara ke *lightning* (nvidia/nemotron-3.5-lightning-30b-a3b). Akan kembali ke auto setelah TTL berakhir.
-~~~~
-
-**.ai auto on**
-
-DM admin terverifikasi
-
-~~~~text
-✅ Mode router AI diatur ke *auto*.
-~~~~
-
-**.ai unpin**
-
-DM admin terverifikasi
-
-~~~~text
-✅ Mode router AI diatur ke *auto*.
-~~~~
-
-**.ai test Halo**
-
-DM admin terverifikasi
-
-~~~~text
-🧪 *Hasil uji NVIDIA*
-Model: nvidia/nemotron-3.5-super-vl-120b-a12b
-
-Contoh respons NVIDIA untuk pengujian format.
-~~~~
-
-**.groups**
-
-DM admin terverifikasi · Alias: `.group`, `.source`, `.target`
-
-~~~~text
-👥 *Daftar Grup Terdaftar & Allow Access (1)*
-• Mode Allow Access Semua Grup: *AKTIF ✅*
-1. *Grup uji* (`sumber-uji@g.us`) — ALLOW / AKTIF ✅ [official]
-~~~~
-
-**.groups sources**
-
-DM admin terverifikasi · Alias: `.groups list`, `.group sources`, `.source sources`, `.target sources`, `.group list`, `.source list`, `.target list`
-
-~~~~text
-👥 *Daftar Grup Terdaftar & Allow Access (1)*
-• Mode Allow Access Semua Grup: *AKTIF ✅*
-1. *Grup uji* (`sumber-uji@g.us`) — ALLOW / AKTIF ✅ [official]
-~~~~
-
-**.groups add sumber-uji@g.us Kelas**
-
-DM admin terverifikasi · Alias: `.groups set`, `.group add`, `.source add`, `.target add`, `.group set`, `.source set`, `.target set`
-
-~~~~text
-✅ Grup sumber *Kelas* (`sumber-uji@g.us`) terdaftar dan aktif.
-~~~~
-
-**.groups pause sumber-uji@g.us**
-
-DM admin terverifikasi · Alias: `.groups remove`, `.group pause`, `.source pause`, `.target pause`, `.group remove`, `.source remove`, `.target remove`
-
-~~~~text
-⏸️ Pemantauan & pengiriman grup `sumber-uji@g.us` dijeda.
-~~~~
-
-**.groups resume sumber-uji@g.us**
-
-DM admin terverifikasi · Alias: `.group resume`, `.source resume`, `.target resume`
-
-~~~~text
-▶️ Pemantauan & pengiriman grup `sumber-uji@g.us` dilanjutkan.
-~~~~
-
-**.nimbrung on**
-
-Owner atau admin grup · Alias: `.nongkrong`
-
-~~~~text
-Aku ikut nongkrong. Mau bahas apa?
-~~~~
-
-**.nimbrung status**
-
-Owner atau admin grup · Alias: `.nongkrong status`
-
-~~~~text
-💬 *Status Mode Grup (kelas-uji@g.us)*
-• Notifikasi AI: *🔴 BOT AI NONAKTIF (Mode Hening)*
-• Mode Saat Ini: *MODE HENING (DIAM) 🤫*
-• Ketik *"bot ikut nimbrung"* / `.nimbrung on` untuk mengajak bot nongkrong, atau *"bot berhenti"* / `.nimbrung off` untuk membuat bot kembali diam.
-~~~~
-
-**.diam**
-
-Owner atau admin grup · Alias: `.hening`, `.berhentinimbrung`, `.nimbrung off`, `.nongkrong off`
-
-~~~~text
-Baik, aku berhenti nongkrong. Panggil aku kalau perlu bantuan.
-~~~~
-
-**.setpjmk sumber-uji@g.us**
-
-DM admin terverifikasi
-
-~~~~text
-✅ *Grup Sumber PJMK Semester 5 Terdaftar!*
-• Nama Grup: *PJMK Semester 5*
-• JID: `sumber-uji@g.us`
-• Pesan penting masuk ke chat pribadi Hedy untuk persetujuan.
-~~~~
-
-**.setkelasa kelas-uji@g.us**
-
-DM admin terverifikasi · Alias: `.setnursing`
-
-~~~~text
-✅ *Grup Utama Nursing Class A Terdaftar!*
-• JID Tujuan Relay: `kelas-uji@g.us`
-• Pesan dari PJMK akan diteruskan ke sini setelah Hedy menyetujui pratinjau di chat pribadi.
-~~~~
-
 **.cekpesan Perubahan jadwal besok**
-
-Pengguna · Alias: `.klasifikasi`
 
 ~~~~text
 🔍 *Hasil Analisis Kualitas & Kepentingan Pesan AI*
@@ -3664,9 +3042,500 @@ Tindak lanjut · Harap dicatat dan dipersiapkan oleh seluruh mahasiswa Nursing C
 Sumber · PJMK Semester 5 (Simulasi)
 ~~~~
 
-**.filter status**
+**.admin menu**
 
-DM admin terverifikasi · Alias: `.monitor status`
+~~~~text
+*📚 Informasi kelas*
+
+• .kelas
+• .anggota [nama]
+• .pengurus
+• .rules
+• .faq
+• .matkul
+• .dosen [nama]
+• .kalender
+
+Halaman 1/8 · .menu 2
+Cara pakai: .help <perintah>
+~~~~
+
+</details>
+
+<a id="panduan-menu-7"></a>
+
+### 🔐 Administrasi
+
+Gunakan DM dari nomor admin terverifikasi. Baca tujuan dan isi pada pratinjau sebelum memberikan kode konfirmasi.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.tambahjadwal`, `.jadwal add`, `.jadwal tambah`, `.schedule add`, `.schedule tambah` | Menambah sesi ke PostgreSQL. | `.tambahjadwal minggu\|07:00\|08:00\|METPEN\|Lab` | Pisahkan hari, jam mulai, jam selesai, kode matkul dan ruang dengan tanda pipa. Tinjau lalu konfirmasi. **DM admin terverifikasi** |
+| `.editjadwal`, `.jadwal edit`, `.jadwal ubah`, `.schedule edit`, `.schedule ubah` | Mengubah sesi yang sudah ada. | `.editjadwal minggu\|07:00\|minggu\|08:00\|09:00\|METPEN\|Lab` | Awali dengan hari dan jam lama, lanjutkan data sesi baru. Konfirmasikan pratinjau di DM. **DM admin terverifikasi** |
+| `.hapusjadwal`, `.jadwal delete`, `.jadwal hapus`, `.schedule delete`, `.schedule hapus` | Menghapus satu sesi kuliah. | `.hapusjadwal minggu\|07:00` | Masukkan hari dan jam mulai sesi, kemudian periksa pratinjau. **DM admin terverifikasi** |
+| `.resetjadwal`, `.jadwal reset`, `.schedule reset` | Mengembalikan jadwal ke data awal. | `.resetjadwal` | Baca pratinjau sebelum mengonfirmasi reset. **DM admin terverifikasi** |
+| `.tugas antrean`, `.tasks antrean`, `.deadline antrean`, `.mytask antrean`, `.progress antrean` | Memeriksa pemberitahuan yang menunggu keputusan. | `.tugas antrean` | Buka di DM owner. **DM owner** |
+| `.tugas grup`, `.tasks grup`, `.deadline grup`, `.mytask grup`, `.progress grup` | Melihat grup tujuan yang dikenali. | `.tugas grup` | Salin nama atau JID untuk perintah tujuan. **DM owner** |
+| `.tugas tujuan`, `.tasks tujuan`, `.deadline tujuan`, `.mytask tujuan`, `.progress tujuan` | Memilih grup penerima pengingat. | `.tugas tujuan TUG-1.1.h3 kelas-uji@g.us` | Gunakan ID pemberitahuan dan JID grup. Baca pratinjau lalu balas .confirm dengan kode yang diberikan. **DM owner** |
+| `.tugas tolak`, `.tasks tolak`, `.deadline tolak`, `.mytask tolak`, `.progress tolak` | Melewati satu pemberitahuan. | `.tugas tolak TUG-1.1.h3` | Gunakan ID pemberitahuan dari DM. **DM owner** |
+| `.tugas deadline`, `.tasks deadline`, `.deadline deadline`, `.mytask deadline`, `.progress deadline` | Memperbaiki tenggat suatu tugas. | `.tugas deadline TUG-1 2026-11-16 14:00` | Masukkan ID tugas, tanggal, dan jam WIB jika diketahui. **DM owner** |
+| `.reminder pause`, `.reminders pause` | Menjeda atau melanjutkan worker pengingat. | `.reminder pause` | Pilih pause atau resume di DM admin. **DM admin terverifikasi** |
+| `.reminder resume`, `.reminders resume` | Menjeda atau melanjutkan worker pengingat. | `.reminder resume` | Pilih pause atau resume di DM admin. **DM admin terverifikasi** |
+| `.drive status`, `.drive errors` | Memeriksa sinkronisasi atau kesalahan Drive. | `.drive status` | Buka di DM admin. **DM admin terverifikasi** |
+| `.drive sync` | Meminta sinkronisasi metadata Drive. | `.drive sync` | Pastikan folder dan akun layanan sudah dikonfigurasi. **DM admin terverifikasi** |
+| `.login`, `.password`, `.pass`, `.auth` | Memverifikasi sesi admin. | `.login` | Dari DM nomor terdaftar, ketik .login lalu balas password, atau kirim .login <password>. Password disembunyikan. **Pengguna** |
+| `.logout`, `.lock` | Mengunci sesi admin. | `.logout` | Kirim di DM admin, termasuk saat membatalkan permintaan password. **Pengguna** |
+| `.status` | Memeriksa kesiapan layanan bot. | `.status` | Buka di DM admin. **DM admin terverifikasi** |
+| `.system` | Melihat penggunaan sumber daya server. | `.system` | Buka di DM admin. **DM admin terverifikasi** |
+| `.dashboard` | Melihat ringkasan operasional kelas dan bot. | `.dashboard` | Buka di DM admin. **DM admin terverifikasi** |
+| `.health` | Memeriksa kesiapan layanan bot. | `.health` | Buka di DM admin. **DM admin terverifikasi** |
+| `.ping` | Memeriksa respons atau lama proses berjalan. | `.ping` | Kirim di DM admin. **DM admin terverifikasi** |
+| `.runtime` | Memeriksa respons atau lama proses berjalan. | `.runtime` | Kirim di DM admin. **DM admin terverifikasi** |
+| `.logs` | Membaca log atau ringkasan kesalahan. | `.logs 10` | Gunakan jumlah entri untuk logs dan periode untuk errors. **DM admin terverifikasi** |
+| `.errors` | Membaca log atau ringkasan kesalahan. | `.errors today` | Gunakan jumlah entri untuk logs dan periode untuk errors. **DM admin terverifikasi** |
+| `.audit` | Melihat jejak tindakan admin. | `.audit` | Buka di DM admin. **DM admin terverifikasi** |
+| `.backup` | Memeriksa status backup. | `.backup status` | Gunakan status untuk melihat hasil yang tersedia. **DM admin terverifikasi** |
+| `.storage` | Melihat informasi penyimpanan server. | `.storage` | Buka di DM admin. **DM admin terverifikasi** |
+| `.pair` | Memverifikasi kode bootstrap admin jika diterbitkan. | `.pair` | Gunakan kode satu kali di DM; pairing perangkat WhatsApp dilakukan di VPS. Adapter mendukung bootstrap sekali pakai. Startup produksi saat ini tidak menerbitkan bootstrap, sehingga perintah mengembalikan penolakan. **DM admin terverifikasi** |
+| `.db status` | Memeriksa database, koneksi WhatsApp, atau worker. | `.db status` | Pilih layanan yang sedang diperiksa. **DM admin terverifikasi** |
+| `.whatsapp status` | Memeriksa database, koneksi WhatsApp, atau worker. | `.whatsapp status` | Pilih layanan yang sedang diperiksa. **DM admin terverifikasi** |
+| `.scheduler status`, `.workers`, `.queue` | Memeriksa database, koneksi WhatsApp, atau worker. | `.scheduler status` | Pilih layanan yang sedang diperiksa. **DM admin terverifikasi** |
+| `.ai`, `.ai status` | Melihat mode, penyedia, dan daftar model AI. | `.ai` | Buka di DM admin. **DM admin terverifikasi** |
+| `.ai models` | Melihat mode, penyedia, dan daftar model AI. | `.ai models` | Buka di DM admin. **DM admin terverifikasi** |
+| `.ai model`, `.ai pin` | Memilih model sementara. | `.ai model lightning` | Gunakan alias yang ditampilkan .ai models, misalnya luna. **DM admin terverifikasi** |
+| `.ai auto` | Mengatur mode otomatis atau melepas pilihan sementara. | `.ai auto on` | Gunakan .ai auto on untuk kembali ke router otomatis. **DM admin terverifikasi** |
+| `.ai unpin` | Mengatur mode otomatis atau melepas pilihan sementara. | `.ai unpin` | Gunakan .ai auto on untuk kembali ke router otomatis. **DM admin terverifikasi** |
+| `.ai test` | Menguji penyedia dan model yang menjawab. | `.ai test Halo` | Sertakan pertanyaan singkat di DM admin. **DM admin terverifikasi** |
+| `.groups`, `.group`, `.source`, `.target` | Menampilkan grup dan sumber yang dikenali. | `.groups` | Periksa nama dan JID sebelum mengubah konfigurasi. **DM admin terverifikasi** |
+| `.groups sources`, `.groups list`, `.group sources`, `.source sources`, `.target sources`, `.group list`, `.source list`, `.target list` | Menampilkan grup dan sumber yang dikenali. | `.groups sources` | Periksa nama dan JID sebelum mengubah konfigurasi. **DM admin terverifikasi** |
+| `.groups add`, `.groups set`, `.group add`, `.source add`, `.target add`, `.group set`, `.source set`, `.target set` | Mendaftarkan grup sumber. | `.groups add sumber-uji@g.us Kelas` | Isi JID grup dan nama tampilan. **DM admin terverifikasi** |
+| `.groups pause`, `.groups remove`, `.group pause`, `.source pause`, `.target pause`, `.group remove`, `.source remove`, `.target remove` | Menjeda atau mengaktifkan pemrosesan grup. | `.groups pause sumber-uji@g.us` | Masukkan JID grup yang dimaksud. **DM admin terverifikasi** |
+| `.groups resume`, `.group resume`, `.source resume`, `.target resume` | Menjeda atau mengaktifkan pemrosesan grup. | `.groups resume sumber-uji@g.us` | Masukkan JID grup yang dimaksud. **DM admin terverifikasi** |
+| `.nimbrung`, `.nongkrong` | Mengatur balasan percakapan grup. | `.nimbrung on` | Gunakan on, off, atau status; di grup, panggil bot sebagai owner atau admin grup saat mengubah mode. **Owner atau admin grup** |
+| `.nimbrung status`, `.nongkrong status` | Mengatur balasan percakapan grup. | `.nimbrung status` | Gunakan on, off, atau status; di grup, panggil bot sebagai owner atau admin grup saat mengubah mode. **Owner atau admin grup** |
+| `.diam`, `.hening`, `.berhentinimbrung`, `.nimbrung off`, `.nongkrong off` | Mengatur balasan percakapan grup. | `.diam` | Gunakan on, off, atau status; di grup, panggil bot sebagai owner atau admin grup saat mengubah mode. **Owner atau admin grup** |
+| `.setpjmk` | Menetapkan grup PJMK atau grup utama kelas. | `.setpjmk sumber-uji@g.us` | Masukkan JID yang sudah diverifikasi. **DM admin terverifikasi** |
+| `.setkelasa`, `.setnursing` | Menetapkan grup PJMK atau grup utama kelas. | `.setkelasa kelas-uji@g.us` | Masukkan JID yang sudah diverifikasi. **DM admin terverifikasi** |
+| `.filter status`, `.monitor status` | Memeriksa status filter atau item review. | `.filter status` | Pilih status untuk konfigurasi atau review untuk daftar. **DM admin terverifikasi** |
+| `.filter review`, `.monitor review` | Memeriksa status filter atau item review. | `.filter review` | Pilih status untuk konfigurasi atau review untuk daftar. **DM admin terverifikasi** |
+| `.filter pause`, `.filter off`, `.monitor pause`, `.monitor off` | Menjeda atau mengaktifkan pemrosesan grup. | `.filter pause sumber-uji@g.us` | Masukkan JID grup yang dimaksud. **DM admin terverifikasi** |
+| `.filter resume`, `.filter on`, `.monitor resume`, `.monitor on` | Menjeda atau mengaktifkan pemrosesan grup. | `.filter resume sumber-uji@g.us` | Masukkan JID grup yang dimaksud. **DM admin terverifikasi** |
+| `.digest` | Membaca ringkasan informasi kelas. | `.digest today` | Tentukan periode, misalnya today. **DM admin terverifikasi** |
+| `.priority` | Melihat item prioritas atau antrean persetujuan. | `.priority` | Baca ID sebelum mengambil tindakan. **DM admin terverifikasi** |
+| `.pending` | Melihat item prioritas atau antrean persetujuan. | `.pending` | Baca ID sebelum mengambil tindakan. **DM admin terverifikasi** |
+| `.approve` | Menyetujui atau menolak item review. | `.approve REV-1` | Gunakan ID yang diberikan bot. **DM admin terverifikasi** |
+| `.reject` | Menyetujui atau menolak item review. | `.reject REV-1` | Gunakan ID yang diberikan bot. **DM admin terverifikasi** |
+| `.send` | Menyiapkan pratinjau atau pengiriman berita kelas. | `.send REV-1` | Gunakan ID review, baca isi, dan ikuti konfirmasi dari bot. **DM admin terverifikasi** |
+| `.broadcast preview` | Menyiapkan pratinjau atau pengiriman berita kelas. | `.broadcast preview REV-1` | Gunakan ID review, baca isi, dan ikuti konfirmasi dari bot. **DM admin terverifikasi** |
+| `.broadcast send` | Menyiapkan pratinjau atau pengiriman berita kelas. | `.broadcast send REV-1` | Gunakan ID review, baca isi, dan ikuti konfirmasi dari bot. **DM admin terverifikasi** |
+| `.confirm` | Menjalankan atau membatalkan tindakan yang menunggu konfirmasi. | `.confirm NONCE` | Ganti NONCE dengan kode terbaru dari DM bot. **DM admin terverifikasi** |
+| `.cancel` | Menjalankan atau membatalkan tindakan yang menunggu konfirmasi. | `.cancel NONCE` | Ganti NONCE dengan kode terbaru dari DM bot. **DM admin terverifikasi** |
+| `.relay` | Melihat antrean relay antarkelompok. | `.relay list` | Jalankan di DM owner. **DM owner** |
+| `.relay` | Melihat, meneruskan, atau menolak satu relay. | `.relay lihat abc123` | Gunakan ID pratinjau dalam DM owner. **DM owner** |
+| `.relay` | Melihat, meneruskan, atau menolak satu relay. | `.relay kirim abc123` | Gunakan ID pratinjau dalam DM owner. **DM owner** |
+| `.relay` | Melihat, meneruskan, atau menolak satu relay. | `.relay tolak abc123` | Gunakan ID pratinjau dalam DM owner. **DM owner** |
+| `.admin pause`, `.admin on`, `.maintenance pause`, `.maintenance on` | Menghentikan atau melanjutkan pengiriman keluar. | `.admin pause` | Jalankan dari DM admin. **DM admin terverifikasi** |
+| `.admin resume`, `.admin off`, `.maintenance resume`, `.maintenance off` | Menghentikan atau melanjutkan pengiriman keluar. | `.admin resume` | Jalankan dari DM admin. **DM admin terverifikasi** |
+| `.admin status`, `.maintenance status` | Memeriksa kesiapan layanan bot. | `.admin status` | Buka di DM admin. **DM admin terverifikasi** |
+| `.admin overview`, `.maintenance overview` | Melihat ringkasan operasional kelas dan bot. | `.admin overview` | Buka di DM admin. **DM admin terverifikasi** |
+| `.admin review`, `.maintenance review` | Melihat item prioritas atau antrean persetujuan. | `.admin review` | Baca ID sebelum mengambil tindakan. **DM admin terverifikasi** |
+| `.admin approve`, `.maintenance approve` | Menyetujui atau menolak item review. | `.admin approve REV-1` | Gunakan ID yang diberikan bot. **DM admin terverifikasi** |
+| `.admin reject`, `.maintenance reject` | Menyetujui atau menolak item review. | `.admin reject REV-1` | Gunakan ID yang diberikan bot. **DM admin terverifikasi** |
+| `.admin audit`, `.maintenance audit` | Melihat jejak tindakan admin. | `.admin audit` | Buka di DM admin. **DM admin terverifikasi** |
+| `.admin backup`, `.maintenance backup` | Memeriksa status backup. | `.admin backup` | Gunakan status untuk melihat hasil yang tersedia. **DM admin terverifikasi** |
+| `.admin`, `.maintenance` | Membuka menu yang sesuai akses pengirim. | `.admin` | Ketik .menu lalu nomor untuk berpindah halaman. **DM admin terverifikasi** |
+
+<details>
+<summary>Contoh balasan · 🔐 Administrasi</summary>
+
+**.tambahjadwal minggu|07:00|08:00|METPEN|Lab**
+
+~~~~text
+*Pratinjau perubahan jadwal*
+Tambahkan minggu 07:00–08:00 WIB · Metodologi Penelitian · Lab
+
+Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
+~~~~
+
+**.editjadwal minggu|07:00|minggu|08:00|09:00|METPEN|Lab**
+
+~~~~text
+*Pratinjau perubahan jadwal*
+Ubah minggu 07:00 menjadi minggu 08:00–09:00 WIB · Metodologi Penelitian · Lab
+
+Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
+~~~~
+
+**.hapusjadwal minggu|07:00**
+
+~~~~text
+*Pratinjau perubahan jadwal*
+Hapus sesi minggu 07:00 beserta 0 pengecualian tanggal.
+
+Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
+~~~~
+
+**.resetjadwal**
+
+~~~~text
+*Pratinjau perubahan jadwal*
+Pulihkan 15 sesi mingguan dari seed. 1 sesi saat ini dan seluruh pengecualian tanggalnya akan diganti.
+
+Setujui dengan .confirm <nonce> atau batalkan dengan .cancel <nonce>.
+~~~~
+
+**.tugas antrean**
+
+~~~~text
+*Antrean tenggat*
+
+TUG-1.1.baru · Diskusi
+
+Pilih grup dengan .tugas tujuan <ID> <nama atau JID grup>.
+~~~~
+
+**.tugas grup**
+
+~~~~text
+*Grup yang dikenali HdyBot*
+
+kelas-uji@g.us
+kelas-uji@g.us
+~~~~
+
+**.tugas tujuan TUG-1.1.h3 kelas-uji@g.us**
+
+~~~~text
+Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
+~~~~
+
+**.tugas tolak TUG-1.1.h3**
+
+~~~~text
+Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
+~~~~
+
+**.tugas deadline TUG-1 2026-11-16 14:00**
+
+~~~~text
+Deadline tersimpan.
+
+*1.*
+📑 Tugas: Diskusi
+🗓️ Deadline: 16 November 2026, pukul 14:00 WIB
+🧑‍🏫 Dari dosen: Ibu Sari
+📖 Matkul: Metodologi
+👨‍🎓 Penanggung jawab: Ani
+ID: TUG-1 · Aktif
+~~~~
+
+**.reminder pause**
+
+~~~~text
+Worker pengingat belum terhubung ke database.
+~~~~
+
+**.reminder resume**
+
+~~~~text
+Worker pengingat belum terhubung ke database.
+~~~~
+
+**.drive status**
+
+~~~~text
+Sinkronisasi berhasil.
+Jumlah dokumen: 2
+Indeks terakhir: 9/11/2026, 07.30.00
+~~~~
+
+**.drive sync**
+
+~~~~text
+Sinkronisasi berhasil.
+Jumlah dokumen: 2
+Indeks terakhir: 9/11/2026, 07.30.00
+~~~~
+
+**.login**
+
+~~~~text
+🔐 *Verifikasi Admin HdyBot*
+Silakan balas pesan ini dengan password admin Anda:
+~~~~
+
+**.logout**
+
+~~~~text
+🔒 Sesi admin telah dikunci. Ketika Anda chat kembali, bot akan meminta password admin.
+~~~~
+
+**.status**
+
+~~~~text
+🩺 *Health & Ready Check HdyBot (via WA Admin)*
+• Kesehatan: *OK* (uptime 0s)
+• WhatsApp (mock): *connected*
+• Database: ok
+• NVIDIA AI: mode=auto | calls=0
+• Drive: Sinkronisasi berhasil.
+Jumlah dokumen: 2
+Indeks terakhir: 9/11/2026, 07.30.00
+• Scheduler: belum tersedia
+• RAM proses: <RAM> MiB
+• Outbound: DISABLED | Dry-Run: ON | EmergencyStop: OFF
+~~~~
+
+**.system**
+
+~~~~text
+🩺 *Health & Ready Check HdyBot (via WA Admin)*
+• Kesehatan: *OK* (uptime 0s)
+• WhatsApp (mock): *connected*
+• Database: ok
+• NVIDIA AI: mode=auto | calls=0
+• Drive: Sinkronisasi berhasil.
+Jumlah dokumen: 2
+Indeks terakhir: 9/11/2026, 07.30.00
+• Scheduler: belum tersedia
+• RAM proses: <RAM> MiB
+• Outbound: DISABLED | Dry-Run: ON | EmergencyStop: OFF
+~~~~
+
+**.dashboard**
+
+~~~~text
+📊 *DASHBOARD HDYBOT — Halo Hedy*
+• WhatsApp (mock): *connected*
+• OpenAI: belum diisi · NVIDIA: *Belum diisi* | Mode: *auto*
+• Model router: deepseek, super-vl, mistral, ultra, kimi, minimax, lightning, luna
+• Grup sumber aktif: *1*
+• Pesan diproses hari ini: *1* (Penting: *1*)
+• Menunggu review Hedy: *1*
+• Kuliah berikutnya: *Metodologi Penelitian (Senin 08:00–09:40 WIB)*
+• Outbound Emergency Stop: *Normal*
+• Error terakhir: tidak ada | Health: OK
+~~~~
+
+**.health**
+
+~~~~text
+🩺 *Health & Ready Check HdyBot (via WA Admin)*
+• Kesehatan: *OK* (uptime 0s)
+• WhatsApp (mock): *connected*
+• Database: ok
+• NVIDIA AI: mode=auto | calls=0
+• Drive: Sinkronisasi berhasil.
+Jumlah dokumen: 2
+Indeks terakhir: 9/11/2026, 07.30.00
+• Scheduler: belum tersedia
+• RAM proses: <RAM> MiB
+• Outbound: DISABLED | Dry-Run: ON | EmergencyStop: OFF
+~~~~
+
+**.ping**
+
+~~~~text
+🏓 Pong! HdyBot — Nursing Class A Assistant aktif.
+~~~~
+
+**.runtime**
+
+~~~~text
+⏱️ Runtime HdyBot: 0 detik | Timezone: Asia/Jakarta | Mode WA: mock
+~~~~
+
+**.logs 10**
+
+~~~~text
+📋 *Log operasional*
+Belum ada kejadian yang sesuai sejak proses dimulai.
+~~~~
+
+**.errors today**
+
+~~~~text
+⚠️ *Laporan kendala*
+Belum ada kejadian yang sesuai sejak proses dimulai.
+~~~~
+
+**.audit**
+
+~~~~text
+📋 Belum ada entri audit log.
+~~~~
+
+**.backup status**
+
+~~~~text
+Direktori backup tidak tersedia.
+~~~~
+
+**.storage**
+
+~~~~text
+💾 Ruang tersedia: <ruang disk> GiB
+RAM proses: <RAM> MiB
+~~~~
+
+**.pair**
+
+~~~~text
+❌ Pairing ditolak (bootstrap_unavailable).
+~~~~
+
+**.db status**
+
+~~~~text
+✅ Database merespons.
+~~~~
+
+**.whatsapp status**
+
+~~~~text
+WhatsApp · connected
+~~~~
+
+**.scheduler status**
+
+~~~~text
+Worker pengingat belum terhubung ke database.
+~~~~
+
+**.ai**
+
+~~~~text
+🧠 *NVIDIA & OpenAI · Model AI*
+• NVIDIA: belum dikonfigurasi · OpenAI: belum dikonfigurasi
+• Mode: *auto*
+• Fallback: ON | Total Panggilan: 0
+• *deepseek* · deepseek-ai/deepseek-v4.1-flash
+• *super-vl* · nvidia/nemotron-3.5-super-vl-120b-a12b
+• *mistral* · mistralai/mistral-large-4-1t-a52b
+• *ultra* · nvidia/nemotron-3-ultra-550b-a55b
+• *kimi* · moonshotai/kimi-k3.1-pro
+• *minimax* · minimaxai/minimax-m3.1-flash
+• *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
+• *luna* · gpt-6-luna (tidak tersedia)
+~~~~
+
+**.ai models**
+
+~~~~text
+🧠 *NVIDIA & OpenAI · Model AI*
+• NVIDIA: belum dikonfigurasi · OpenAI: belum dikonfigurasi
+• Mode: *auto*
+• Fallback: ON | Total Panggilan: 0
+• *deepseek* · deepseek-ai/deepseek-v4.1-flash
+• *super-vl* · nvidia/nemotron-3.5-super-vl-120b-a12b
+• *mistral* · mistralai/mistral-large-4-1t-a52b
+• *ultra* · nvidia/nemotron-3-ultra-550b-a55b
+• *kimi* · moonshotai/kimi-k3.1-pro
+• *minimax* · minimaxai/minimax-m3.1-flash
+• *lightning* · nvidia/nemotron-3.5-lightning-30b-a3b
+• *luna* · gpt-6-luna (tidak tersedia)
+~~~~
+
+**.ai model lightning**
+
+~~~~text
+✅ Model di-pin sementara ke *lightning* (nvidia/nemotron-3.5-lightning-30b-a3b). Akan kembali ke auto setelah TTL berakhir.
+~~~~
+
+**.ai auto on**
+
+~~~~text
+✅ Mode router AI diatur ke *auto*.
+~~~~
+
+**.ai unpin**
+
+~~~~text
+✅ Mode router AI diatur ke *auto*.
+~~~~
+
+**.ai test Halo**
+
+~~~~text
+🧪 *Hasil uji NVIDIA*
+Model: nvidia/nemotron-3.5-super-vl-120b-a12b
+
+Contoh respons NVIDIA untuk pengujian format.
+~~~~
+
+**.groups**
+
+~~~~text
+👥 *Daftar Grup Terdaftar & Allow Access (1)*
+• Mode Allow Access Semua Grup: *AKTIF ✅*
+1. *Grup uji* (`sumber-uji@g.us`) — ALLOW / AKTIF ✅ [official]
+~~~~
+
+**.groups sources**
+
+~~~~text
+👥 *Daftar Grup Terdaftar & Allow Access (1)*
+• Mode Allow Access Semua Grup: *AKTIF ✅*
+1. *Grup uji* (`sumber-uji@g.us`) — ALLOW / AKTIF ✅ [official]
+~~~~
+
+**.groups add sumber-uji@g.us Kelas**
+
+~~~~text
+✅ Grup sumber *Kelas* (`sumber-uji@g.us`) terdaftar dan aktif.
+~~~~
+
+**.groups pause sumber-uji@g.us**
+
+~~~~text
+⏸️ Pemantauan & pengiriman grup `sumber-uji@g.us` dijeda.
+~~~~
+
+**.groups resume sumber-uji@g.us**
+
+~~~~text
+▶️ Pemantauan & pengiriman grup `sumber-uji@g.us` dilanjutkan.
+~~~~
+
+**.nimbrung on**
+
+~~~~text
+Aku ikut nongkrong. Mau bahas apa?
+~~~~
+
+**.nimbrung status**
+
+~~~~text
+💬 *Status Mode Grup (kelas-uji@g.us)*
+• Notifikasi AI: *🔴 BOT AI NONAKTIF (Mode Hening)*
+• Mode Saat Ini: *MODE HENING (DIAM) 🤫*
+• Ketik *"bot ikut nimbrung"* / `.nimbrung on` untuk mengajak bot nongkrong, atau *"bot berhenti"* / `.nimbrung off` untuk membuat bot kembali diam.
+~~~~
+
+**.diam**
+
+~~~~text
+Baik, aku berhenti nongkrong. Panggil aku kalau perlu bantuan.
+~~~~
+
+**.setpjmk sumber-uji@g.us**
+
+~~~~text
+✅ *Grup Sumber PJMK Semester 5 Terdaftar!*
+• Nama Grup: *PJMK Semester 5*
+• JID: `sumber-uji@g.us`
+• Pesan penting masuk ke chat pribadi Hedy untuk persetujuan.
+~~~~
+
+**.setkelasa kelas-uji@g.us**
+
+~~~~text
+✅ *Grup Utama Nursing Class A Terdaftar!*
+• JID Tujuan Relay: `kelas-uji@g.us`
+• Pesan dari PJMK akan diteruskan ke sini setelah Hedy menyetujui pratinjau di chat pribadi.
+~~~~
+
+**.filter status**
 
 ~~~~text
 📡 *Status Monitoring & Digest Group Intelligence*
@@ -3678,8 +3547,6 @@ DM admin terverifikasi · Alias: `.monitor status`
 
 **.filter review**
 
-DM admin terverifikasi · Alias: `.monitor review`
-
 ~~~~text
 📝 *Antrean Review Hedy (1)*
 • *REV-1* [URGENT/schedule_change] (conf=0.9)
@@ -3689,23 +3556,17 @@ DM admin terverifikasi · Alias: `.monitor review`
 
 **.filter pause sumber-uji@g.us**
 
-DM admin terverifikasi · Alias: `.filter off`, `.monitor pause`, `.monitor off`
-
 ~~~~text
 ⏸️ Pemantauan & pengiriman grup `sumber-uji@g.us` dijeda.
 ~~~~
 
 **.filter resume sumber-uji@g.us**
 
-DM admin terverifikasi · Alias: `.filter on`, `.monitor resume`, `.monitor on`
-
 ~~~~text
 ▶️ Pemantauan & pengiriman grup `sumber-uji@g.us` dilanjutkan.
 ~~~~
 
 **.digest today**
-
-DM admin terverifikasi
 
 ~~~~text
 📡 *Status Monitoring & Digest Group Intelligence*
@@ -3717,8 +3578,6 @@ DM admin terverifikasi
 
 **.priority**
 
-DM admin terverifikasi
-
 ~~~~text
 *Prioritas kelas*
 REV-1 · URGENT
@@ -3726,8 +3585,6 @@ Perubahan jadwal diskusi besok.
 ~~~~
 
 **.pending**
-
-DM admin terverifikasi
 
 ~~~~text
 📝 *Antrean Review Hedy (1)*
@@ -3737,8 +3594,6 @@ DM admin terverifikasi
 ~~~~
 
 **.approve REV-1**
-
-DM admin terverifikasi
 
 ~~~~text
 ✅ *REV-1* disetujui.
@@ -3766,15 +3621,11 @@ Untuk mengirim ke grup utama, jalankan `.send REV-1` (memerlukan konfirmasi nonc
 
 **.reject REV-1**
 
-DM admin terverifikasi
-
 ~~~~text
 🚫 *REV-1* ditolak. Alasan: Ditolak oleh Hedy
 ~~~~
 
 **.send REV-1**
-
-DM admin terverifikasi
 
 ~~~~text
 🔒 *Konfirmasi Pengiriman Pengumuman*
@@ -3802,8 +3653,6 @@ Balas dengan `.confirm <nonce>` untuk mengirim atau `.cancel <nonce>` untuk memb
 
 **.broadcast preview REV-1**
 
-DM admin terverifikasi
-
 ~~~~text
 *Pratinjau pengumuman*
 Tujuan: kelas-uji@g.us
@@ -3827,8 +3676,6 @@ Sumber · Grup uji
 ~~~~
 
 **.broadcast send REV-1**
-
-DM admin terverifikasi
 
 ~~~~text
 🔒 *Konfirmasi Pengiriman Pengumuman*
@@ -3856,15 +3703,11 @@ Balas dengan `.confirm <nonce>` untuk mengirim atau `.cancel <nonce>` untuk memb
 
 **.confirm NONCE**
 
-DM admin terverifikasi
-
 ~~~~text
 ✅ Pengumuman *REV-1* terkirim (mock-out-1).
 ~~~~
 
 **.cancel NONCE**
-
-DM admin terverifikasi
 
 ~~~~text
 ✅ Konfirmasi `<nonce>` dibatalkan.
@@ -3872,16 +3715,12 @@ DM admin terverifikasi
 
 **.relay list**
 
-DM admin terverifikasi
-
 ~~~~text
 abc123 · pending → kelas-uji@g.us
 Diskusi kelas besok.
 ~~~~
 
 **.relay lihat abc123**
-
-DM admin terverifikasi
 
 ~~~~text
 sumber-uji@g.us → kelas-uji@g.us
@@ -3895,15 +3734,11 @@ Diskusi kelas besok.
 
 **.relay kirim abc123**
 
-DM admin terverifikasi
-
 ~~~~text
 Pesan sudah dikirim ke kelas-uji@g.us.
 ~~~~
 
 **.relay tolak abc123**
-
-DM admin terverifikasi
 
 ~~~~text
 Pesan tidak diteruskan.
@@ -3911,43 +3746,17 @@ Pesan tidak diteruskan.
 
 **.admin pause**
 
-DM admin terverifikasi · Alias: `.admin on`, `.maintenance pause`, `.maintenance on`
-
 ~~~~text
 🛑 *EMERGENCY STOP AKTIF*. Seluruh pengiriman pesan keluar ke grup dihentikan seketika.
 ~~~~
 
 **.admin resume**
 
-DM admin terverifikasi · Alias: `.admin off`, `.maintenance resume`, `.maintenance off`
-
 ~~~~text
 ▶️ *Emergency Stop dinonaktifkan*. Pengiriman kembali mengikuti kebijakan normal.
 ~~~~
 
-**.admin menu**
-
-Pengguna · Alias: `.maintenance menu`
-
-~~~~text
-*📚 Informasi kelas*
-
-• .kelas
-• .anggota [nama]
-• .pengurus
-• .rules
-• .faq
-• .matkul
-• .dosen [nama]
-• .kalender
-
-Halaman 1/8 · .menu 2
-Cara pakai: .help <perintah>
-~~~~
-
 **.admin status**
-
-DM admin terverifikasi · Alias: `.maintenance status`
 
 ~~~~text
 🩺 *Health & Ready Check HdyBot (via WA Admin)*
@@ -3956,7 +3765,7 @@ DM admin terverifikasi · Alias: `.maintenance status`
 • Database: ok
 • NVIDIA AI: mode=auto | calls=0
 • Drive: Sinkronisasi berhasil.
-Jumlah dokumen: 1
+Jumlah dokumen: 2
 Indeks terakhir: 9/11/2026, 07.30.00
 • Scheduler: belum tersedia
 • RAM proses: <RAM> MiB
@@ -3964,8 +3773,6 @@ Indeks terakhir: 9/11/2026, 07.30.00
 ~~~~
 
 **.admin overview**
-
-DM admin terverifikasi · Alias: `.maintenance overview`
 
 ~~~~text
 📊 *DASHBOARD HDYBOT — Halo Hedy*
@@ -3982,8 +3789,6 @@ DM admin terverifikasi · Alias: `.maintenance overview`
 
 **.admin review**
 
-DM admin terverifikasi · Alias: `.maintenance review`
-
 ~~~~text
 📝 *Antrean Review Hedy (1)*
 • *REV-1* [URGENT/schedule_change] (conf=0.9)
@@ -3992,8 +3797,6 @@ DM admin terverifikasi · Alias: `.maintenance review`
 ~~~~
 
 **.admin approve REV-1**
-
-DM admin terverifikasi · Alias: `.maintenance approve`
 
 ~~~~text
 ✅ *REV-1* disetujui.
@@ -4021,15 +3824,11 @@ Untuk mengirim ke grup utama, jalankan `.send REV-1` (memerlukan konfirmasi nonc
 
 **.admin reject REV-1**
 
-DM admin terverifikasi · Alias: `.maintenance reject`
-
 ~~~~text
 🚫 *REV-1* ditolak. Alasan: Ditolak oleh Hedy
 ~~~~
 
 **.admin audit**
-
-DM admin terverifikasi · Alias: `.maintenance audit`
 
 ~~~~text
 📋 Belum ada entri audit log.
@@ -4037,15 +3836,11 @@ DM admin terverifikasi · Alias: `.maintenance audit`
 
 **.admin backup**
 
-DM admin terverifikasi · Alias: `.maintenance backup`
-
 ~~~~text
 Direktori backup tidak tersedia.
 ~~~~
 
 **.admin**
-
-DM admin terverifikasi · Alias: `.maintenance`
 
 ~~~~text
 📊 *DASHBOARD HDYBOT — Halo Hedy*
@@ -4058,6 +3853,71 @@ DM admin terverifikasi · Alias: `.maintenance`
 • Kuliah berikutnya: *Metodologi Penelitian (Senin 08:00–09:40 WIB)*
 • Outbound Emergency Stop: *Normal*
 • Error terakhir: tidak ada | Health: OK
+~~~~
+
+</details>
+
+<a id="panduan-menu-8"></a>
+
+### 🎓 LMS STIKES Husada Jombang
+
+Gunakan DM dari nomor mahasiswa yang didaftarkan oleh owner.
+
+| Perintah dan alias | Kegunaan | Pesan WhatsApp | Cara pakai dan akses |
+| --- | --- | --- | --- |
+| `.lms` | Membuka bantuan LMS mahasiswa. | `.lms help` | Mulai di DM atau grup dengan nama sendiri. Baca hasil lewat DM. **DM atau grup, hasil ke DM** |
+
+Ganti `hedy` dengan alias yang didaftarkan. Mulai dari DM atau grup. Kirim kredensial dan pengaturan hanya di DM.
+
+| Pesan WhatsApp | Kegunaan | Cara menggunakan |
+| --- | --- | --- |
+| `.lms daftar <nomor> <NIM> <alias>` | Mendaftarkan identitas mahasiswa | Owner terverifikasi menggunakan nomor dan NIM yang sudah diperiksa. |
+| `.lms hedy hubungkan <password LMS>` | Mengaktifkan login otomatis | Gunakan sekali di DM jika nama cocok dengan daftar kelas. Nomor berasal dari pengirim. |
+| `.lms hedy hubungkan-nim <NIM> <password LMS>` | Menghubungkan akun jika nama belum cocok | Ketik di DM. Gunakan NIM dan password akun sendiri. |
+| `.lms hedy setuju` | Memberi izin baca LMS | Kirim dari nomor mahasiswa yang terdaftar. |
+| `.lms hedy login <password LMS>` | Menghubungkan sesi mahasiswa | Ketik di DM bot. Gunakan password LMS milik sendiri. |
+| `.lms hedy` | Membuka dashboard | Bentuk lengkapnya .lms hedy dashboard. |
+| `.lms hedy status` | Memeriksa sesi, izin AI dan notifikasi | Kirim sebelum melakukan sinkronisasi. |
+| `.lms hedy matkul gerontik` | Mencari mata kuliah | Kosongkan gerontik untuk semua matkul, atau ganti dengan kode, kelas atau pengampu. |
+| `.lms hedy detail gerontik` | Membaca kartu mata kuliah | Gunakan nama atau ID yang muncul dalam daftar. |
+| `.lms hedy dosen gerontik` | Melihat data pengampu | Ganti nama matkul dengan yang ingin diperiksa. |
+| `.lms hedy materi` | Mendaftar materi | Tambahkan nama matkul atau page 2 untuk halaman berikut. |
+| `.lms hedy materi list ENTR2.3` | Memfilter isi kelas | Gunakan kode dari dashboard sendiri. |
+| `.lms hedy materi terbaru` | Mengurutkan materi terbaru | Tanggal LMS atau waktu pertama terdeteksi menentukan urutan. |
+| `.lms hedy materi baru` | Melihat materi yang belum ditampilkan atau dikirim bot | Jalankan di DM setelah sinkronisasi. |
+| `.lms hedy materi cari penelitian` | Mencari metadata dan teks materi | Alias .lms hedy cari materi penelitian. Tambahkan page 2 untuk kelompok dokumen berikutnya. |
+| `.lms hedy materi detail <ID>` | Memeriksa sumber dan metadata | Salin ID dari daftar materi. |
+| `.lms hedy materi kirim <ID>` | Mengunduh dan mengirim lampiran ke DM sendiri | Alias .lms hedy materi download <ID>. Tambahkan nomor file jika ada beberapa lampiran. |
+| `.lms hedy tugas` | Mendaftar tugas akademik | Tambahkan matkul, pending, selesai, atau terbaru sebagai filter. |
+| `.lms hedy tugas cari makalah` | Mencari tugas | Ganti makalah dengan kata kunci. |
+| `.lms hedy tugas detail <ID>` | Membuka rincian tugas | Gunakan ID dari daftar tugas. |
+| `.lms hedy deadline` | Melihat tenggat dari LMS | Hanya tugas dengan tenggat yang terbaca yang ditampilkan. |
+| `.lms hedy kuis aktif` | Mencari evaluasi di LMS | Gunakan kuis, kuis terbaru, kuis <matkul>, atau kuis detail <ID>. |
+| `.lms hedy sync` | Menyinkronkan akun | Bisa juga memakai .lms sync hedy atau .lms sync now. |
+| `.lms sync status` | Memeriksa penjadwal akun | Gunakan sync pause untuk menjeda, sync resume untuk melanjutkan, atau sync history untuk riwayat. |
+| `.lms hedy notif on` | Menerima notifikasi perubahan pribadi | Ganti on dengan off untuk menonaktifkan. |
+| `.lms hedy ai on` | Mengizinkan penggunaan kutipan materi oleh AI | Ganti on dengan off untuk mencabut izin. |
+| `.lms hedy ask Apa itu mobilisasi?` | Bertanya berdasarkan dokumen | Gunakan kata kunci materi yang sudah terindeks. |
+| `.lms hedy summarize <ID>` | Merangkum materi tertentu | Salin ID dokumen yang bisa diekstrak. |
+| `.lms hedy flashcard gerontik` | Membuat kartu belajar | Ganti gerontik dengan topik dari materi. |
+| `.lms hedy quiz belajar gerontik` | Membuat latihan pribadi | Jawaban dikirim ke chat; bot tidak mengerjakan kuis kampus. |
+| `.lms hedy logout` | Mencabut akses dan menghapus cache sesi | Alias .lms hedy cabut dan .lms hedy hapus. |
+
+<details>
+<summary>Contoh balasan · 🎓 LMS STIKES Husada Jombang</summary>
+
+**.lms help**
+
+~~~~text
+🎓 *LMS mahasiswa*
+
+Ketik .lms <nama> di DM atau grup, misalnya .lms hedy. Bot membalas ke nomor pengirim. Saat pertama kali, ikuti petunjuk di DM.
+
+.lms <nama> dashboard | matkul | materi | tugas | deadline | kuis
+.lms <nama> materi kirim <ID> [nomor file]
+.lms <nama> sync | status | logout
+
+Tambahkan page 2 untuk halaman berikutnya.
 ~~~~
 
 </details>
@@ -4111,8 +3971,8 @@ Ke kelas-uji@g.us
 
 Perubahan jadwal praktikum besok pukul 10.00 WIB.
 
-.relay kirim 67a2bddec94b80e3
-.relay tolak 67a2bddec94b80e3
+.relay kirim e99e20ca9ba07dde
+.relay tolak e99e20ca9ba07dde
 Atau kutip pesan ini dan balas ya atau tidak.
 ~~~~
 

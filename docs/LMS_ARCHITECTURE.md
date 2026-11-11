@@ -2,11 +2,11 @@
 
 ## Jalur permintaan
 
-Adapter WhatsApp → deduplikasi → pengenal perintah LMS → pemeriksaan DM dan nomor pengirim → LmsService → akun Prisma → LmsClient HTTPS → parser/katalog atau downloader → OutboundGate. Jalur login diperiksa sebelum mode admin, klasifikasi grup, ringkasan, dan AI. Perintah LMS dalam grup diabaikan. Nama pada command memilih alias akun yang sudah terikat pada nomor pengirim. Owner memverifikasi pemilik nomor dan NIM sebelum registrasi. Tidak ada akses baca lintas akun untuk owner.
+Adapter WhatsApp → deduplikasi → pengenal perintah LMS → pemeriksaan DM dan nomor pengirim → LmsService → akun Prisma → LmsClient HTTPS → parser/katalog atau downloader → OutboundGate. Jalur login diperiksa sebelum mode admin, klasifikasi grup, ringkasan, dan AI. Permintaan baca dari grup memakai identitas pengirim dan tujuan DM. Penautan mandiri memverifikasi password pada portal dan mencocokkan NIM sebelum membuat akun. Nomor dan NIM unik mencegah pengambilalihan akun yang terikat.
 
 ## Penyimpanan
 
-Migrasi tambahan membuat LmsAccount di PostgreSQL, dengan nomor dan NIM unik, alias, consent, izin AI, preferensi notifikasi, revisi dan jadwal sinkronisasi. Envelope AES-256-GCM menyimpan cookie, snapshot metadata, riwayat, ID materi yang sudah ditampilkan, serta daftar perubahan. AAD mengikat envelope pada nomor dan NIM. Gunakan LMS_ENCRYPTION_KEY dari 32 byte acak dalam base64. Instalasi systemd membuat kunci jika belum tersedia. Simpan kunci secara terpisah bersama prosedur pemulihan backup. Mengganti kunci memerlukan login ulang atau migrasi data. Password tidak disimpan oleh aplikasi. Pesan login tetap berada dalam riwayat WhatsApp pengguna sampai pengguna menghapusnya.
+Migrasi tambahan membuat LmsAccount di PostgreSQL, dengan nomor dan NIM unik, alias, consent, izin AI, preferensi notifikasi, revisi dan jadwal sinkronisasi. Envelope AES-256-GCM menyimpan cookie, snapshot metadata, riwayat, ID materi yang sudah ditampilkan, serta daftar perubahan. AAD mengikat envelope pada nomor dan NIM. Gunakan LMS_ENCRYPTION_KEY dari 32 byte acak dalam base64. Instalasi systemd membuat kunci jika belum tersedia. Simpan kunci secara terpisah bersama prosedur pemulihan backup. Mengganti kunci memerlukan login ulang atau migrasi data. Perintah hubungkan menyimpan password dalam kolom autoLogin terenkripsi dengan AAD terpisah. Perintah login biasa menyimpan sesi saja. Logout menghapus kedua data terenkripsi. Pesan login tetap berada dalam riwayat WhatsApp pengguna sampai pengguna menghapusnya.
 
 ## Batas akses
 

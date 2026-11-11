@@ -116,13 +116,16 @@ export class DriveCatalog {
     if (page < 1 || page > total) return 'Pilih halaman 1–' + total + '.';
     return files.slice((page - 1) * 15, page * 15).map(f => f.name + '\n' + (f.path || 'Folder utama') + ' · ' + f.id).join('\n\n') + '\n\nHalaman ' + page + '/' + total + (page < total ? '\n.materi ' + query + ' halaman ' + (page + 1) : '');
   }
-  async download(id: string, limit: number, extractText = false): Promise<{ text: string; media?: OutboundMediaPayload }> {
+  async download(id: string, limit: number, extractText = false, format?:string): Promise<{ text: string; media?: OutboundMediaPayload }> {
     await this.sync(); // Verifikasi kembali keanggotaan folder dan izin saat diminta.
     const file = this.files.get(id);
     if (!file) return { text: 'Dokumen tidak ditemukan dalam folder kelas.' };
     const link = 'https://drive.google.com/open?id=' + encodeURIComponent(id);
     if (!file.capabilities?.canDownload) return { text: 'Unduhan dibatasi oleh pemilik. Buka melalui akun Google Anda: ' + link };
-    const mime = extractText && file.mimeType === 'application/vnd.google-apps.document' ? 'text/plain' : exportTypes[file.mimeType] ?? file.mimeType;
+    const pptx='application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    if (format && !(format==='pptx' && [pptx,'application/vnd.google-apps.presentation'].includes(file.mimeType)) &&
+        !(format==='pdf' && (exportTypes[file.mimeType] || file.mimeType==='application/pdf'))) return {text:'Format itu tidak tersedia untuk file ini. Gunakan .download '+id+' untuk format aslinya.'};
+    const mime = format==='pptx' ? pptx : extractText && file.mimeType === 'application/vnd.google-apps.document' ? 'text/plain' : exportTypes[file.mimeType] ?? file.mimeType;
     if (extractText && !['text/plain', 'text/csv', 'application/pdf'].includes(mime) && !mime.startsWith('image/')) return { text: 'Ekstraksi teks untuk format dokumen ini belum tersedia.' };
     if (!allowedMime.test(mime)) return { text: 'Format dokumen belum didukung. ' + link };
     const tooLarge = { text: 'Ukuran dokumen melebihi batas pengiriman. ' + link };
@@ -141,7 +144,13 @@ export class DriveCatalog {
       parts.push(value);
     }
     if (!size) return { text: 'Dokumen kosong.' };
-    return { text: [file.name, file.path || 'Belum dikategorikan'].join(' · '), media: { data: Buffer.concat(parts), mimeType: mime,
-      filename: file.name.replace(/[\\/\r\n]/g, '_') + (exportTypes[file.mimeType] ? '.pdf' : ''), asDocument: true } };
+    const data=Buffer.concat(parts);
+    if (/text\/html/i.test(res.headers.get('content-type')??'') ||
+        (mime==='application/pdf' && !data.subarray(0,1024).includes(Buffer.from('%PDF-'))) ||
+        (mime===pptx && !data.subarray(0,4).equals(Buffer.from([80,75,3,4]))) ||
+        (mime==='application/vnd.ms-powerpoint' && !data.subarray(0,8).equals(Buffer.from('d0cf11e0a1b11ae1','hex'))))
+      return {text:'Isi yang diterima tidak sesuai dengan format dokumen. Periksa file dan izin di Drive.'};
+    return { text: [file.name, file.path || 'Belum dikategorikan'].join(' · '), media: { data, mimeType: mime,
+      filename: file.name.replace(/[\\/\r\n]/g, '_') + (exportTypes[file.mimeType] ? mime===pptx?'.pptx':mime==='text/plain'?'.txt':'.pdf' : ''), asDocument: true } };
   }
 }

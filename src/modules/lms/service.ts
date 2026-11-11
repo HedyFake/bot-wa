@@ -9,8 +9,9 @@ import { belongsTo, LmsClient, LmsError, seal, unseal, SessionExpired, TooLarge 
 import { crawl, detailFiles, parsePage, type Catalog, type Item } from './catalog.js';
 import { documentPayload } from './document.js';
 import { lmsDate } from './dates.js';
+import { CLASS_MEMBERS_5A } from '../fun/fun-utility-service.js';
 
-export const lmsHelp='🎓 *LMS pribadi*\n\n.lms <nama> setuju\n.lms <nama> login <password LMS>\n.lms <nama> dashboard | matkul | materi | tugas | deadline | kuis\n.lms <nama> materi detail <ID>\n.lms <nama> materi kirim <ID> [nomor file]\n.lms <nama> sync | status | logout\n\nTambahkan page 2 untuk halaman berikutnya. Gunakan DM dari nomor yang didaftarkan.';
+export const lmsHelp='🎓 *LMS mahasiswa*\n\nKetik .lms <nama> di DM atau grup, misalnya .lms hedy. Bot membalas ke nomor pengirim. Saat pertama kali, ikuti petunjuk di DM.\n\n.lms <nama> dashboard | matkul | materi | tugas | deadline | kuis\n.lms <nama> materi kirim <ID> [nomor file]\n.lms <nama> sync | status | logout\n\nTambahkan page 2 untuk halaman berikutnya.';
 interface State {cookie:string; dashboard:string; logout?:boolean; catalog:Catalog; seen:string[]; alerts:string[]; history:string[]}
 const stamp=(date:string|Date)=>new Date(date).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB';
 const match=(i:Item,q:string)=>[i.title,i.course,...Object.values(i.fields)].join(' ').toLowerCase().includes(q.toLowerCase());
@@ -35,6 +36,44 @@ export class LmsService {
     if(key.length!==32) throw new LmsError('LMS_ENCRYPTION_KEY harus 32 byte dalam base64.');
   }
   private state(a:LmsAccount) {return unseal<State>(this.key,keyFor(a),a.encrypted!);}
+  private async openSession(nim:string,password:string):Promise<State> {
+    const client=this.client('',this.shutdown.signal);
+    const first=await client.login(nim,password);
+    let catalog:Catalog;
+    try { catalog=await crawl(client,first); }
+    catch(error) {
+      if(error instanceof SessionExpired) throw error;
+      const page=parsePage(first.html,first.url);
+      catalog={items:page.items,profile:page.profile,checked:new Date().toISOString(),partial:true};
+    }
+    return {cookie:client.cookie,dashboard:first.url,logout:first.logout,catalog,alerts:[],seen:[],history:[stamp(catalog.checked)+' · login']};
+  }
+
+  private async linkStudent(phone:string,alias:string,input:string) {
+    if(!/^[a-z][a-z0-9_-]{0,30}$/.test(alias) || ['help','sync','daftar'].includes(alias)) {
+      return 'Ketik .lms <nama panggilan>, misalnya .lms hedy.';
+    }
+    const matches=CLASS_MEMBERS_5A.filter(member=>member.name.toLowerCase().split(/\s+/).includes(alias));
+    const explicit=input.match(/^\S+\s+hubungkan-nim\s+(\d{7,16})\s+(.+)$/is);
+    const nim=explicit?.[1] ?? (matches.length===1 ? matches[0]!.nim : undefined);
+    const password=explicit?.[2] ?? input.match(/^\S+\s+hubungkan\s+(.+)$/is)?.[1];
+    if(!nim || !password) {
+      const command='.lms '+alias+(matches.length===1?' hubungkan <password LMS>':' hubungkan-nim <NIM sendiri> <password LMS>');
+      return '🎓 *Hubungkan akun LMS sekali*\n\nDi DM ini, ketik '+command+'. Nomor WhatsApp diambil dari pengirim. Dengan menghubungkan, kamu mengizinkan bot membaca LMS dan menyimpan kredensial terenkripsi untuk login otomatis. Untuk mencabut akses, ketik .lms '+alias+' logout.';
+    }
+    // Jangan pesan NIM untuk pengirim sebelum password diverifikasi oleh portal.
+    const action='lms.link';
+    const attempts=await this.db.auditLog.count({where:{action,createdAt:{gte:new Date(Date.now()-900_000)},OR:[{actor:phone},{target:nim}]}});
+    if(attempts>=5) return 'Percobaan menghubungkan akun dibatasi. Coba kembali dalam 15 menit.';
+    await this.db.auditLog.create({data:{actor:phone,action,target:nim,result:'attempt'}});
+    if(await this.db.lmsAccount.findUnique({where:{nim}})) return 'Akun belum dapat dihubungkan. Periksa akun sendiri atau hubungi owner untuk pemindahan nomor.';
+    const state=await this.openSession(nim,password);
+    const identity=phone+'|'+nim;
+    const account=await this.db.lmsAccount.create({data:{phone,nim,alias,consentAt:new Date(),
+      autoLogin:seal(this.key,'login|'+identity,password),encrypted:seal(this.key,identity,state),
+      nextSyncAt:new Date(Date.now()+(state.catalog.partial?60_000:this.interval))}});
+    return this.dashboard(account,state.catalog);
+  }
   private async save(a:LmsAccount,state:State) {
     const done=await this.db.lmsAccount.updateMany({where:{phone:a.phone,revision:a.revision},data:{encrypted:seal(this.key,keyFor(a),state),revision:{increment:1}}});
     if(!done.count) throw new LmsError('Status akun berubah. Ulangi perintah.');
@@ -63,7 +102,6 @@ export class LmsService {
     if(msg.chatType!=='private' || this.shutdown.signal.aborted) return '';
     const phone=normalizeE164(msg.senderJid);
     const chatPhone=normalizeE164(msg.chatJid);
-    if(!phone || (chatPhone ? chatPhone!==phone : !msg.chatJid.endsWith('@lid'))) return 'Identitas WhatsApp belum terverifikasi.';
     const send=async (text:string,media?:OutboundMediaPayload)=>{
       if(this.shutdown.signal.aborted)return false;
       const body=text.length>3800?text.slice(0,3750)+'\n\nGunakan filter yang lebih spesifik.':text;
@@ -71,6 +109,11 @@ export class LmsService {
       if(!result.ok || result.dryRun) return false;
       return true;
     };
+    if(!phone || (chatPhone ? chatPhone!==phone : !msg.chatJid.endsWith('@lid'))) {
+      const notice='Nomor pengirim belum dikenali WhatsApp. Coba kirim .lms <nama> lagi dari DM nomor milikmu.';
+      if(chatPhone || msg.chatJid.endsWith('@lid')) await send(notice);
+      return notice;
+    }
     let words=input.trim().split(/\s+/);
     const alias=words.shift()?.toLowerCase();
     if(alias==='help' || !alias){await send(lmsHelp);return lmsHelp;}
@@ -88,7 +131,8 @@ export class LmsService {
         return answer('Identitas LMS terdaftar. Mahasiswa dapat memberikan izin melalui DM sendiri.');
       }
       account=await this.db.lmsAccount.findUnique({where:{phone}});
-      if(!account || (alias!==account.alias && !(alias==='sync' && (words[0]===account.alias || ['status','now','pause','resume','history'].includes(words[0]??'')))))
+      if(!account) return answer(await this.linkStudent(phone,alias,input));
+      if(alias!==account.alias && !(alias==='sync' && (words[0]===account.alias || ['status','now','pause','resume','history'].includes(words[0]??''))))
         return answer('Akun belum terdaftar untuk identitas ini. Hubungi owner melalui DM.');
       const a=account;
       if(alias==='sync' && words[0]===a.alias) words.shift();
@@ -98,7 +142,7 @@ export class LmsService {
       if(['logout','cabut','hapus'].includes(op)){
         let old: State | undefined;
         try { if(a.encrypted)old=this.state(a); } catch { /* Tetap cabut cache bila kunci berubah. */ }
-        await this.db.lmsAccount.update({where:{phone},data:{consentAt:null,aiConsent:false,encrypted:null,paused:true,notify:false,failures:0,revision:{increment:1}}});
+        await this.db.lmsAccount.update({where:{phone},data:{consentAt:null,aiConsent:false,encrypted:null,autoLogin:null,paused:true,notify:false,failures:0,revision:{increment:1}}});
         const closed=old?.logout && await this.client(old.cookie,this.shutdown.signal).logout().catch(()=>false);
         return answer('Akses bot dicabut. Sesi, cache, dan izin AI telah dihapus.'+(old?.logout?(closed?' Logout LMS berhasil.':' Logout di server LMS belum terkonfirmasi.'):''));
       }
@@ -106,33 +150,40 @@ export class LmsService {
         await this.db.lmsAccount.update({where:{phone},data:{consentAt:new Date()}});
         return answer('Izin baca LMS dicatat. Ketik .lms '+a.alias+' login <password LMS> di DM ini. Hapus pesan berisi password dari WhatsApp setelah login.');
       }
-      if(!a.consentAt) return answer('Untuk mengizinkan bot membaca dan menyimpan sesi LMS pribadi, ketik .lms '+a.alias+' setuju. Password hanya dipakai saat login.');
+      if(!a.consentAt && op!=='hubungkan') return answer('Di DM ini, ketik .lms '+a.alias+' hubungkan <password LMS> untuk mengizinkan akses dan login ulang dengan kredensial terenkripsi. Untuk memakai sesi saja, ketik .lms '+a.alias+' setuju.');
       if(op==='status' || (op==='sync' && sub==='status')) return answer('🎓 *Status LMS*\n\nSesi tersimpan: '+(a.encrypted?'ya':'belum')+'\nSinkronisasi: '+(a.paused?'dijeda':'aktif')+'\nNotifikasi: '+(a.notify?'aktif':'mati')+'\nAI: '+(a.aiConsent?'diizinkan':'mati'));
       if(op==='ai' || op==='notif' || (op==='sync' && ['pause','resume'].includes(sub))) {
         if(op!=='sync' && !['on','off'].includes(sub)) return answer('Gunakan ai on/off, notif on/off atau sync pause/resume.');
         await this.db.lmsAccount.update({where:{phone},data:op==='ai'?{aiConsent:sub==='on'}:op==='notif'?{notify:sub==='on'}:{paused:sub==='pause'}});
         return answer('Preferensi LMS diperbarui.');
       }
-      if(op==='login'){
-        const password=input.match(/^\S+\s+login\s+(.+)$/is)?.[1];
+      if(op==='dashboard' && a.encrypted && a.autoLogin) {
+        const state=this.state(a);
+        if(Date.now()-Date.parse(state.catalog.checked)>=this.interval) {
+          try { await this.refresh(a,state); return answer(this.dashboard(a,state.catalog)); }
+          catch(error) { if(!(error instanceof SessionExpired)) throw error; }
+          if(!await this.expire(a)) throw new LmsError('Status akun berubah. Ulangi perintah.');
+          a.revision++;
+          a.encrypted=null;
+        }
+      }
+      const renew=op==='dashboard' && !a.encrypted && !!a.autoLogin && !!a.consentAt;
+      if(op==='login' || op==='hubungkan' || renew){
+        const password=renew ? unseal<string>(this.key,'login|'+keyFor(a),a.autoLogin!) : input.match(/^\S+\s+(?:login|hubungkan)\s+(.+)$/is)?.[1];
         if(!password) return answer('Ketik .lms '+a.alias+' login <password LMS> dalam chat pribadi.');
         if(a.loginAfter && +a.loginAfter>Date.now()) return answer('Login dibatasi sementara. Coba setelah '+stamp(a.loginAfter)+'.');
-        const c=this.client('',this.shutdown.signal);
         const claim=await this.db.lmsAccount.updateMany({where:{phone,revision:a.revision,OR:[{loginAfter:null},{loginAfter:{lte:new Date()}}]},
           data:{loginAttempts:{increment:1},loginAfter:new Date(Date.now()+Math.min(1800,30*2**Math.min(6,a.loginAttempts))*1000)}});
         if(!claim.count)return answer('Login lain sedang diproses. Coba kembali sebentar.');
-        const first=await c.login(a.nim,password);
-        let catalog:Catalog;
-        try {catalog=await crawl(c,first);} catch(error) {
-          if(error instanceof SessionExpired)throw error;
-          const initial=parsePage(first.html,first.url);
-          catalog={items:initial.items,profile:initial.profile,checked:new Date().toISOString(),partial:true};
-        }
-        await this.save(a,{cookie:c.cookie,dashboard:first.url,logout:first.logout,catalog,alerts:[],seen:[],history:[stamp(catalog.checked)+' · login']});
-        await this.db.lmsAccount.updateMany({where:{phone,revision:a.revision},data:{loginAttempts:0,loginAfter:null,failures:0,paused:false,nextSyncAt:new Date(Date.now()+(catalog.partial?60_000:this.interval))}});
-        return answer(this.dashboard(a,catalog));
+        const session=await this.openSession(a.nim,password);
+        const saved=await this.db.lmsAccount.updateMany({where:{phone,revision:a.revision},data:{
+          encrypted:seal(this.key,keyFor(a),session),revision:{increment:1},consentAt:a.consentAt??new Date(),
+          autoLogin:op==='hubungkan'?seal(this.key,'login|'+keyFor(a),password):renew?a.autoLogin:null,
+          loginAttempts:0,loginAfter:null,failures:0,paused:false,nextSyncAt:new Date(Date.now()+(session.catalog.partial?60_000:this.interval))}});
+        if(!saved.count) throw new LmsError('Status akun berubah. Ulangi perintah.');
+        return answer(this.dashboard(a,session.catalog));
       }
-      if(!a.encrypted) return answer('Belum ada sesi. Gunakan .lms '+a.alias+' login <password LMS> di DM.');
+      if(!a.encrypted) return answer(a.autoLogin?'Sesi perlu diperbarui. Ketik .lms '+a.alias+' untuk login otomatis.':'Belum ada sesi. Untuk login otomatis, ketik .lms '+a.alias+' hubungkan <password LMS> di DM. Untuk memakai sesi saja, ketik .lms '+a.alias+' login <password LMS>.');
       const s=this.state(a);
       if(op==='sync' && sub==='history') return answer('🔄 *Riwayat sinkronisasi*\n\n'+s.history.join('\n'));
       if(op==='sync'){
@@ -228,7 +279,8 @@ export class LmsService {
       c.partial?'Cakupan belum lengkap. Periksa juga LMS.':'',stamp(c.checked)].filter(Boolean).join('\n\n');
   }
   private async expire(a:LmsAccount) {
-    await this.db.lmsAccount.updateMany({where:{phone:a.phone,revision:a.revision},data:{encrypted:null,paused:true,revision:{increment:1}}});
+    const expired=await this.db.lmsAccount.updateMany({where:{phone:a.phone,revision:a.revision},data:{encrypted:null,paused:true,revision:{increment:1}}});
+    return expired.count===1;
   }
   private async download(a:LmsAccount,s:State,i:Item,n:number) {
     const c=this.client(s.cookie,this.shutdown.signal).forStudent(a.nim), listing=await c.page(i.listing);

@@ -14,6 +14,25 @@ Diperbarui 9 November 2026. Proyek menggunakan source lama TypeScript, whatsapp-
 | 7 · Monitoring | PARTIAL | Health, sumber daya, WhatsApp, Drive, antrean, backup, log dan kesalahan dibaca melalui DM admin. Log operasional WhatsApp merupakan buffer terbatas sejak startup. Pengaturan rotasi journal dan restore backup belum diuji di VPS. |
 | 8 · QA | PARTIAL | Typecheck, build, pemeriksaan sintaks Bash, suite Vitest, dan pembacaan publik Perawat.org dijalankan. Pengujian lintas provider dan uji restart host sungguhan masih terbuka. |
 
+## Audit delapan halaman menu · 10 November 2026
+
+Katalog README menjalankan parser dan dispatcher dengan WhatsApp simulasi. Setiap nama perintah dalam registri memiliki contoh. Sebagian contoh sengaja memeriksa respons ketika akses ditolak, data kosong, atau layanan belum dikonfigurasi.
+
+| Halaman | Jalur yang diperiksa | Syarat penggunaan |
+| --- | --- | --- |
+| Informasi kelas | Data kelas, anggota, pengurus, dosen, mata kuliah dan kalender | Isi mengikuti data kelas yang dimuat. |
+| Jadwal dan tugas | Filter hari, ekspor, tambah dan selesaikan tugas, antrean tenggat H−3 sampai hari H | Perubahan jadwal memerlukan penyimpanan yang dapat ditulis. Owner memilih grup dan mengonfirmasi pengingat di DM. |
+| Belajar dan materi | Tanya AI, ringkasan, keperawatan, perhitungan, pencarian dan pengiriman materi Drive | Penyedia AI dan sumber artikel memerlukan jaringan. Drive memeriksa izin chat dan berkas saat unduhan. |
+| Permainan | Bank soal, ruang permainan, kuis AI bertema, petunjuk, jawaban dan skor | Ronde AI memerlukan penyedia yang merespons. Ronde yang tersimpan dapat dilanjutkan setelah restart bot. |
+| Media | Stiker, gambar, QR, PDF, kartu jadwal, OCR dan TTS | Perintah olah media memerlukan lampiran yang sesuai. OCR dan TTS bergantung pada program di host. |
+| Utilitas | Perhitungan, waktu, musik, cuaca, wiki, profil dan bantuan | Cuaca, pencarian musik dan wiki bergantung pada layanan luar. MP3 berasal dari koleksi lokal yang diizinkan. |
+| Administrasi | Status, log, AI, backup, moderasi dan persetujuan pengiriman | Akses mengikuti identitas, sesi admin dan konfirmasi tiap tindakan. Backup dan pemulihan produksi memerlukan uji VPS. |
+| LMS | Dashboard, materi, tugas, kuis, sinkronisasi, AI belajar dan pengiriman dokumen pribadi | Perlu mahasiswa terdaftar, izin, sesi akun dan database. Batas verifikasi HTML serta dokumen kampus tercatat di [laporan LMS](LMS_IMPLEMENTATION_STATUS.md). |
+
+Dalam mode otomatis untuk teks dan gambar, router mengutamakan OpenAI jika tersedia dan dapat mencoba NVIDIA sesuai anggaran waktu. Pengenal perintah bahasa alami membaca menu sesuai izin chat. Pemeriksaan akses dan pengiriman dijalankan oleh aplikasi. Kuis bertema memakai router yang sama. Jadwal, kalkulator, jawaban permainan dan persetujuan tetap memakai data serta aturan fitur masing-masing.
+
+Uji pengiriman Drive mencakup PDF, PPT, PPTX dan ekspor Google Slides ke PPTX. Uji ini memeriksa tujuan, jenis, nama, isi lampiran serta penolakan ketika izin dicabut. Untuk uji penerimaan setelah deployment, gunakan DM yang diizinkan, cari satu dokumen dengan `.carimateri`, salin ID ke `.download <ID>`, lalu buka lampiran di HP. Untuk Slides, gunakan `.download <ID> pptx`. Untuk LMS, gunakan `.lms <alias> materi kirim <ID>` dari akun mahasiswa sendiri.
+
 ## Relay dan percakapan
 
 1. Pilih grup PJMK melalui `.setpjmk <jid grup sumber>` dan grup tujuan melalui `.setkelasa <jid grup tujuan>` dalam DM admin. JID dan pengaturannya disimpan.

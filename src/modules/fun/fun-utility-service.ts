@@ -1,5 +1,5 @@
 import { buildNotices, jakartaDay, type DeadlineNotice } from '../academic/deadline-notices.js';
-import { questions } from './questions.js';
+import { questions, type GameQuestion } from './questions.js';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateSafeExternalUrl } from '../../security/guards.js';
@@ -1294,13 +1294,26 @@ export class FunAndUtilityService {
     return action === 'stop' || !this.state.rooms[chat] ? 'Sesi ditutup.' : '🎮 Peserta ' + room.players.length + '/' + room.limit + ' · ' + room.category + ' · ' + (room.level ?? 'semua level') + ' · ' + room.seconds + ' detik';
   }
 
+  async startAiQuiz(chat:string, user:string, admin:boolean, generate:()=>Promise<GameQuestion>) {
+    const room = this.state.rooms?.[chat];
+    if (room && room.host !== user && !admin) return 'Hanya pembuat sesi atau admin yang dapat memulai ronde.';
+    const active = this.state.rounds?.[chat];
+    if (active && (!active.expiresAt || active.expiresAt > Date.now())) return 'Permainan masih berlangsung. Gunakan .jawab atau .nyerah.';
+    const question = await generate();
+    if (room !== this.state.rooms?.[chat]) return 'Sesi berubah. Minta ronde baru di sesi yang aktif.';
+    return this.startQuestion(chat, question);
+  }
+
   startBankQuiz(chat: string, category: string, level?: string, day?: string) {
     const choices = questions.filter(q => (category === 'acak' || q.category === category) && (!level || q.level === level));
     if (!choices.length) return 'Soal kategori atau level tersebut belum tersedia.';
+    const index = day ? Number(day.replace(/-/g, '')) % choices.length : Math.floor(Math.random() * choices.length);
+    return this.startQuestion(chat, choices[index]!, day);
+  }
+
+  private startQuestion(chat:string,q:GameQuestion,day?:string) {
     const current = this.state.rounds?.[chat];
     if (current && (!current.expiresAt || current.expiresAt > Date.now())) return 'Permainan masih berlangsung. Gunakan .jawab atau .nyerah.';
-    const index = day ? Number(day.replace(/-/g, '')) % choices.length : Math.floor(Math.random() * choices.length);
-    const q = choices[index]!;
     const seconds = this.state.rooms?.[chat]?.seconds ?? 60;
     this.storeRound(chat, { daily: day, kind: 'bank', question: q.prompt, answer: q.answer, hint: q.hint, explanation: q.explanation, points: { easy: 10, medium: 20, hard: 30 }[q.level], expiresAt: Date.now() + seconds * 1000 });
     return ['🎮 *' + q.category + ' · ' + q.level + '*', q.prompt, 'Petunjuk: ' + q.hint, 'Waktu ' + seconds + ' detik. Balas dengan .jawab <jawaban>.'].join('\n');

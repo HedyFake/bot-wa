@@ -1,15 +1,16 @@
 # HDYBOT — LMS Implementation Report
 
-**Tanggal** 10 November 2026 WIB  
+**Tanggal** 11 November 2026 WIB
+
 **Status keseluruhan** PARTIAL. Integrasi berjalan pada proyek HDYBOT. Login ke akun kampus asli dan pengiriman PDF dari sesi asli ke HP pemilik masih perlu uji penerimaan.
 
 | Fase | Status | Bukti |
 | --- | --- | --- |
 | Audit kode dan login publik | DONE | Form HTTPS, nama field, metode, action, dan nama cookie diperiksa langsung tanpa mengirim kredensial. |
 | Koneksi ke dispatcher, menu, AI, PostgreSQL | DONE untuk integrasi lokal | Perintah LMS masuk melalui DM sebelum klasifikasi. Luna menjadi model utama saat tersedia. Menu dan katalog menjalankan dispatcher. |
-| Identitas, persetujuan, enkripsi | DONE pada pengujian | Registrasi owner, ikatan nomor–NIM, cookie per sesi, AES-GCM dengan AAD per pengguna, rate limit login, pencabutan cache dan persetujuan AI terpisah. |
+| Identitas, persetujuan, enkripsi | DONE pada pengujian | Penautan mandiri lewat nama atau registrasi owner, ikatan nomor–NIM, cookie per sesi, AES-GCM dengan AAD per pengguna, rate limit login, pencabutan cache dan persetujuan AI terpisah. |
 | Dashboard dan matkul | PARTIAL | Selector dari HTML pemberian pengguna. Profil sidebar, periode, empat statistik, kode, kelas, SKS, pengampu, jumlah pertemuan dan tautan kelas. Angka berasal dari HTML tiap akun. |
-| Materi dan dokumen | PARTIAL | Struktur tab materi diketahui. Tombol Buka dapat memberikan PDF langsung dari URL tanpa ekstensi. Permintaan unduh memvalidasi ulang daftar kelas dan isi dokumen. Pengiriman ke DM diuji dengan PDF sintetis. Tidak ada pengiriman grup. |
+| Materi dan dokumen | PARTIAL | Struktur tab materi diketahui. Tombol Buka dapat memberikan PDF langsung dari URL tanpa ekstensi. Permintaan unduh memvalidasi ulang daftar kelas dan isi dokumen. Pengiriman ke DM diuji dengan PDF sintetis. Permintaan dapat dimulai di grup, lampiran dan hasil akademik dikirim ke DM pengirim. |
 | Tugas dan kuis | PARTIAL | Tab kosong diketahui dari contoh. Tabel dan status eksplisit ditangani dengan fixture. Kartu nyata yang berisi tugas, deadline atau kuis aktif belum tersedia untuk uji penerimaan. |
 | AI dan sumber | PARTIAL | Metadata, ekstraksi PDF, OCR serta kutipan halaman/bagian terhubung. Penelusuran beberapa file dibatasi. Ekstraksi isi PPT/DOC untuk AI dan evaluasi kualitas jawaban dari materi asli belum tersedia. |
 | Scheduler | DONE pada database uji | Tiga migrasi berhasil diterapkan ke PostgreSQL 18 kosong; skrip check-lms-db memeriksa sesi, pembuatan ulang service, dua worker bersamaan, notifikasi tunggal, dan logout. |
