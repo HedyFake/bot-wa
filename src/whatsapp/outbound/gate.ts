@@ -1,3 +1,4 @@
+import { validAttachment } from './media-check.js';
 import type { OutboundMessage, SendResult, WhatsAppProvider } from '../adapters/types.js';
 
 /** Deduplicator untuk event pesan WhatsApp masuk agar tidak diproses dua kali. */
@@ -32,6 +33,7 @@ export interface OutboundGateOptions {
   allowedGroupJids?: Iterable<string>;
   /** Izinkan otomatis seluruh grup yang tidak di-pause (default: true). */
   allowAllGroups?: boolean;
+  maxMediaBytes?: number;
 }
 
 /**
@@ -46,6 +48,7 @@ export class OutboundGate {
   private outboundEnabled: boolean;
   private dryRun: boolean;
   private allowAllGroups: boolean;
+  private readonly maxMediaBytes: number;
   private emergencyStopped = false;
   private readonly allowedGroups = new Set<string>();
   private readonly pausedGroups = new Set<string>();
@@ -54,6 +57,7 @@ export class OutboundGate {
 
   constructor(opts: OutboundGateOptions) {
     this.provider = opts.provider;
+    this.maxMediaBytes = opts.maxMediaBytes ?? 16 * 1024 * 1024;
     this.outboundEnabled = opts.outboundEnabled;
     this.dryRun = opts.dryRun;
     this.allowAllGroups = opts.allowAllGroups ?? true;
@@ -116,6 +120,7 @@ export class OutboundGate {
         return { ok: false, error: 'group_paused' };
       }
     }
+    if (msg.media && !validAttachment(msg.media,this.maxMediaBytes)) return {ok:false,error:'invalid_or_oversized_attachment'};
     if (this.dryRun) return { ok: true, dryRun: true, providerMessageId: `dryrun-${msg.idempotencyKey}` };
     if (!this.outboundEnabled && (isGroup || !opts?.isAdminPrivateReply)) return { ok: false, error: 'outbound_disabled' };
     const existing = this.pending.get(key);
@@ -123,7 +128,7 @@ export class OutboundGate {
     const sending = this.provider.send(msg).then(result => {
       if (result.ok) this.remember(key,result);
       return result;
-    }).finally(() => this.pending.delete(key));
+    }).catch(() => ({ok:false,error:'provider_send_failed'})).finally(() => this.pending.delete(key));
     this.pending.set(key,sending);
     return sending;
   }

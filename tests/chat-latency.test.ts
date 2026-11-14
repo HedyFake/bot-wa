@@ -27,14 +27,14 @@ it('menjawab mention berikutnya saat AI sibuk dan memberi satu status untuk jawa
       chatType:'group',isBotMentioned:true,text,receivedAt:new Date()});
     const slow = send('.rapikan pengumuman ini');
     await vi.advanceTimersByTimeAsync(1500);
-    expect(wa.sent.map(m=>m.text)).toEqual(['Aku sedang menyiapkan jawabannya.']);
+    expect(wa.sent.map(m=>m.text)).toEqual([expect.stringMatching(/^⏳ Aku sedang menyiapkan jawabannya\. · [0-9a-f]{10}$/)]);
     expect(await send('HdyBot halo')).toContain('Halo!');
     expect(await send('HdyBot menu')).toBeTruthy();
     expect(await send('HdyBot tugas hari ini')).toBeTruthy();
     expect(completion).toHaveBeenCalledTimes(1);
     finish({content:'Pengumuman kelas.'});
     expect(await slow).toContain('Pengumuman kelas.');
-    expect(wa.sent.filter(m=>m.text==='Aku sedang menyiapkan jawabannya.')).toHaveLength(1);
+    expect(wa.sent.filter(m=>m.text.includes('sedang menyiapkan jawabannya'))).toHaveLength(1);
     expect(wa.sent.at(-1)?.quotedMessageId).toBe('1');
   } finally { vi.useRealTimers(); }
 });

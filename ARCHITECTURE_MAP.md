@@ -1,5 +1,18 @@
 # Peta arsitektur HdyBot
 
+## Arsitektur aktual dan arah integrasi · 11 November 2026
+
+| Jalur | Urutan di source | Titik pengendalian |
+| --- | --- | --- |
+| Perintah bertitik | Adapter WA → handleInbound → parseCommand → executeCommand atau cabang khusus → OutboundGate | Identitas pengirim, jenis chat, allowlist dan konfirmasi sesuai aksi. |
+| Permintaan alami | Mention/DM → directIntent → inferIntent → ModelRouter → parseCommand | Menu sesuai akses, pemeriksaan perintah hasil model, fallback untuk obrolan. |
+| LMS | handleInbound → LmsService.handle → Prisma + LmsClient → parser atau downloader → DM | Penautan menurut nomor, pemeriksaan NIM, consent terpisah untuk kutipan AI. |
+| Dokumen kelas | Dispatcher → DriveCatalog → validasi akses dan batas → media WhatsApp | JID chat berizin dan file yang dapat diakses. |
+| Pekerjaan berkala | Timer src/index.ts → ReminderWorker, tickDeadlines, LmsService.tick dan sinkronisasi Drive | Waktu Asia/Jakarta, kondisi koneksi, dry-run, klaim worker dan status tugas. |
+
+Pada Fase 1, dispatcher membentuk tool yang dapat dipakai dalam `.ask` dan percakapan. ModelRouter memilih penyedia, LunaTransport memanggil Responses dan mengirim hasil fungsi lokal melalui `function_call_output`. Router menyertakan hasil pembacaan yang sudah diperoleh jika sintesis perlu diteruskan ke NVIDIA. Tugas membuat makalah, slide dan pengiriman memerlukan ID pekerjaan persisten beserta hasil setiap langkah. Peta ini membedakan jalur aktif di atas dari desain fase berikutnya. [Registri dan kontrak yang diusulkan](AI_TOOL_REGISTRY.md) · [Penyimpanan](DATABASE_SCHEMA.md)
+
+
 ## Alur runtime
 
 Node menjalankan src/index.ts melalui dist/index.js. Adapter wwebjs menerjemahkan event WhatsApp menjadi InboundMessage. Dispatcher memeriksa duplikasi, konteks chat, dan identitas pengirim. Parser memetakan alias dan perintah bahasa alami. Layanan domain menghasilkan teks atau lampiran. OutboundGate memeriksa status pengiriman, grup, dan kunci idempotensi sebelum meneruskan pesan ke provider.

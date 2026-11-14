@@ -39,7 +39,7 @@ globalThis.fetch = async (url) => {
   const u = String(url);
   if (u.startsWith('https://perawat.org/')) return new Response(exampleArticle);
   if (u.includes('geocoding-api.open-meteo.com')) return Response.json({results:[{name:'Jakarta',latitude:-6.2,longitude:106.8}]});
-  if (u.includes('api.open-meteo.com')) return Response.json({ current_weather:{temperature:28,windspeed:8,weathercode:1},current:{temperature_2m:28,relative_humidity_2m:70} });
+  if (u.includes('api.open-meteo.com')) return Response.json({ current:{time:'2026-11-09T08:00',temperature_2m:28,relative_humidity_2m:70,wind_speed_10m:8,weather_code:1},hourly:{time:['2026-11-09T08:00'],precipitation_probability:[30]},daily:{time:['2026-11-09'],weather_code:[1],temperature_2m_min:[24],temperature_2m_max:[31],precipitation_probability_max:[60]} });
   if (u.startsWith('https://api.aladhan.com/')) return Response.json({data:{timings:{Fajr:'04:11',Dhuhr:'11:42',Asr:'15:00',Maghrib:'17:53',Isha:'19:03'},meta:{timezone:'Asia/Jakarta'}}});
   if (u.includes('wikipedia.org')) return Response.json({title:'Belajar',extract:'Contoh ringkasan untuk pengujian.'});
   return new Response(null,{status:503});
@@ -115,7 +115,7 @@ section('Permainan, XP, dan statistik',[
 ]);
 section('Grup, persetujuan, dan operasional',[
   reg('auth.login','','Password disembunyikan.'),reg('auth.logout'),reg('owner'),reg('about'),reg('info'),reg('menu'),reg('help','calc'),
-  reg('status'),reg('system'),reg('dashboard'),reg('health'),reg('ping'),reg('runtime'),reg('logs','10'),reg('errors','today'),reg('audit'),reg('backup','status'),reg('storage'),reg('pair','','Adapter mendukung bootstrap sekali pakai. Startup produksi saat ini tidak menerbitkan bootstrap, sehingga perintah mengembalikan penolakan.'),
+  reg('repo.inspect'),example('doc makalah'),example('doc ppt'),reg('status'),reg('system'),reg('dashboard'),reg('health'),reg('ping'),reg('runtime'),reg('logs','10'),reg('errors','today'),reg('audit'),reg('backup','status'),reg('storage'),reg('pair','','Adapter mendukung bootstrap sekali pakai. Startup produksi saat ini tidak menerbitkan bootstrap, sehingga perintah mengembalikan penolakan.'),
   example('db status'),example('whatsapp status'),example('scheduler status/workers/queue'),example('ai/ai status'),example('ai models'),example('ai model/ai pin','lightning'),example('ai auto','on'),example('ai unpin'),example('ai test','Halo'),
   example('groups/group/source/target'),example('groups sources/groups list'),example('groups add/groups set','sumber-uji@g.us Kelas'),example('groups pause/groups remove','sumber-uji@g.us'),example('groups resume','sumber-uji@g.us'),
   example('nimbrung/nongkrong','on'),example('nimbrung status'),example('diam/hening/berhentinimbrung/nimbrung off'),reg('group.setpjmk',source),reg('group.setkelasa',group),reg('group.classify','Perubahan jadwal besok'),

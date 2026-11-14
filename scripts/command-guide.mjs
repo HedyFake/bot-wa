@@ -1,6 +1,9 @@
 // Deskripsi untuk tabel README. Kunci terpanjang menang untuk subperintah.
 const rows = `
 kelas :: Melihat identitas dan ringkasan kelas. :: Kirim tanpa argumen.
+doc makalah :: Membuat draf makalah Word. :: Tulis topik setelah .doc makalah.
+doc ppt :: Membuat presentasi dari draf terakhir milik pengirim. :: Kirim .doc ppt di chat yang sama atau sertakan topik baru.
+repo :: Membaca metadata dan lisensi repositori publik. :: Owner yang sudah login mengirim URL GitHub lengkap melalui DM.
 anggota :: Mencari nama dan NIM anggota kelas. :: Kosongkan nama untuk daftar lengkap atau tulis potongan nama.
 pengurus :: Melihat susunan pengurus dan PJ mata kuliah. :: Kirim perintah atau pilih alias jabatan.
 rules :: Membaca aturan kelas. :: Kirim tanpa argumen.
@@ -209,6 +212,7 @@ export function lmsGuide() {
     ['hedy materi kirim <ID>', 'Mengunduh dan mengirim lampiran ke DM sendiri', 'Alias .lms hedy materi download <ID>. Tambahkan nomor file jika ada beberapa lampiran.'],
     ['hedy tugas', 'Mendaftar tugas akademik', 'Tambahkan matkul, pending, selesai, atau terbaru sebagai filter.'],
     ['hedy tugas cari makalah', 'Mencari tugas', 'Ganti makalah dengan kata kunci.'],
+    ['hedy materi pdf gerontik page 1','Mengirim PDF materi ke DM jika akun masih memiliki akses','Pilih nama mata kuliah dan halaman. Maksimal empat berkas per halaman.'],
     ['hedy tugas detail <ID>', 'Membuka rincian tugas', 'Gunakan ID dari daftar tugas.'],
     ['hedy deadline', 'Melihat tenggat dari LMS', 'Hanya tugas dengan tenggat yang terbaca yang ditampilkan.'],
     ['hedy kuis aktif', 'Mencari evaluasi di LMS', 'Gunakan kuis, kuis terbaru, kuis <matkul>, atau kuis detail <ID>.'],

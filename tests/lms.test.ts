@@ -145,6 +145,9 @@ describe('LMS privat',()=>{
     expect(await send('hedy materi gerontik')).toContain('Latihan A');
     expect(await send('hedy materi list KGER.4')).toContain('Latihan A');
     expect(pdfRequests).toBe(0);
+    expect(await svc.linkedAlias(phone)).toBe("hedy");
+    expect(await send("hedy materi pdf gerontik")).toContain("WhatsApp: 1");
+    expect(wa.sent.at(-2)?.media?.mimeType).toBe("application/pdf");
     const itemId=parsePage(classroom(rows),origin+'/mahasiswa_panel/kelas/101','matkul','Gerontik').items[0]!.id;
     await send('hedy materi kirim '+itemId);expect(wa.sent.at(-1)?.media?.mimeType).toBe('application/pdf');
     expect(await send('hedy ask teori')).toContain('ai on');

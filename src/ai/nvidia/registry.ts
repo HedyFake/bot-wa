@@ -34,7 +34,7 @@ export function createModelRegistry(overrides?: Partial<Record<ModelAlias, strin
     alias, lane, modalities, modelId: ids[alias], defaultTemperature: 0.6, topP: 0.95, maxTokens: 4096, supportsTools: false,
   });
   return {
-    luna: model('luna','fast',['text','image']),
+    luna: { ...model('luna','fast',['text','image']), supportsTools: true },
     deepseek: model('deepseek','fast',['text']),
     mistral: model('mistral','vision',['text','image']),
     kimi: model('kimi','reasoning',['text','image','video']),

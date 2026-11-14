@@ -5,6 +5,7 @@ export type ChatType = 'private' | 'group';
 export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker';
 
 export interface InboundMediaPayload {
+  error?: string;
   mimeType: string;
   sizeBytes: number;
   kind: MediaKind;

@@ -92,6 +92,10 @@ export class LmsService {
     s.history=[stamp(result.checked)+' · '+result.items.length+' entri',...s.history].slice(0,8);
     await this.save(a,s);
   }
+  async linkedAlias(phone:string) {
+    const account=await this.db.lmsAccount.findUnique({where:{phone},select:{alias:true,consentAt:true}});
+    return account?.consentAt ? account.alias : undefined;
+  }
   async privateAsk(phone:string,question:string) {
     const a=await this.db.lmsAccount.findUnique({where:{phone}});
     if(!a?.encrypted || !a.aiConsent || !a.consentAt) return;
@@ -102,10 +106,10 @@ export class LmsService {
     if(msg.chatType!=='private' || this.shutdown.signal.aborted) return '';
     const phone=normalizeE164(msg.senderJid);
     const chatPhone=normalizeE164(msg.chatJid);
-    const send=async (text:string,media?:OutboundMediaPayload)=>{
+    const send=async (text:string,media?:OutboundMediaPayload,part='')=>{
       if(this.shutdown.signal.aborted)return false;
       const body=text.length>3800?text.slice(0,3750)+'\n\nGunakan filter yang lebih spesifik.':text;
-      const result=await this.outbound.send({chatJid:msg.chatJid,text:body,media,idempotencyKey:'lms:'+msg.providerMessageId});
+      const result=await this.outbound.send({chatJid:msg.chatJid,text:body,media,idempotencyKey:'lms:'+msg.providerMessageId+part});
       if(!result.ok || result.dryRun) return false;
       return true;
     };
@@ -203,6 +207,30 @@ export class LmsService {
         const q=words.join(' ').slice(0,1000);
         if(!q) return answer('Tambahkan ID materi, topik atau pertanyaan.');
         return answer(await this.study(a,s,items,op,q));
+      }
+      if(op==='materi' && sub==='pdf'){
+        const tail=words.slice(1).join(' ').match(/^(.+?)(?:\s+page\s+(\d+))?$/i);
+        if(!tail) return answer('Materi PDF untuk mata kuliah apa?');
+        const course=tail[1]!.trim().toLowerCase(), page=Number(tail[2]??1);
+        const candidates=items.filter(i=>i.course.toLowerCase().includes(course)).flatMap(i=>
+          i.files.length ? i.files.map((_,n)=>({item:i,n})) : i.access ? [{item:i,n:0}] : []);
+        if(!Number.isSafeInteger(page) || page<1 || !candidates[(page-1)*4]) return answer('Tidak ada dokumen untuk mata kuliah atau halaman tersebut.');
+        let sent=0, checked=0;
+        const start=Date.now(), batch=candidates.slice((page-1)*4,page*4);
+        for(const {item,n} of batch) {
+          if(Date.now()-start>20000) break;
+          checked++;
+          try {
+            const media=await this.download(a,s,item,n);
+            if(media.mimeType==='application/pdf' && await send('📄 '+item.title,media,':'+item.id+':'+n)){
+              if(!s.seen.includes(item.id)) s.seen.push(item.id);
+              sent++;
+            }
+          } catch(e) { if(e instanceof SessionExpired) throw e; }
+        }
+        if(sent) await this.save(a,s);
+        const next=page*4<candidates.length ? '\nHalaman berikutnya: .lms '+alias+' materi pdf '+course+' page '+(page+1) : '';
+        return answer('PDF diterima provider WhatsApp: '+sent+'. Dokumen diperiksa: '+checked+'/'+batch.length+'.'+(checked<batch.length?' Waktu habis. Buka daftar materi untuk mengambil sisanya per ID.':'')+next);
       }
       if(op==='materi' && ['download','kirim'].includes(sub)){
         const item=items.find(i=>i.id===words[1]), n=Number(words[2]??1)-1;

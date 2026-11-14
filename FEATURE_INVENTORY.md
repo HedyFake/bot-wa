@@ -1,5 +1,43 @@
 # Inventaris fitur HdyBot
 
+## Kesenjangan terhadap master project · 11 November 2026
+
+| Modul | Yang ada | Batas yang perlu ditutup |
+| --- | --- | --- |
+| Brain dan tools | Responses dengan 13 fungsi termasuk status DM admin. Fase 2 menambahkan akses terikat chat untuk tugas, catatan, pengingat, permainan, kalender, perhitungan dan pencarian menu. Tiga permintaan lampiran bisa diarahkan langsung ke generator. | Verifikasi akun API, kuota PostgreSQL, pengiriman perangkat nyata dan modul master berikutnya. |
+| Nursing, terminologi, anatomi | .ask, .askep, .pengkajian, .sdki, .sop dan pencarian sumber | Kamus Indonesia/Inggris/Latin/Yunani, sumber per entri, 12 sistem tubuh, diagram berizin, ADPIE/SOAP/SBAR terstruktur. |
+| Jurnal dan EBN | .jurnal mencari metadata dan membuat katalog PDF | Verifikasi full-text dan lisensi, filter tervalidasi, evidence table, PICO, perbandingan artikel, appraisal dan provenance. |
+| Makalah | .doc pdf serta katalog jurnal | .makalah, draf per bab, kutipan terverifikasi, revisi dan DOCX/PDF dari versi sumber yang sama. |
+| Presentasi | Pengiriman PPT/PPTX, ekspor Google Slides | .ppt, tema, speaker notes, desain 16:9, preview serta render PDF dan uji overflow. |
+| Dokumen universal | Validasi format LMS/Drive, ekstraksi PDF/teks/OCR | Ekstraksi DOCX/PPTX/XLSX, transkripsi, perbandingan, checksum dan pemrosesan persisten universal. |
+| LMS dan Drive | Perintah LMS dengan alias mahasiswa, session dan dashboard; katalog serta unduh Drive | Sintaks singkat baru dan diskusi LMS perlu implementasi/validasi. Perlu sinkronisasi Drive inkremental dan verifikasi live. |
+| Kalkulator dan OSCE | IMT, GCS, balance, tetesan dan konversi tertentu | Formula bersatuan dan pengujian untuk BSA, dosis, energi serta simulator pasien fiktif dan rubrik tervalidasi. |
+| Belajar dan hiburan | Flashcard, kuis, game, skor, pengingat | Spaced repetition, tujuan dan progres per mahasiswa, tryout serta perluasan permainan. |
+| Knowledge | Retrieval berbasis kata, metadata materi dan consent LMS | Penyaringan privasi, sumber, editor, versi, persetujuan, ruang akses dan pengusangan. |
+| Operasi | systemd, backup, log internal, health, retry dan reconnect | Pemulihan teruji, klasifikasi error teredaksi, bukti restore, reboot serta idle 24 jam. |
+
+Daftar di bawah memetakan ejaan perintah di lampiran ke parser saat audit. Perintah dengan prefix yang sudah dikenal masih dapat memerlukan subperintah, layanan dan pengujian baru. Contohnya, menerima teks setelah .jurnal tidak membuktikan dukungan .jurnal kritik.
+
+| Bagian lampiran | Bentuk dengan prefix dikenali | Bentuk tanpa rute parser |
+| --- | --- | --- |
+| 6. MEDICAL TERMINOLOGY — KAMUS BAHASA MEDIS | `.translate medical <teks>` | `.med`, `.med <kata>`, `.istilah <kata>`, `.arti <istilah>`, `.prefix <kata>`, `.rootword <kata>`, `.suffix <kata>`, `.singkatanmedis`, `.anatomiterm <kata>`, `.pronounce <kata>` |
+| 7. Anatomi dan fisiologi | `.quiz anatomi`, `.flashcard anatomi` | `.anatomi`, `.anatomi <organ>`, `.fisiologi <organ>`, `.sistemtubuh`, `.organ <nama>`, `.lokasi <organ>`, `.fungsi <organ>`, `.anatomy diagram <organ>` |
+| 8. NURSING AI ASSISTANT | `.ask`, `.askep`, `.pengkajian` | `.penyakit`, `.patofisiologi`, `.adpie`, `.diagnosa`, `.intervensi`, `.luaran`, `.rasional`, `.implementasi`, `.evaluasi`, `.soap`, `.sbar`, `.pathway`, `.mindmap`, `.edukasipasien` |
+| 9. JOURNAL FINDER — MULTI-SOURCE RESEARCH ENGINE | `.jurnal`, `.jurnal <topik>`, `.jurnal terbaru <topik>`, `.jurnal 5tahun <topik>`, `.jurnal internasional <topik>`, `.jurnal indonesia <topik>`, `.jurnal gratis <topik>`, `.jurnal review <topik>`, `.jurnal systematic <topik>`, `.jurnal RCT <topik>`, `.jurnal doi <doi>`, `.jurnal detail <id>`, `.jurnal unduh <id>`, `.jurnal kirim <id>`, `.jurnal ringkas <id>`, `.jurnal kritik <id>`, `.jurnal bandingkan <id1> <id2>` | `.pico <topik>`, `.evidencetable <topik>`, `.criticalappraisal <id>`, `.sitasi <doi>`, `.bibliography` |
+| 10. EVIDENCE-BASED NURSING & RESEARCH ASSISTANT | — | `.research`, `.topikpenelitian`, `.pico`, `.rumusanmasalah`, `.tujuanpenelitian`, `.hipotesis`, `.variabel`, `.kerangkakonsep`, `.metodepenelitian`, `.sampling`, `.instrumen`, `.analisisdata`, `.criticalappraisal`, `.evidencetable`, `.systematicreview` |
+| 11. Generator makalah akademik | — | `.makalah`, `.makalah <judul>`, `.makalah detail <judul>`, `.makalah referensi <topik>`, `.makalah revisi <id>`, `.bab1 <topik>`, `.bab2 <topik>`, `.bab3 <topik>`, `.latarbelakang <topik>`, `.rumusanmasalah <topik>`, `.tujuan <topik>`, `.tinjauanpustaka <topik>`, `.daftarisi`, `.daftar pustaka`, `.exportdocx <id>`, `.exportpdf <id>`, `.makalah kirim <id>` |
+| 12. Generator PowerPoint | — | `.ppt`, `.ppt <judul>`, `.ppt makalah <id>`, `.ppt materi <id>`, `.ppt tema <nama>`, `.ppt jumlah <angka>`, `.ppt revisi <id>`, `.ppt notes <id>`, `.exportpptx <id>`, `.exportslidepdf <id>`, `.ppt preview <id>`, `.ppt kirim <id>` |
+| 13. OSCE & CLINICAL CASE SIMULATOR | — | `.osce`, `.osce <topik>`, `.kasus`, `.kasus <penyakit>`, `.pasien simulasi`, `.anamnesis`, `.evaluasi kasus`, `.skill checklist`, `.skill progress`, `.tryout` |
+| 14. CLINICAL CALCULATORS | `.bmi`, `.balance`, `.tetesan`, `.gcs` | `.bsa`, `.infus`, `.dosis`, `.convertobat`, `.kalori` |
+| 15. LMS SHJ INTEGRATION | `.lms`, `.lms hubungkan`, `.lms status`, `.lms dashboard`, `.lms matkul`, `.lms materi`, `.lms materi <matkul>`, `.lms materi terbaru`, `.lms tugas`, `.lms tugas pending`, `.lms kuis aktif`, `.lms diskusi`, `.lms unduh <id>`, `.lms sinkron`, `.lms logout` | — |
+| 16. GOOGLE DRIVE INTEGRATION | `.materi`, `.materi <matkul>`, `.materi cari <kata>`, `.drive status`, `.drive search <kata>`, `.drive sync`, `.download <id>` | `.file send <id>` |
+| 18. JOURNAL & EVIDENCE-BASED PRACTICE | `.jurnal`, `.jurnal <topik>`, `.jurnal terbaru`, `.jurnal 5tahun`, `.jurnal gratis`, `.jurnal systematic`, `.jurnal RCT`, `.jurnal detail`, `.jurnal ringkas`, `.jurnal kirim` | `.pico`, `.criticalappraisal`, `.evidencetable`, `.references`, `.sitasi`, `.bibliography` |
+| 19. PERSONAL LEARNING ASSISTANT | `.flashcard`, `.quiz`, `.reminder belajar` | `.studyplan`, `.review`, `.tryout`, `.progressbelajar`, `.targetbelajar`, `.ujian simulasi` |
+| 20. ENTERTAINMENT AND GROUP INTERACTION | `.game`, `.game list`, `.tebakkata`, `.tebakemoji`, `.caklontong`, `.family100`, `.mathquiz`, `.asahotak`, `.truth`, `.dare`, `.pantun`, `.gombal`, `.quotes`, `.faktaunik`, `.hint`, `.nyerah`, `.score`, `.leaderboard` | `.tebakgambar`, `.duel`, `.battle`, `.jawaban` |
+| 21. Kurasi dan penyimpanan pengetahuan | — | `.knowledge pending`, `.knowledge review <id>`, `.knowledge approve <id>`, `.knowledge reject <id>`, `.knowledge search <kata>`, `.knowledge update <id>`, `.knowledge archive <id>`, `.knowledge status`, `.knowledge export`, `.knowledge suggest <teks>` |
+| 22. VPS 24 JAM & WHATSAPP ADMIN MONITORING | `.health`, `.status`, `.system`, `.runtime`, `.logs`, `.errors`, `.ai status`, `.lms status`, `.drive status`, `.db status`, `.scheduler status`, `.backup status` | — |
+
+
 Katalog dengan alias dan contoh balasan dari handler terbaru tersedia di [README](README.md#katalog-perintah-dan-contoh-balasan). Inventaris statis perintah titik dari parser dan dispatcher aktif. Kolom status menyatakan keberadaan jalur kode. Uji perilaku yang telah dijalankan tercantum di IMPLEMENTATION_STATUS.md. Alias bahasa alami ada di akhir parser. Semua baris merujuk ke src/admin/commands/parser.ts dan src/admin/commands/dispatcher.ts. Pengiriman melewati OutboundGate. Beberapa subperintah melakukan validasi tambahan terhadap izin, sesi, atau konfigurasi provider.
 
 | Perintah internal | Perintah dan alias | Akses | Panggilan langsung | Data utama | Status statis |

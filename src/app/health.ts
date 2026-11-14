@@ -64,7 +64,7 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   });
 
   checks.push({name:'openai', status:deps.config.OPENAI_API_KEY ? 'degraded' : 'not_configured',
-    detail:deps.config.OPENAI_API_KEY ? 'gpt-6-luna dikonfigurasi; koneksi belum diuji' : 'OPENAI_API_KEY kosong'});
+    detail:deps.config.OPENAI_API_KEY ? deps.config.OPENAI_MODEL + ' dikonfigurasi; koneksi belum diuji' : 'OPENAI_API_KEY kosong'});
   const relevant = checks.filter((c) => c.status !== 'not_configured');
   const status: CheckStatus = relevant.some((c) => c.status === 'down')
     ? 'down'

@@ -1,5 +1,76 @@
 # HDYBOT — Implementation Report
 
+## Pembaruan lampiran dan pemulihan menu
+
+Pengujian, jalur cadangan per fitur, dan batas verifikasi produksi dicatat dalam [laporan multimodal](MULTIMODAL_IMPLEMENTATION_STATUS.md). Daftar perintah dan contoh balasannya di [README](README.md) dihasilkan melalui dispatcher dengan adapter WhatsApp simulasi.
+
+## Fase 3 · Permintaan bahasa biasa dan pengiriman berkas · 14 November 2026
+
+**Status PARTIAL untuk keseluruhan master prompt.** Dispatcher menggunakan router OpenAI utama dan NVIDIA cadangan untuk permintaan yang memerlukan interpretasi. Perintah lokal yang jelas tetap diproses langsung. Skema keputusan mencakup 12 jenis maksud dan lima tingkat kepentingan. Pengirim, lokasi chat, izin dan daftar perintah yang tersedia diperiksa oleh kode. Obrolan santai tidak diberi tools. Di grup yang dipantau, teks untuk klasifikasi diperlakukan sebagai data. Penyebaran pengumuman tetap memerlukan persetujuan pribadi owner.
+
+| Bagian | Implementasi dan bukti |
+| --- | --- |
+| Rute dan konteks | `src/admin/commands/intent.ts`, `dispatcher.ts` dan `src/ai/workflow-context.ts`. Tes dispatcher mencakup klarifikasi kota, pemilihan jurnal, draf antaranggota dan penolakan mutasi dalam permintaan gabungan. |
+| Cuaca | `src/modules/weather/forecast.ts`. Selain tes respons simulasi dan kegagalan provider, pemanggilan langsung fungsi produksi mengembalikan Jombang, Jawa Timur, data pukul 15.15 WIB dan tujuh tanggal prakiraan, 14–20 November 2026. |
+| Berkas | `src/modules/academic/study-draft.ts` menghasilkan DOCX dan PPTX. `src/modules/materials/journal-delivery.ts` memeriksa batas unduhan, lisensi dan PDF. Gerbang outbound memeriksa ukuran, MIME dan penanda format. Tes memakai adapter WhatsApp simulasi dan memeriksa isi lampiran. |
+| LMS | Akun yang telah memberi izin dicari melalui nomor peminta. PDF diperiksa ulang di halaman materi akun, dikirim ke DM, dan dihitung menurut hasil pengiriman provider. Tes LMS memakai portal dan database simulasi. |
+| Operasional | Inspeksi metadata GitHub dibatasi ke DM owner. Refresh katalog Drive melalui bahasa biasa memerlukan instruksi eksplisit owner. Rekoneksi WhatsApp menggunakan pengelola koneksi yang sudah ada. Log pekerjaan menyimpan pengirim, aksi, ID, waktu dan status persiapan dalam memori. |
+
+Typecheck dan build lulus. Vitest lulus 144 tes di 24 berkas. Pemeriksaan katalog lulus untuk 149 handler, 293 nama perintah, dan 578 eksekusi melalui WhatsApp simulasi. Bukti untuk cuaca memakai Open-Meteo langsung. Pengujian lainnya belum membuktikan login WhatsApp atau LMS produksi, pengiriman ke ponsel, kuota akun AI, maupun operasi 24 jam pada VPS.
+
+Instalasi dan eksekusi repositori GitHub secara otomatis belum tersedia. Fallback tautan baru dengan masa berlaku untuk lampiran yang gagal, histori pekerjaan persisten lintas restart, dan peringatan cuaca resmi juga belum tersedia. Untuk berkas yang memiliki halaman sumber, pengguna dapat memakai tautan resmi yang disediakan modul.
+
+## Fase 2 · Integrasi fitur lama · 14 November 2026
+
+Hasil akhir di workspace: typecheck dan build lulus. Vitest lulus 139/139 tes dalam 24 berkas dengan satu worker dan timeout semula. Setelah contoh README diperbarui dari keluaran dispatcher, pemeriksaan katalog lulus untuk 147 handler, 292 nama perintah dan 573 eksekusi WhatsApp simulasi.
+
+Sembilan fungsi baru memberi AI akses ke tugas yang terlihat di chat, judul catatan, pengingat, kalender, hitung mundur, aritmetika, konversi satuan, petunjuk atau skor game, serta pencarian menu berdasarkan izin. Bersama Fase 1 terdapat 13 fungsi ketika sesi admin memenuhi izin. PDF sederhana, QR dan kartu jadwal memakai generator lokal serta adapter pengiriman WhatsApp. Format pesan dan contoh perintah tersedia di [README](README.md).
+
+Catatan lama tersedia di DM pembuat. Untuk catatan baru, chat asal menentukan akses baca. Pembuat atau moderator chat itu dapat menghapusnya. Daftar pengingat lokal dan fungsi AI kini memakai waktu efektif setelah penundaan, termasuk bila waktunya berpindah tanggal WIB. Penjadwalan lokal memakai validasi tanggal yang sama dengan worker database.
+
+Pengujian menggunakan adapter WhatsApp mock, pemeriksaan struktur PDF dan PNG, dua akun, dua grup, provider AI simulasi dan worker PostgreSQL simulasi. Tes operasi lintas chat meliputi baca, hapus dan tunda. Tes batas waktu memeriksa bahwa hasil fungsi yang terlambat dapat diabaikan sebelum putaran OpenAI berikutnya. [Tes integrasi](tests/existing-feature-tools.test.ts)
+
+OpenAI belum memiliki kunci pada workspace. Pemeriksaan koneksi baca PostgreSQL lokal belum berhasil. Penerimaan pada ponsel, pengiriman pengingat oleh worker produksi dan operasi VPS 24 jam masih menunggu pengujian langsung. Fase berikutnya mencakup pendidikan keperawatan dan terminologi medis. [Daftar fungsi beserta izin](AI_TOOL_REGISTRY.md) · [Perubahan per berkas](CHANGELOG.md)
+
+## Fase 1 master project · 11 November 2026
+
+**Upgrade terpasang di source dan teruji lokal. Verifikasi produksi masih terbuka.** Pesan teks dan gambar pada jalur OpenAI memakai Responses. Percakapan dan `.ask` dapat memakai jadwal, katalog mata kuliah dan kalkulator. DM admin yang lolos otorisasi juga mendapat fungsi status WhatsApp dan uptime. Pemilihan intent meminta JSON sesuai schema. Untuk permintaan lanjutan, konteks dalam RAM menyimpan hingga enam giliran dengan masa pakai 30 menit. Pengaturan harian dan bulanan memakai satuan jumlah percobaan request per periode WIB.
+
+| Pemeriksaan | Bukti lokal |
+| --- | --- |
+| TypeScript dan build | `npm run typecheck` dan `npm run build` selesai dengan exit 0. |
+| Regresi | `npm test -- --maxWorkers=1` lulus 131/131 tes dalam 23 file. Uji media melewati 15 detik pada percobaan awal bersamaan dengan pemeriksaan lain. Pengulangan memakai batas waktu semula. Fontconfig melaporkan cache font lokal tak dapat ditulis. |
+| Jalur perintah WhatsApp | `node scripts/command-catalog.mjs --check` lulus untuk 147 handler, 292 nama dan 573 eksekusi mock. Tes baru mengirim `.ask` ke dispatcher dan memeriksa balasan yang diterima adapter mock setelah dua putaran Responses simulasi. |
+| Keamanan dan fungsi | Tes mencakup fungsi tak dikenal, argumen tambahan, pencabutan akses monitoring, batas fungsi, hitungan IMT dan kelanjutan melalui NVIDIA, pemisahan konteks dan penyamaran teks. Pengujian ini memakai fixture. |
+| Database | Koneksi baca PostgreSQL lokal belum tersedia. Pengujian kuota memeriksa pemakaian satu transaksi dan periode WIB dengan mock. Belum ada bukti persaingan transaksi pada PostgreSQL nyata. Kuota positif memerlukan tabel BotSetting dari migrasi proyek. |
+| Lingkungan nyata | OPENAI_API_KEY kosong di workspace. Respons dari akun OpenAI, penerimaan pada ponsel, log systemd VPS dan durasi hidup 24 jam belum diverifikasi. |
+
+Perubahan tiap berkas tercatat di [changelog](CHANGELOG.md). Daftar fungsi dan izin ada di [registri AI](AI_TOOL_REGISTRY.md). Fase 2 mencakup integrasi fitur lama lainnya. Generator makalah dan PPT, pencarian jurnal lanjutan, OSCE dan kurasi pengetahuan berada pada fase berikutnya.
+
+## Fase 0 master project · 11 November 2026
+
+**Audit lokal selesai. Status produk PARTIAL.** Pada fase ini perubahan terbatas pada laporan audit. Belum ada tool Responses aktif, generator makalah atau PPT baru, perubahan database maupun deployment.
+
+| Pemeriksaan pada revisi a641f86 | Hasil | Cakupan |
+| --- | --- | --- |
+| npm run typecheck dan npm run build | Keduanya exit 0 | Kompilasi source TypeScript aktif. |
+| npm test | 122 dari 122 tes lulus pada 22 file | Vitest lokal. Termasuk perizinan LMS, fallback, game, pemulihan worker dan validasi lampiran dengan fixture. |
+| node scripts/command-catalog.mjs --check | 147 handler, 292 nama perintah, 573 eksekusi lewat WA mock, exit 0 | Memeriksa transkrip termasuk respons penolakan. Fontconfig memberi peringatan cache lokal. |
+| Probe kalkulator sintetis | 28 tetes/menit, GCS 15/15, IMT 22,04 kg/m² dan balance 300 mL | nursingCalculation menghasilkan nilai yang diminta untuk empat input contoh pengguna. |
+| Probe catatan dan alias hari | Masalah S03 dan S06 direproduksi | Objek layanan sementara dan parser. Detail di SECURITY_REVIEW.md. |
+| Database | Prisma gagal menjangkau PostgreSQL lokal, kode P1001 | Struktur dan empat migrasi dibaca dari repo. Probe hanya mengizinkan alamat lokal. Data, migrasi dan backup produksi belum diuji. |
+| Log dan WhatsApp | Output proses tes dan build diperiksa, transkrip WA melalui mock | Journal systemd VPS, API berbayar, akun LMS, file Drive asli, pairing HP dan uptime 24 jam belum diverifikasi dalam fase ini. |
+
+### Urutan implementasi setelah audit
+
+1. Perbaiki isolasi data dan siapkan registry dengan satu tool baca, uji izin lintas pengguna, input berbahaya dan fallback. Integrasikan Responses melalui transport baru agar jalur lokal tetap cepat.
+2. Sambungkan layanan lama secara bertahap, catat penggunaan, persistensikan pekerjaan multi-langkah dan verifikasi efek yang dilaporkan.
+3. Lanjutkan fase domain sesuai master project. Untuk prioritas makalah/PPT, gunakan korpus uji dengan DOI yang dapat diverifikasi, lalu uji file editable, render PDF, sitasi, notes dan pengiriman.
+4. Jadwalkan uji akses live, pemulihan backup terisolasi, reconnect, reboot dan observasi VPS pada fase penerimaan.
+
+Perubahan fase ini tercatat di [changelog](CHANGELOG.md). [Kesenjangan fitur](FEATURE_INVENTORY.md) · [Temuan per baris](SECURITY_REVIEW.md) · [Tool dan otorisasi](AI_TOOL_REGISTRY.md).
+
+
 Diperbarui 9 November 2026. Proyek menggunakan source lama TypeScript, whatsapp-web.js, Prisma, PostgreSQL, dan systemd. Status keseluruhan **PARTIAL**. Pengujian mock menggunakan data uji. Pengiriman ke WhatsApp produksi dan instalasi Linux berada di luar hasil verifikasi lokal.
 
 | Tahap | Status | Hasil dan batas pembuktian |

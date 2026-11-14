@@ -65,6 +65,22 @@ export const EnvSchema = z.object({
   LMS_ENCRYPTION_KEY: z.string().optional().transform(v=>v?.trim() || undefined),
   LMS_SYNC_MINUTES: z.coerce.number().int().min(30).max(1440).default(45),
   OPENAI_API_KEY: z.string().optional().transform(v => v?.trim() || undefined),
+  OPENAI_TRANSCRIPTION_MODEL: z.string().trim().min(1).default('gpt-transcribe'),
+  MEDIA_ENCRYPTION_KEY: z.string().optional().transform(v=>v?.trim()||undefined)
+    .refine(v=>!v || /^[A-Za-z0-9+/]{43}=$/.test(v) && Buffer.from(v,'base64').length===32,'MEDIA_ENCRYPTION_KEY harus Base64 dari 32 byte.'),
+  OPENAI_MODEL: z.string().trim().transform(v => v || 'gpt-6-luna').default('gpt-6-luna'),
+  OPENAI_BASE_URL: z.url({ protocol: /^https$/ }).refine(v => {
+    const url = new URL(v);
+    return !url.username && !url.password && !url.search && !url.hash;
+  }).default('https://api.openai.com/v1'),
+  OPENAI_TIMEOUT: z.coerce.number().int().min(100).max(180000).default(60000),
+  OPENAI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(1),
+  OPENAI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(16).max(128000).default(4096),
+  OPENAI_MAX_TOOL_CALLS: z.coerce.number().int().min(1).max(12).default(4),
+  OPENAI_DAILY_BUDGET: z.coerce.number().int().nonnegative().default(0),
+  OPENAI_MONTHLY_BUDGET: z.coerce.number().int().nonnegative().default(0),
+  OPENAI_AUTO_ROUTING: bool(true),
+  OPENAI_TOOL_CALLING: bool(true),
   AI_PROVIDER_SWITCH_MS: z.coerce.number().int().positive().default(3500),
   NVIDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   AI_DEFAULT_MODEL: z.string().optional(),

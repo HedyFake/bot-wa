@@ -342,3 +342,106 @@ model BotSetting {
   updatedBy String?
   updatedAt DateTime @updatedAt
 }
+
+model MediaFile {
+  id String @id
+  scope String
+  message String
+  checksum String
+  size Int
+  payload String
+  created DateTime @default(now())
+  expires DateTime
+  mediaProcessingJob MediaProcessingJob[]
+  mediaExtraction MediaExtraction[]
+  mediaTranscript MediaTranscript[]
+  mediaFrame MediaFrame[]
+  documentChunk DocumentChunk[]
+  fileDeliveryHistory FileDeliveryHistory[]
+  fileAccessPermission FileAccessPermission[]
+  fileFeedback FileFeedback[]
+  @@unique([scope,checksum])
+  @@index([scope,created])
+  @@index([expires])
+  @@map("media_files")
+}
+
+model MediaProcessingJob {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("media_processing_jobs")
+}
+
+model MediaExtraction {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("media_extractions")
+}
+
+model MediaTranscript {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("media_transcripts")
+}
+
+model MediaFrame {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("media_frames")
+}
+
+model DocumentChunk {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("document_chunks")
+}
+
+model FileDeliveryHistory {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("file_delivery_history")
+}
+
+model FileAccessPermission {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("file_access_permissions")
+}
+
+model FileFeedback {
+  id String @id @default(cuid())
+  fileId String
+  file MediaFile @relation(fields:[fileId],references:[id],onDelete:Cascade)
+  value String
+  created DateTime @default(now())
+  @@index([fileId])
+  @@map("file_feedback")
+}

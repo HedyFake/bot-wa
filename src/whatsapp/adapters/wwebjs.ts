@@ -92,11 +92,13 @@ interface WWebMessageLike {
   type?: string;
   fromMe?: boolean;
   hasMedia?: boolean;
+  isEphemeral?: boolean;
+  isViewOnce?: boolean;
   hasQuotedMsg?: boolean;
   isForwarded?: boolean;
   timestamp?: number;
   mentionedIds?: string[];
-  _data?: { notifyName?: string; mentionedJidList?: string[] };
+  _data?: { notifyName?: string; mentionedJidList?: string[]; isEphemeral?:boolean; isViewOnce?:boolean; ephemeralDuration?:number; size?:number; mimetype?:string };
   getContact?: () => Promise<{ number?: string; id?: { user?: string; _serialized?: string } }>;
   getChat?: () => Promise<{
     name?: string;
@@ -646,13 +648,21 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       if (this._state !== 'session_expired') this.setState(String(reason).toUpperCase().includes('LOGOUT') ? 'logged_out' : 'disconnected');
     });
 
+    const isProtected = (msgObj: WWebMessageLike) => msgObj.isEphemeral || msgObj.isViewOnce || msgObj._data?.isEphemeral || msgObj._data?.isViewOnce || Number(msgObj._data?.ephemeralDuration)>0 || /view_once|ephemeral/i.test(msgObj.type??'');
     const extractMedia = async (msgObj: WWebMessageLike): Promise<InboundMediaPayload | undefined> => {
-      if (!msgObj.hasMedia || typeof msgObj.downloadMedia !== 'function') return undefined;
+      const protectedMedia=isProtected(msgObj);
+      if (!msgObj.hasMedia && !protectedMedia) return undefined;
+      const failure=(error:string):InboundMediaPayload=>({kind:'document',mimeType:msgObj._data?.mimetype??'',sizeBytes:0,error});
+      if(protectedMedia)return failure('Media sekali lihat atau pesan sementara tidak dapat diproses.');
+      const limit=this.opts.maxMediaBytes??25*1024*1024;
+      if((msgObj._data?.size??0)>limit)return failure('Lampiran melebihi batas ukuran bot.');
+      if(typeof msgObj.downloadMedia!=='function')return failure('Media tidak tersedia dari WhatsApp.');
       try {
         const downloaded = await msgObj.downloadMedia();
-        if (!downloaded?.data || !downloaded?.mimetype) return undefined;
-        if (downloaded.data.length > Math.ceil((this.opts.maxMediaBytes ?? 25 * 1024 * 1024) / 3) * 4) return undefined;
+        if (!downloaded?.data || !downloaded?.mimetype) return failure('Media tidak tersedia dari WhatsApp.');
+        if (downloaded.data.length > Math.ceil(limit / 3) * 4) return failure('Lampiran melebihi batas ukuran bot.');
         const buf = Buffer.from(downloaded.data, 'base64');
+        if(buf.length>limit)return failure('Lampiran melebihi batas ukuran bot.');
         return {
           mimeType: downloaded.mimetype,
           sizeBytes: buf.byteLength,
@@ -661,7 +671,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           filename: downloaded.filename,
         };
       } catch {
-        return undefined;
+        return failure('WhatsApp gagal mengunduh lampiran.');
       }
     };
 
@@ -675,7 +685,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       if (this.botSentIds.has(msgId)) return;
 
       const text = String(m.body ?? '').trim();
-      if (!text && !m.hasMedia) return;
+      if (!text && !m.hasMedia && !isProtected(m)) return;
 
       // Pesan keluar (termasuk isi relay) tidak boleh masuk kembali sebagai perintah.
       if (m.fromMe) return;
@@ -689,7 +699,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const cached = groupNames.get(rawChatId);
       const cachedName = cached && cached.until > Date.now() ? cached.name : undefined;
       const groupChat = isGroup && (!textOnly || !cachedName) ? m.getChat?.().catch(() => undefined) : undefined;
-      let senderJid = isGroup ? String(m.author ?? m.from ?? '') : String(m.from ?? '');
+      let senderJid = isGroup ? String(m.author ?? '') : String(m.from ?? '');
+      if(!senderJid)return;
       const isLidSender = senderJid.endsWith('@lid');
       const phone = normalizeE164(senderJid);
       if (phone) senderJid = e164ToJid(phone);
@@ -729,10 +740,13 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           const q = await m.getQuotedMessage();
           if (q) {
             quotedFromBot = Boolean(q.fromMe);
-            const qMedia = await extractMedia(q);
+            const source=q.author??q.from;
+            const owned=!!source && (source===m.author || source===senderJid || !isGroup && !q.fromMe && source===rawChatId ||
+              normalizeE164(source)!==null && normalizeE164(source)===normalizeE164(senderJid));
+            const qMedia = owned ? await extractMedia(q) : undefined;
             quoted = {
               providerMessageId: String(q.id?._serialized ?? ''),
-              senderJid: q.author ?? q.from,
+              senderJid: owned ? senderJid : source,
               text: q.body,
               media: qMedia,
             };

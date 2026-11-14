@@ -1,5 +1,5 @@
 import { LmsService } from './modules/lms/service.js';
-import { LunaTransport } from './ai/openai/luna.js';
+import { configuredOpenAI } from './ai/openai/luna.js';
 import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,6 +7,8 @@ import { PrismaClient } from '@prisma/client';
 import { AdminAuthenticator } from './admin/authentication/authenticator.js';
 import { ConfirmationManager } from './admin/authorization/confirmation.js';
 import { CommandDispatcher } from './admin/commands/dispatcher.js';
+import { reserveOpenAiRequest } from './ai/openai/usage.js';
+import { FileVault } from './modules/file-intelligence/vault.js';
 import { GroupIntelligenceService } from './ai/classification/group-intelligence.js';
 import { ModelRouter } from './ai/model-router/router.js';
 import { HttpNvidiaTransport } from './ai/nvidia/registry.js';
@@ -49,6 +51,7 @@ async function main() {
   } else if (config.WHATSAPP_PROVIDER === 'baileys') {
     whatsapp = new BaileysWhatsAppProvider({
       authDir: config.WHATSAPP_AUTH_DIR,
+      maxMediaBytes:config.MEDIA_MAX_MB*1024*1024,
       allowExperimental: config.WHATSAPP_ALLOW_EXPERIMENTAL_BAILEYS,
       pairingPhoneE164: config.WHATSAPP_PAIRING_PHONE,
       onPairingCode: code => writeFileSync(join(config.WHATSAPP_AUTH_DIR, 'pairing-code.txt'), code, { mode: 0o600 }),
@@ -60,6 +63,7 @@ async function main() {
   const outbound = new OutboundGate({
     provider: whatsapp,
     outboundEnabled: config.OUTBOUND_ENABLED,
+    maxMediaBytes: config.MEDIA_MAX_MB * 1024 * 1024,
     dryRun: config.DRY_RUN,
     allowedGroupJids: config.WHATSAPP_PRIMARY_GROUP_JID ? [config.WHATSAPP_PRIMARY_GROUP_JID] : [],
   });
@@ -80,6 +84,7 @@ async function main() {
   const router = new ModelRouter({
     transport,
     modelIds: {
+      luna: config.OPENAI_MODEL,
       ultra: config.NVIDIA_MODEL_ULTRA,
       'super-vl': config.NVIDIA_MODEL_SUPER_VL,
       lightning: config.NVIDIA_MODEL_LIGHTNING,
@@ -87,7 +92,10 @@ async function main() {
     initialMode: config.AI_ROUTER_MODE,
     fallbackEnabled: config.AI_FALLBACK_ENABLED,
     maxRetries: config.AI_MAX_RETRIES,
-    openai: config.OPENAI_API_KEY ? new LunaTransport(config.OPENAI_API_KEY) : undefined,
+    openai: configuredOpenAI(config, prisma),
+    openaiRetries: config.OPENAI_MAX_RETRIES,
+    secrets: [config.ADMIN_PASSWORD],
+    openaiAutoRouting: config.OPENAI_AUTO_ROUTING,
     switchMs: config.AI_PROVIDER_SWITCH_MS,
     timeoutMs: config.NVIDIA_TIMEOUT_MS,
   });
@@ -97,6 +105,7 @@ async function main() {
   const scheduleDatabase = prisma ? new ScheduleDatabase(prisma,config.CLASS_NAME,baseSchedule) : undefined;
   if (scheduleDatabase) schedule.useDatabase(scheduleDatabase);
   const intelligence = new GroupIntelligenceService({
+    retentionDays: config.MESSAGE_RAW_RETENTION_DAYS,
     primaryGroupJid: config.WHATSAPP_PRIMARY_GROUP_JID,
   });
   const mediaService = new MediaService();
@@ -113,6 +122,9 @@ async function main() {
   const lms = prisma && config.LMS_ENCRYPTION_KEY ? new LmsService(prisma,Buffer.from(config.LMS_ENCRYPTION_KEY,'base64'),router,outbound,
     config.LMS_SYNC_MINUTES * 60_000,config.MEDIA_MAX_MB * 1024 * 1024) : undefined;
   const dispatcher = new CommandDispatcher({
+    fileVault:prisma && config.MEDIA_ENCRYPTION_KEY ? new FileVault(prisma,Buffer.from(config.MEDIA_ENCRYPTION_KEY,'base64')):undefined,
+    reserveTranscription:async()=>{if(config.OPENAI_DAILY_BUDGET || config.OPENAI_MONTHLY_BUDGET)
+      await reserveOpenAiRequest(prisma,config.OPENAI_DAILY_BUDGET,config.OPENAI_MONTHLY_BUDGET);},
     lms,
     config,
     whatsapp,
@@ -255,6 +267,7 @@ async function main() {
     clearInterval(syncTimer);
     if (reconnectTimer) clearTimeout(reconnectTimer);
     log.info({ sig }, 'shutdown: stop ingest, tutup koneksi');
+    dispatcher.files.close();
     await whatsapp.disconnect().catch(() => undefined);
     await prisma?.$disconnect().catch(() => undefined);
     process.exit(0);

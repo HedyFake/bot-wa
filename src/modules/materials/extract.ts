@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function convert(command: string, args: string[], input: Buffer, maxBuffer: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -18,7 +21,16 @@ export async function extractSections(data: Buffer, mime: string): Promise<Extra
   try {
     let pages: string[];
     if (mime === 'application/pdf') {
-      const output = await convert('pdftotext', ['-f', '1', '-l', '80', '-enc', 'UTF-8', '-', '-'], data, 4_000_000);
+      // Xpdf on Windows needs an input path. Both Xpdf and Poppler can stream their output.
+      const dir = await mkdtemp(join(tmpdir(), 'hdybot-pdf-'));
+      let output: Buffer;
+      try {
+        const input = join(dir, 'input.pdf');
+        await writeFile(input, data, { mode: 0o600 });
+        output = await convert('pdftotext', ['-f', '1', '-l', '80', '-enc', 'UTF-8', input, '-'], Buffer.alloc(0), 4_000_000);
+      } finally {
+        await rm(dir, {recursive:true,force:true});
+      }
       pages = output.toString('utf8').split('\f');
       if (pages.at(-1)?.trim() === '') pages.pop();
       for (let i = 0; i < Math.min(pages.length, 8); i++) {

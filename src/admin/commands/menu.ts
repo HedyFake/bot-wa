@@ -5,7 +5,7 @@ const catalog: [string, string[]][] = [
   ['🕒 Jadwal dan tugas', ['jadwal [hari]', 'besok', 'mingguini', 'kuliahberikutnya', 'cekjadwal <tanggal>', 'tugas', 'tugas hariini', 'tambahtugas matkul|judul|deadline|catatan|dosen|PJ', 'selesaitugas <id>', 'reminder', 'note list']],
   ['🧠 Belajar dan materi', ['ask <pertanyaan>', 'rapikan <teks>', 'summarize <teks>', 'jurnal <topik>', 'materi', 'keperawatan', 'sdki <diagnosis>', 'sop <prosedur>', 'carimateri <kata>', 'download <id>', 'tanyadokumen <id> <pertanyaan>', 'ringkasdokumen <id>']],
   ['🎮 Permainan', ['game', 'tebakkata', 'caklontong', 'family100', 'mathquiz', 'jawab <teks>', 'nyerah', 'hint', 'score', 'dailychallenge', 'game buat [jumlah|duel]', 'game gabung', 'game mulai [kategori]', 'game riwayat', 'suit <pilihan>', 'leaderboard']],
-  ['🎨 Media', ['sticker', 'ttp <teks>', 'toimg', 'qr <teks>', 'doc pdf <judul>|<isi>', 'kartujadwal [hari]']],
+  ['🎨 Media', ['sticker', 'ttp <teks>', 'toimg', 'qr <teks>', 'doc pdf <judul>|<isi>', 'doc makalah <topik>', 'doc ppt [topik]', 'kartujadwal [hari]']],
   ['🛠️ Utilitas', ['jam', 'calc <rumus>', 'convert <nilai> <dari> <ke>', 'bmi <kg> <cm>', 'ipk', 'pantun [tema]', 'music <judul>', 'cerita <tema>', 'motivasi', 'dadu']],
   ['🔐 Administrasi', ['health', 'status', 'dashboard', 'runtime', 'ping', 'ai status', 'groups', 'backup', 'audit', 'logs [jumlah]', 'errors [today]', 'relay list', 'tugas antrean', 'tugas grup', 'tugas tujuan <id> <grup>', 'tugas tolak <id>', 'tugas deadline <id> <tanggal>', 'db status', 'drive status', 'drive sync', 'whatsapp status', 'scheduler status', 'storage', 'queue']],
 ];
@@ -16,7 +16,7 @@ catalog[3]![1].push('privacy gamification on');
 catalog[3]![1].push('game ai <topik>');
 catalog[4]![1].push('blur','resize <lebar> <tinggi>');
 catalog[5]![1].push('quotes [tema]','apakah <pertanyaan>','hilih <teks>');
-catalog[6]![1].push('ai models','ai model <alias>','ai auto on','ai test <pesan>','groups sources','groups add <JID> <nama>','groups pause <JID>','groups resume <JID>','nimbrung status','filter status','filter review','digest today','broadcast preview <ID>','broadcast send <ID>','reminder pause','reminder resume','admin pause','admin resume');
+catalog[6]![1].push('repo <URL>','ai models','ai model <alias>','ai auto on','ai test <pesan>','groups sources','groups add <JID> <nama>','groups pause <JID>','groups resume <JID>','nimbrung status','filter status','filter review','digest today','broadcast preview <ID>','broadcast send <ID>','reminder pause','reminder resume','admin pause','admin resume');
 
 catalog.push(['🎓 LMS STIKES Husada Jombang',['lms help','lms <nama> dashboard','lms <nama> matkul','lms <nama> materi','lms <nama> tugas','lms <nama> kuis','lms <nama> sync','lms <nama> logout']]);
 

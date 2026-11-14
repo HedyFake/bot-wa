@@ -1,8 +1,17 @@
+import { weatherReport } from '../weather/forecast.js';
 import { buildNotices, jakartaDay, type DeadlineNotice } from '../academic/deadline-notices.js';
 import { questions, type GameQuestion } from './questions.js';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { validateSafeExternalUrl } from '../../security/guards.js';
+import { normalizeE164 } from '../../security/phone.js';
+
+function sameChat(left: string, right: string): boolean {
+  if (left === right) return true;
+  const phone = normalizeE164(left);
+  return phone !== null && phone === normalizeE164(right);
+}
 
 export interface AssignmentItem {
   id: string;
@@ -43,6 +52,7 @@ export interface AnnouncementDraft {
 
 export interface ClassNoteItem {
   id: string;
+  sourceChat?: string;
   title: string;
   content: string;
   createdBy: string;
@@ -86,6 +96,7 @@ export interface AcademicJournalItem {
   journalName: string;
   doiOrUrl: string;
   pdfUrl?: string;
+  redistributable?: boolean;
   snippet: string;
 }
 
@@ -382,9 +393,24 @@ export class FunAndUtilityService {
   private saveState(): void {
     if (!this.persistPath) return;
     mkdirSync(dirname(this.persistPath), { recursive: true });
-    const temp = this.persistPath + '.tmp';
-    writeFileSync(temp, JSON.stringify(this.state, null, 2), { mode: 0o600 });
-    renameSync(temp, this.persistPath);
+    const temp = this.persistPath + '.' + randomUUID() + '.tmp';
+    try {
+      writeFileSync(temp, JSON.stringify(this.state, null, 2), { mode: 0o600, flag: 'wx' });
+      for (let attempt = 0; ; attempt++) {
+        try {
+          renameSync(temp, this.persistPath);
+          return;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (process.platform !== 'win32' || attempt >= 3 || !['EPERM','EBUSY','EACCES'].includes(code ?? '')) throw error;
+          // A Windows reader can briefly hold the destination without sharing delete access.
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15 * (attempt + 1));
+        }
+      }
+    } catch (error) {
+      rmSync(temp, {force:true});
+      throw error;
+    }
   }
 
   relayDrafts() { return Object.values(this.state.relayDrafts ?? {}); }
@@ -551,8 +577,16 @@ export class FunAndUtilityService {
   }
 
   // ==================== 2. REMINDER CUSTOM ====================
-  listReminders(): CustomReminderItem[] {
-    return this.state.reminders.filter((r) => r.status === 'scheduled');
+  listReminders(chat?: string): CustomReminderItem[] {
+    return this.state.reminders.filter(r => r.status === 'scheduled' && (chat === undefined || sameChat(r.targetJid, chat)));
+  }
+
+  reminderSchedule(chat: string) {
+    return this.listReminders(chat).map(r => {
+      const time = new Date(r.whenIso.replace(' ', 'T') + '+07:00').getTime() + (r.snoozedMinutes ?? 0) * 60000;
+      const whenWib = Number.isFinite(time) ? new Date(time).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : r.whenIso;
+      return { id: r.id, title: r.title, time, whenWib };
+    }).sort((a,b) => a.time - b.time).map(({ id, title, whenWib }) => ({ id, title, whenWib }));
   }
 
   addReminder(whenIso: string, title: string, targetJid: string): CustomReminderItem {
@@ -568,16 +602,17 @@ export class FunAndUtilityService {
     return item;
   }
 
-  deleteReminder(id: string): boolean {
-    const item = this.state.reminders.find((r) => r.id.toUpperCase() === id.trim().toUpperCase());
+  deleteReminder(id: string, chat: string): boolean {
+    const item = this.listReminders(chat).find(r => r.id.toUpperCase() === id.trim().toUpperCase());
     if (!item) return false;
     item.status = 'cancelled';
     this.saveState();
     return true;
   }
 
-  snoozeReminder(id: string, minutes: number): CustomReminderItem | null {
-    const item = this.state.reminders.find((r) => r.id.toUpperCase() === id.trim().toUpperCase());
+  snoozeReminder(id: string, minutes: number, chat: string): CustomReminderItem | null {
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) return null;
+    const item = this.listReminders(chat).find(r => r.id.toUpperCase() === id.trim().toUpperCase());
     if (!item) return null;
     item.snoozedMinutes = (item.snoozedMinutes ?? 0) + minutes;
     this.saveState();
@@ -611,9 +646,10 @@ export class FunAndUtilityService {
     return [...this.state.announcements].slice(-10);
   }
 
-  addNote(title: string, content: string, createdBy: string): ClassNoteItem {
+  addNote(title: string, content: string, createdBy: string, sourceChat = createdBy): ClassNoteItem {
     const note: ClassNoteItem = {
       id: this.nextId('NOTE',this.state.notes),
+      sourceChat,
       title: title.trim(),
       content: content.trim(),
       createdBy,
@@ -624,12 +660,14 @@ export class FunAndUtilityService {
     return note;
   }
 
-  listNotes(): ClassNoteItem[] {
-    return [...this.state.notes];
+  listNotes(chat: string): ClassNoteItem[] {
+    // Catatan lama tidak memiliki grup asal. Akses melalui DM pembuatnya.
+    return this.state.notes.filter(note => sameChat(note.sourceChat ?? note.createdBy, chat));
   }
 
-  deleteNote(id: string): boolean {
-    const idx = this.state.notes.findIndex((n) => n.id.toUpperCase() === id.trim().toUpperCase());
+  deleteNote(id: string, chat: string, actor: string, moderator = false): boolean {
+    const idx = this.state.notes.findIndex(n => sameChat(n.sourceChat ?? n.createdBy, chat) &&
+      (moderator || sameChat(n.createdBy, actor)) && n.id.toUpperCase() === id.trim().toUpperCase());
     if (idx === -1) return false;
     this.state.notes.splice(idx, 1);
     this.saveState();
@@ -817,7 +855,7 @@ export class FunAndUtilityService {
 
     // Panjang
     const lengthToMeter: Record<string, number> = { km: 1000, m: 1, cm: 0.01, mm: 0.001 };
-    if (lengthToMeter[from] && lengthToMeter[to]) {
+    if (Object.hasOwn(lengthToMeter, from) && Object.hasOwn(lengthToMeter, to)) {
       const meters = amount * lengthToMeter[from]!;
       const out = meters / lengthToMeter[to]!;
       return `📏 *Konversi Panjang:* ${amount} ${from} = *${out.toFixed(4).replace(/\.?0+$/, '')} ${to}*`;
@@ -825,7 +863,7 @@ export class FunAndUtilityService {
 
     // Berat
     const weightToGram: Record<string, number> = { kg: 1000, g: 1, mg: 0.001, lb: 453.59237 };
-    if (weightToGram[from] && weightToGram[to]) {
+    if (Object.hasOwn(weightToGram, from) && Object.hasOwn(weightToGram, to)) {
       const grams = amount * weightToGram[from]!;
       const out = grams / weightToGram[to]!;
       return `⚖️ *Konversi Berat:* ${amount} ${from} = *${out.toFixed(3).replace(/\.?0+$/, '')} ${to}*`;
@@ -833,7 +871,7 @@ export class FunAndUtilityService {
 
     // Mata uang (kurs referensi edukatif ke IDR)
     const fxToIdr: Record<string, number> = { idr: 1, usd: 15850, eur: 17100, sgd: 11800, myr: 3580 };
-    if (fxToIdr[from] && fxToIdr[to]) {
+    if (Object.hasOwn(fxToIdr, from) && Object.hasOwn(fxToIdr, to)) {
       const idr = amount * fxToIdr[from]!;
       const out = idr / fxToIdr[to]!;
       return `💱 *Estimasi Kurs Referensi:* ${amount} ${from.toUpperCase()} ≈ *${out.toLocaleString('id-ID', { maximumFractionDigits: 2 })} ${to.toUpperCase()}* _(kurs indikatif)_`;
@@ -881,44 +919,7 @@ export class FunAndUtilityService {
   }
 
   // ==================== 6. INTEGRASI API PUBLIK (DENGAN FALLBACK AMAN) ====================
-  async getWeather(cityRaw: string): Promise<string> {
-    const city = (cityRaw || 'Jakarta').trim();
-    try {
-      const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=id&format=json`;
-      const gCheck = validateSafeExternalUrl(geoUrl);
-      if (gCheck.ok) {
-        const gRes = await fetch(geoUrl, { signal: AbortSignal.timeout(4500) });
-        if (gRes.ok) {
-          const gData = (await gRes.json()) as {
-            results?: Array<{ name: string; country?: string; latitude: number; longitude: number }>;
-          };
-          const loc = gData.results?.[0];
-          if (loc) {
-            const wUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=Asia%2FJakarta`;
-            const wRes = await fetch(wUrl, { signal: AbortSignal.timeout(4500) });
-            if (wRes.ok) {
-              const wData = (await wRes.json()) as {
-                current?: { temperature_2m?: number; relative_humidity_2m?: number; wind_speed_10m?: number };
-              };
-              const c = wData.current;
-              if (c) {
-                return (
-                  `🌤️ *Cuaca Saat Ini — ${loc.name}${loc.country ? `, ${loc.country}` : ''}*\n` +
-                  `• Suhu: *${c.temperature_2m ?? '-'} °C*\n` +
-                  `• Kelembapan: *${c.relative_humidity_2m ?? '-'}%*\n` +
-                  `• Kecepatan Angin: *${c.wind_speed_10m ?? '-'} km/jam*\n` +
-                  `_Sumber: Open-Meteo (Asia/Jakarta)_`
-                );
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // Gunakan fallback lokal jika jaringan offline/timeout
-    }
-    return 'Data cuaca untuk ' + city + ' belum tersedia. Periksa nama kota atau coba kembali.';
-  }
+  getWeather(city: string, onUnavailable?: () => void) { return weatherReport(city,fetch,onUnavailable); }
 
   async searchWikipedia(queryRaw: string): Promise<string> {
     const query = queryRaw.trim();
@@ -973,7 +974,7 @@ export class FunAndUtilityService {
 
     // 1. Coba EuropePMC (PubMed Central Open Access + direct PDF)
     try {
-      const epmcUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=4`;
+      const epmcUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=4`;
       if (validateSafeExternalUrl(epmcUrl).ok) {
         const res = await fetch(epmcUrl, {
           headers: { 'User-Agent': 'HdyBot-NursingClassA/1.0' },
@@ -989,6 +990,8 @@ export class FunAndUtilityService {
                 journalTitle?: string;
                 doi?: string;
                 pmcid?: string;
+                isOpenAccess?: string;
+                license?: string;
                 pmid?: string;
               }>;
             };
@@ -1010,6 +1013,7 @@ export class FunAndUtilityService {
               journalName: r.journalTitle || 'PubMed / EuropePMC Journal',
               doiOrUrl: doiLink,
               pdfUrl,
+              redistributable: r.isOpenAccess === 'Y' && /^(?:cc by|cc0)$/i.test(r.license?.trim() ?? ''),
               snippet: `Jurnal terindeks ilmiah terkait "${query}" (${r.journalTitle ?? 'Biomedical & Nursing Repository'}).`,
             });
             if (items.length >= 4) break;

@@ -11,7 +11,7 @@ describe('regresi dari audit katalog perintah', () => {
     fun.deleteAssignment(b.id);
     expect(new Set([a.id,c.id,createTask().id]).size).toBe(3);
     const notes = Array.from({length:3},()=>fun.addNote('Catatan','Belajar','uji'));
-    fun.deleteNote(notes[1]!.id);
+    fun.deleteNote(notes[1]!.id, 'uji', 'uji');
     const next = fun.addNote('Catatan baru','Belajar','uji');
     expect(notes.some(n=>n.id===next.id)).toBe(false);
   });

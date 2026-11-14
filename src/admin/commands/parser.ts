@@ -104,6 +104,8 @@ export type CanonicalCommand =
   | 'countdown'
   | 'doc.permission'
   | 'doc.minutes'
+  | 'doc.study'
+  | 'repo.inspect'
   | 'doc.pdf'
   | 'media.sticker'
   | 'media.ttp'
@@ -154,7 +156,13 @@ export type CanonicalCommand =
   | 'pair'
   | 'unknown';
 
+export const intentKinds = ['CHAT_ONLY','KNOWLEDGE_QUESTION','INFORMATION_LOOKUP','DATA_QUERY','ACTION_REQUEST','FILE_WORKFLOW','SYSTEM_OPERATION','RESEARCH_REQUEST','WEATHER_REQUEST','IMPORTANT_MESSAGE','SECURITY_REVIEW','AMBIGUOUS_REQUEST'] as const;
+export const importanceLevels = ['URGENT','IMPORTANT','NORMAL','LOW','REVIEW'] as const;
 export interface ParsedCommand {
+  followups?: ParsedCommand[];
+  intent?: typeof intentKinds[number];
+  importance?: typeof importanceLevels[number];
+  clarification?: string;
   kind: 'dot' | 'natural' | 'none';
   command: CanonicalCommand;
   args: string[];
@@ -167,7 +175,7 @@ export interface ParsedCommand {
 // seluruh fitur informasi, dashboard, jadwal, tugas, AI, media, & hiburan diizinkan untuk dilihat di semua grup yang allow!
 export const monitoringCommands = new Set<CanonicalCommand>(['health', 'status', 'system', 'dashboard', 'runtime', 'ping', 'logs', 'errors', 'backup', 'ai.status', 'ai.models', 'db.status', 'whatsapp.status', 'scheduler.status', 'storage', 'drive.status']);
 const ADMIN_ONLY = new Set<CanonicalCommand>([
-  'scheduler.status', 'whatsapp.status', 'db.status', 'storage', 'relay', 'drive.status', 'drive.sync', 'group.setpjmk', 'group.setkelasa', 'filter.status', 'digest', 'priority', 'ai.test', 'logs', 'errors', 'system', 'dashboard', 'health', 'status', 'ping', 'runtime', 'ai.status', 'ai.models', 'groups', 'groups.sources',
+  'repo.inspect', 'scheduler.status', 'whatsapp.status', 'db.status', 'storage', 'relay', 'drive.status', 'drive.sync', 'group.setpjmk', 'group.setkelasa', 'filter.status', 'digest', 'priority', 'ai.test', 'logs', 'errors', 'system', 'dashboard', 'health', 'status', 'ping', 'runtime', 'ai.status', 'ai.models', 'groups', 'groups.sources',
   'ai.model', 'ai.auto',
   'groups.add', 'groups.pause', 'groups.resume',
   'filter.review',
@@ -205,6 +213,7 @@ export const commandRegistry: ReadonlyArray<{ names: string[]; command: Canonica
   { names: ['logout','lock'], command: 'auth.logout', args: false },
   { names: ['owner'], command: 'owner', args: false },
   { names: ['groupid','id'], command: 'groupid', args: false },
+  { names: ['repo'], command:'repo.inspect', args:true },
   { names: ['dashboard'], command: 'dashboard', args: false },
   { names: ['system'], command: 'system', args: false },
   { names: ['status'], command: 'status', args: false },
@@ -381,6 +390,7 @@ export function parseCommand(textInput: string): ParsedCommand {
 
       case 'doc':
       case 'pdf':
+        if (sub === 'makalah' || sub === 'ppt') return build('dot','doc.study',rest,rawRest);
         if (sub === 'create' || sub === 'permission') return build('dot', 'doc.permission', rest2, rawRest2);
         if (sub === 'minutes') return build('dot', 'doc.minutes', rest2, rawRest2);
         return build('dot', 'doc.pdf', sub === 'pdf' ? rest2 : rest, sub === 'pdf' ? rawRest2 : rawRest);

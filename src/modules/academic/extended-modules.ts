@@ -118,7 +118,7 @@ export class DocumentGeneratorService {
   generateMinutesDraft(input: {
     title: string;
     dateIso: string;
-    attendeesCount: number;
+    attendeesCount?: number;
     decisions: string[];
   }): string {
     return (
@@ -126,7 +126,7 @@ export class DocumentGeneratorService {
       `NOTULENSI KEGIATAN KELAS — NURSING CLASS A (5A)\n` +
       `Kegiatan : ${input.title}\n` +
       `Tanggal  : ${input.dateIso}\n` +
-      `Hadir    : ${input.attendeesCount} orang\n\n` +
+      `Hadir    : ${input.attendeesCount === undefined ? 'Belum dicatat' : input.attendeesCount + ' orang'}\n\n` +
       `Keputusan / Ringkasan:\n` +
       input.decisions.map((d, i) => `${i + 1}. ${d}`).join('\n') +
       `\n\n${DocumentGeneratorService.DRAFT_WATERMARK}`

@@ -54,12 +54,12 @@ it('mengutamakan Luna lagi setelah masa cadangan selesai', async () => {
 it('mengirim permintaan gambar ke model Luna yang tepat dan mengecualikan video', async () => {
   const image = {type:'image_url' as const,image_url:{url:'data:image/png;base64,fixture'}};
   const fetcher:typeof fetch = async (url,opts) => {
-    expect(String(url)).toBe('https://api.openai.com/v1/chat/completions');
+    expect(String(url)).toBe('https://api.openai.com/v1/responses');
     expect(opts?.signal).toBeInstanceOf(AbortSignal);
     const body = JSON.parse(String(opts?.body));
-    expect(body).toMatchObject({model:'gpt-6-luna',reasoning_effort:'none',store:false});
-    expect(body.messages[0].content[0]).toEqual(image);
-    return Response.json({choices:[{message:{content:'Gambar uji'}}]});
+    expect(body).toMatchObject({model:'gpt-6-luna',reasoning:{effort:'none'},store:false});
+    expect(body.input[0].content[0]).toEqual({type:"input_image",image_url:image.image_url.url});
+    return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'Gambar uji'}]}]});
   };
   const router = new ModelRouter({openai:new LunaTransport('test-key',fetcher)});
   expect((await router.invoke({...req, modality:'image',messages:[{role:'user',content:[image]}]})).text).toBe('Gambar uji');

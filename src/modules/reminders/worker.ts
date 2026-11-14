@@ -50,8 +50,12 @@ export class ReminderWorker {
         data: sub === 'snooze' ? { fireAt: new Date(+job.fireAt + minutes * 60_000) } : { status: 'cancelled' } });
       return result.count ? '✅ Pengingat diperbarui.' : 'Pengingat sudah diproses.';
     }
-    const jobs = await this.db.reminder.findMany({ where: { targetJid: chat, status: 'scheduled' }, orderBy: { fireAt: 'asc' }, take: 30 });
+    const jobs = await this.listForChat(chat);
     return '⏰ *Pengingat chat ini*\n' + (jobs.map(j => j.id + ' · ' + j.fireAt.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB\n' + j.text).join('\n\n') || 'Belum ada pengingat.');
+  }
+  listForChat(chat: string) {
+    return this.db.reminder.findMany({ where: { targetJid: chat, status: 'scheduled' }, orderBy: { fireAt: 'asc' }, take: 30,
+      select: { id: true, fireAt: true, text: true } });
   }
   async pause(paused: boolean) {
     await this.db.botSetting.upsert({ where: { key: 'reminders.paused' }, update: { value: paused }, create: { key: 'reminders.paused', value: paused } });

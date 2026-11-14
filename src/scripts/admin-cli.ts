@@ -1,4 +1,4 @@
-import { LunaTransport } from '../ai/openai/luna.js';
+import { configuredOpenAI } from '../ai/openai/luna.js';
 /**
  * CLI Simulasi Chat Pribadi Admin WhatsApp Hedy (`+6282233038659`).
  * Memungkinkan Hedy menguji perintah `.dashboard`, `.health`, `.status`, `.jadwal`,
@@ -7,6 +7,7 @@ import { LunaTransport } from '../ai/openai/luna.js';
  *   - Mode interaktif: `npm run cli` atau `sudo ./install.sh --cli`
  */
 import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
 import { createInterface } from 'node:readline';
 import { AdminAuthenticator } from '../admin/authentication/authenticator.js';
 import { ConfirmationManager } from '../admin/authorization/confirmation.js';
@@ -22,12 +23,14 @@ import { OutboundGate } from '../whatsapp/outbound/gate.js';
 
 async function main() {
   const config = loadConfig();
+  const budgetDatabase = config.DATABASE_URL && (config.OPENAI_DAILY_BUDGET || config.OPENAI_MONTHLY_BUDGET) ? new PrismaClient() : undefined;
   const wa = new MockWhatsAppProvider();
   await wa.connect();
 
   const outbound = new OutboundGate({
     provider: wa,
     outboundEnabled: config.OUTBOUND_ENABLED,
+    maxMediaBytes: config.MEDIA_MAX_MB * 1024 * 1024,
     dryRun: config.DRY_RUN,
     allowedGroupJids: config.WHATSAPP_PRIMARY_GROUP_JID ? [config.WHATSAPP_PRIMARY_GROUP_JID] : [],
   });
@@ -35,6 +38,8 @@ async function main() {
   const auth = new AdminAuthenticator({
     ownerE164: config.OWNER_WHATSAPP,
     adminAllowlistE164: config.ADMIN_WHATSAPP_ALLOWLIST,
+    adminPassword: config.ADMIN_PASSWORD,
+    requirePassword: config.ADMIN_REQUIRE_PASSWORD,
   });
 
   const confirmations = new ConfirmationManager();
@@ -45,6 +50,7 @@ async function main() {
   const router = new ModelRouter({
     transport,
     modelIds: {
+      luna: config.OPENAI_MODEL,
       ultra: config.NVIDIA_MODEL_ULTRA,
       'super-vl': config.NVIDIA_MODEL_SUPER_VL,
       lightning: config.NVIDIA_MODEL_LIGHTNING,
@@ -52,7 +58,10 @@ async function main() {
     initialMode: config.AI_ROUTER_MODE,
     fallbackEnabled: config.AI_FALLBACK_ENABLED,
     maxRetries: config.AI_MAX_RETRIES,
-    openai: config.OPENAI_API_KEY ? new LunaTransport(config.OPENAI_API_KEY) : undefined,
+    openai: configuredOpenAI(config, budgetDatabase),
+    openaiRetries: config.OPENAI_MAX_RETRIES,
+    secrets: [config.ADMIN_PASSWORD],
+    openaiAutoRouting: config.OPENAI_AUTO_ROUTING,
     switchMs: config.AI_PROVIDER_SWITCH_MS,
     timeoutMs: config.NVIDIA_TIMEOUT_MS,
   });
@@ -86,7 +95,8 @@ async function main() {
 
   const singleArg = process.argv.slice(2).join(' ').trim();
   if (singleArg) {
-    await sendAsHedy(singleArg);
+    try { await sendAsHedy(singleArg); }
+    finally { await budgetDatabase?.$disconnect(); }
     return;
   }
 
@@ -95,6 +105,7 @@ async function main() {
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'Hedy> ' });
   rl.prompt();
+  rl.once('close', () => { void budgetDatabase?.$disconnect(); });
   rl.on('line', (line) => {
     const t = line.trim();
     if (t === 'exit' || t === 'quit') {

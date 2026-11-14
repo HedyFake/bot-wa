@@ -1,5 +1,26 @@
 # 🤖🩺 HdyBot — Nursing Class A Assistant (Semester 5A)
 
+## Meminta bantuan dengan bahasa sehari-hari
+
+Untuk memperbarui VPS dari paket ZIP, ekstrak paket ke direktori sumber baru. Dari direktori yang berisi `package.json` dan `install.sh`, jalankan `sudo bash install.sh`. Installer menyalin kode ke `/opt/hdybot`, memproses migrasi Prisma, membangun aplikasi, dan memulai ulang service. Konfigurasi aktif ada di `/opt/hdybot/.env`. Pastikan `OPENAI_API_KEY` terisi untuk provider utama serta `NVIDIA_API_KEY` untuk cadangan. Setelah instalasi, periksa `sudo bash install.sh --status` dan kirim `.ping` serta `.menu` melalui chat pribadi. Gunakan `sudo bash install.sh --qr` jika perangkat perlu ditautkan.
+
+**Jika fitur mengalami gangguan.** HdyBot dapat menjawab permainan teks melalui OpenAI atau NVIDIA, membaca ulang katalog untuk jadwal dan mata kuliah, serta menampilkan isi draf jika pembuatan lampirannya gagal. Untuk hasil yang belum dapat dipastikan, bot memberi petunjuk yang tersedia bagi pengirim dan ID pekerjaan. Gunakan chat pribadi admin untuk memeriksa `.audit`. Pengiriman pesan dan perubahan data memerlukan pemeriksaan status sebelum diulang.
+
+**Lampiran WhatsApp.** Kirim file dengan pertanyaan seperti “ringkas file ini” atau “jelaskan slide 2”. Di grup, tag HdyBot. Untuk melihat format dan batas pemrosesan, baca [matriks format](FILE_SUPPORT_MATRIX.md) dan [alur pemrosesan](MEDIA_ARCHITECTURE.md).
+
+**Suara.** Jika mesin suara lokal gagal untuk `.tts Halo kelas`, bot mencoba endpoint suara OpenAI dengan batas delapan detik. Jalur ini memerlukan OPENAI_API_KEY yang memiliki akses audio. Bot memberi label suara sintetis dan memeriksa hasil WAV sebelum mengirim. [Dokumentasi suara OpenAI](https://developers.openai.com/api/docs/guides/text-to-speech)
+
+Kirim pesan langsung ke bot. Di grup, tag bot atau awali pesan dengan “HdyBot”. Untuk merujuk hasil sebelumnya, gunakan nomor WhatsApp dan chat yang sama. Daftar jurnal dan draf yang diterima provider disimpan dalam memori paling lama 30 menit dan hilang saat proses dimulai ulang.
+
+| Pesan WhatsApp | Hasil yang dapat diperiksa |
+| --- | --- |
+| Tolong cek cuaca sekarang dan tujuh hari ke depan di Jombang | Kondisi saat ini dan prakiraan Open-Meteo. Pesan mencantumkan waktu data dalam WIB. Jika kota kosong, balas pertanyaan bot dengan nama kota. |
+| Cek jadwal besok serta tugas hari ini | Saat model mengenali kedua permintaan, bot membaca data masing-masing dan membalas dalam satu pesan. Maksimal tiga pemeriksaan informasi per pesan. |
+| Carikan jurnal tentang diabetes → Kirim nomor dua | Bot menggunakan daftar terakhir peminta. PDF dilampirkan jika sumber dan lisensi yang didukung dapat diverifikasi. Jika tidak, bot mengirim tautan publikasi. |
+| Buatkan makalah tentang komunikasi terapeutik → Buatkan PPT dari makalah tersebut | Permintaan pertama membuat draf DOCX. Permintaan kedua memakai kembali isinya untuk membuat PPTX. Perintah titiknya adalah `.doc makalah <topik>` dan `.doc ppt`. |
+| Ambil semua PDF materi Gerontik | Bot mencari materi di akun LMS yang terhubung dengan nomor pengirim. Lampiran dikirim ke DM dalam halaman berisi maksimal empat calon dokumen. Gunakan petunjuk pada balasan untuk halaman selanjutnya. |
+| Periksa repo https://github.com/organisasi/proyek | Owner yang sudah login dapat memeriksa cabang utama, bahasa, status arsip dan lisensi repositori publik. Gunakan URL proyek yang sebenarnya. |
+
 Versi revisi 10 November 2026. Relay grup meminta persetujuan Hedy lewat DM. Menu .keperawatan memakai Perawat.org, dan .music mencari SoundCloud. Untuk fitur aktif, batas pengujian, konfigurasi Drive, dan pemulihan, lihat [laporan implementasi](IMPLEMENTATION_STATUS.md) dan [audit proyek](PROJECT_AUDIT.md). Installer memakai systemd dan memakai password admin default `hedyfake`. QR hanya ditampilkan lewat akses lokal privat.
 
 > **Asisten AI WhatsApp Akademik, Sekretaris Kelas Digital, & Pengelola Informasi Grup Cerdas (24/7 Daemon)**  
@@ -55,7 +76,36 @@ Menu menampilkan perintah yang tersedia di chat tersebut. Gunakan `.help game ri
 
 Sapaan seperti `HdyBot halo`, `HdyBot menu`, dan `HdyBot tugas hari ini` mendapat jawaban lokal. Permintaan AI atau pencarian seperti `.ask` dan `.music` yang masih diproses setelah 1,5 detik menampilkan satu pemberitahuan sebelum hasil. Untuk memeriksa keterlambatan di VPS, jalankan `sudo journalctl -u hdybot -g 'Balasan WhatsApp lambat' -n 10 --no-pager`. Kolom `inboundAgeMs` mengukur usia pesan sejak waktu yang tercatat di WhatsApp hingga dispatcher menerimanya. Kolom `handledMs` mengukur waktu pemrosesan sampai pengiriman balasan selesai di sisi bot. Log ini hanya memuat jenis chat dan waktu, maksimal satu per menit untuk balasan lambat.
 
-Untuk memakai dua penyedia, isi `NVIDIA_API_KEY` dan `OPENAI_API_KEY` dalam file `.env` pada mesin bot. Model OpenAI adalah `gpt-6-luna` (teks dan gambar). Dalam mode auto dengan fallback aktif, bot memulai permintaan teks dan gambar dengan GPT-6 Luna. Jika permintaan lambat atau gagal, bot mencoba model NVIDIA yang sesuai dalam sisa waktu permintaan yang sama. Setelah Luna timeout, bot mengutamakan NVIDIA selama 60 detik. Jika NVIDIA juga lambat, Luna dapat mengambil alih lagi. Ambang percobaan awal adalah `AI_PROVIDER_SWITCH_MS=3500` milidetik dan dapat lebih singkat jika anggaran waktu fitur terbatas. Satu kunci saja juga didukung. Pesan dan lampiran yang memerlukan AI dapat diproses oleh kedua penyedia, dan percobaan API dapat dikenai biaya masing-masing.
+Untuk memakai dua penyedia, isi `NVIDIA_API_KEY` dan `OPENAI_API_KEY` dalam file `.env` pada mesin bot. Model default OpenAI adalah `gpt-6-luna` (teks dan gambar) dan bisa diatur melalui `OPENAI_MODEL`. Dalam mode auto dengan fallback aktif, bot memulai permintaan teks dan gambar dengan GPT-6 Luna. Jika permintaan lambat atau gagal, bot mencoba model NVIDIA yang sesuai dalam sisa waktu permintaan yang sama. Setelah Luna timeout, bot mengutamakan NVIDIA selama 60 detik. Jika NVIDIA juga lambat, Luna dapat mengambil alih lagi. Ambang percobaan awal adalah `AI_PROVIDER_SWITCH_MS=3500` milidetik dan dapat lebih singkat jika anggaran waktu fitur terbatas. Satu kunci saja juga didukung. Pesan dan lampiran yang memerlukan AI dapat diproses oleh kedua penyedia, dan percobaan API dapat dikenai biaya masing-masing.
+
+### Memakai AI lewat WhatsApp
+
+| Contoh pesan Fase 2 | Hasil yang diminta |
+| --- | --- |
+| `.ask Apa tenggat tugas minggu ini? Kelompokkan per matkul.` | Daftar tugas yang boleh dilihat di chat asal dan tanggal dalam WIB. Tugas grup yang menunggu persetujuan mengikuti aturan visibilitas `.tugas`. |
+| `Bot lihat catatan saya` atau `Bot tampilkan pengingat chat ini` | Menampilkan daftar lewat handler lokal. Saat AI mencari catatan, hasil fungsi hanya memuat ID dan judul. |
+| `.ask Apa jadwal ujian di kalender dan tinggal berapa hari?` | Entri kalender kelas dengan status verifikasi dan hitung mundur ke tanggal yang tersedia. |
+| `.ask Berapa 2 pangkat 3 ditambah 4, dan berapa meter dalam 2 km?` | Dua perhitungan memakai kalkulator dan konverter lokal. |
+| `.ask Berapa skor game saya? Ada petunjuk ronde ini?` | Skor pengirim dan petunjuk permainan di chat tersebut. |
+| `.ask Bagaimana cara membuat stiker?` | AI dapat mencari sintaks perintah pada menu yang tersedia untuk pengirim. |
+| `Buatkan PDF berjudul Laporan praktik dengan isi Hasil diskusi kelas` | Lampiran PDF sederhana dari judul dan isi yang diberikan. Bentuk `.ask Buatkan PDF Judul\|Isi` juga didukung. |
+| `HdyBot buatkan QR untuk Kelas A` | Lampiran QR dalam PNG berisi teks pengguna. |
+| `Buatkan kartu jadwal Senin` | Lampiran PNG berisi jadwal hari Senin. Di grup, panggil bot atau awali permintaan dengan `.ask`. |
+
+Catatan baru dapat dibaca di chat pembuatannya. Pembuat atau admin yang berwenang di chat itu dapat menghapusnya. Catatan lama yang hanya menyimpan identitas pembuat dapat diakses lewat DM pembuat. Pengingat lokal juga mengikuti chat tujuan.
+
+| Ketik atau ucapkan | Yang dilakukan bot | Akses |
+| --- | --- | --- |
+| `.ask Bandingkan jadwal hari Senin dan Selasa` | AI dapat membaca kedua hari dari jadwal kelas, termasuk perubahan sesi, lalu menyusun jawaban. | DM atau grup |
+| `.ask Mata kuliah apa saja yang berbobot 3 SKS?` | AI mengambil katalog kelas dan membaca jumlah SKS. | DM atau grup |
+| `.ask Hitung IMT untuk latihan, berat 60 kg dan tinggi 165 cm` | AI dapat memanggil kalkulator lokal. Hasil contoh adalah 22,04 kg/m². | DM atau grup |
+| `.ask Apakah WhatsApp bot tersambung dan berapa lama bot aktif?` | Tool memeriksa koneksi dan lama proses aktif. | DM admin yang berwenang |
+
+Balasan lanjutan dapat memakai enam giliran terakhir selama 30 menit. Konteks pertanyaan `.ask` di grup dipisahkan menurut pengirim. Balasan yang mengutip pesan membawa potongan kutipan yang relevan.
+
+Respons OpenAI memakai `/responses`. Setiap panggilan tool divalidasi di server. Jika layanan utama gagal setelah pembacaan, router menyediakan hasil pembacaan itu bagi NVIDIA saat fallback. Untuk perintah langsung seperti `.jadwal senin`, bot tetap memakai handler lokal. [Registri tool dan izin](AI_TOOL_REGISTRY.md)
+
+`OPENAI_TOOL_CALLING=false` menonaktifkan tool Responses. `OPENAI_AUTO_ROUTING=false` mengeluarkan OpenAI dari pemilihan otomatis, sementara pemilihan manual `.ai model luna` tetap tersedia. `OPENAI_DAILY_BUDGET` dan `OPENAI_MONTHLY_BUDGET` dihitung dalam jumlah percobaan request per periode WIB. Nilai positif mengaktifkan pencatatan di PostgreSQL. Nilai 0 menonaktifkan batas periode tersebut. `OPENAI_MAX_TOOL_CALLS` membatasi jumlah pemanggilan fungsi dalam satu percobaan OpenAI. [Konfigurasi contoh](.env.example)
 
 Isi kunci yang tersedia pada mesin bot dan gunakan `AI_ROUTER_MODE=auto`. Dalam DM admin, `.ai models` menampilkan daftar, `.ai model kimi` memilih model sementara, dan `.ai auto on` mengembalikan pemilihan otomatis. Model dipanggil satu per permintaan dan fallback mengikuti jenis masukan.
 
@@ -152,7 +202,7 @@ WHATSAPP_AUTH_DIR=./data/wa-auth
 OUTBOUND_ENABLED=true
 DRY_RUN=false
 
-NVIDIA_API_KEY=nvapi-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NVIDIA_API_KEY=
 AI_ROUTER_MODE=auto
 AI_FALLBACK_ENABLED=true
 ```
@@ -1364,7 +1414,7 @@ Pemberitahuan belum tersedia atau sudah diproses. Lihat .tugas antrean.
 
 ~~~~text
 ⏰ *Daftar Pengingat Kustom (1)*
-• *REM-1* — 2026-11-10 08:00 WIB: Diskusi
+• *REM-1* — 10/11/2026, 08.00.00 WIB: Diskusi
 ~~~~
 
 **.reminder settings**
@@ -2401,6 +2451,8 @@ Kirim gambar atau stiker dengan caption perintah, atau balas pesan lampiran deng
 | `.qr`, `.qrcode` | Membuat gambar QR dari teks atau tautan. | `.qr Halo kelas` | Tempel konten setelah .qr. QR masuk akun WhatsApp tersedia melalui installer VPS. **Pengguna** |
 | `.ocr` | Membaca teks pada gambar. | `.ocr` | Kirim atau kutip gambar yang tulisannya terbaca. Perlu gambar dan Tesseract pada server. **Pengguna** |
 | `.tts`, `.say` | Mengubah teks menjadi audio. | `.tts Halo kelas` | Tulis kalimat yang ingin dibacakan. Memerlukan espeak-ng dengan suara Indonesia. **Pengguna** |
+| `.doc makalah`, `.pdf makalah` | Membuat draf makalah Word. | `.doc makalah` | Tulis topik setelah .doc makalah. **Pengguna** |
+| `.doc ppt`, `.pdf ppt` | Membuat presentasi dari draf terakhir milik pengirim. | `.doc ppt` | Kirim .doc ppt di chat yang sama atau sertakan topik baru. **Pengguna** |
 
 <details>
 <summary>Contoh balasan · 🎨 Media</summary>
@@ -2455,7 +2507,7 @@ Demikian surat permohonan ini dibuat untuk ditinjau dan ditandatangani secara sa
 NOTULENSI KEGIATAN KELAS — NURSING CLASS A (5A)
 Kegiatan : Diskusi
 Tanggal  : 2026-11-09
-Hadir    : 30 orang
+Hadir    : Belum dicatat
 
 Keputusan / Ringkasan:
 1. Cek jadwal
@@ -2471,7 +2523,7 @@ Keputusan / Ringkasan:
 NOTULENSI KEGIATAN KELAS — NURSING CLASS A (5A)
 Kegiatan : Diskusi
 Tanggal  : 2026-11-09
-Hadir    : 30 orang
+Hadir    : Belum dicatat
 
 Keputusan / Ringkasan:
 1. Cek jadwal
@@ -2602,7 +2654,23 @@ Kartu ucapan kelas
 **.tts Halo kelas**
 
 ~~~~text
-Sintesis suara belum tersedia. Periksa instalasi espeak-ng di server.
+Sintesis suara belum tersedia. Periksa espeak-ng atau akses API suara di server.
+
+Petunjuk: .help tts
+
+ID pekerjaan: f37f112d07
+~~~~
+
+**.doc makalah**
+
+~~~~text
+Makalah tentang topik apa yang ingin kamu buat?
+~~~~
+
+**.doc ppt**
+
+~~~~text
+Belum ada draf makalah di percakapan ini. Presentasi tentang topik apa?
 ~~~~
 
 </details>
@@ -2761,11 +2829,16 @@ https://soundcloud.com/search/sounds?q=fals
 **.cuaca Jakarta**
 
 ~~~~text
-🌤️ *Cuaca Saat Ini — Jakarta*
-• Suhu: *28 °C*
-• Kelembapan: *70%*
-• Kecepatan Angin: *- km/jam*
-_Sumber: Open-Meteo (Asia/Jakarta)_
+🌤️ *Cuaca Jakarta*
+Waktu data: 2026-11-09 08:00 WIB
+*Sekarang* · umumnya cerah
+Suhu 28 °C · Kelembapan 70%
+Angin 8 km/jam · Peluang hujan jam ini 30%
+
+*Prakiraan hari ini*
+Sen, 9 Nov · umumnya cerah · 24°–31° · hujan 60%
+
+Sumber: Open-Meteo · https://open-meteo.com/
 ~~~~
 
 **.wiki belajar**
@@ -3085,6 +3158,7 @@ Gunakan DM dari nomor admin terverifikasi. Baca tujuan dan isi pada pratinjau se
 | `.drive sync` | Meminta sinkronisasi metadata Drive. | `.drive sync` | Pastikan folder dan akun layanan sudah dikonfigurasi. **DM admin terverifikasi** |
 | `.login`, `.password`, `.pass`, `.auth` | Memverifikasi sesi admin. | `.login` | Dari DM nomor terdaftar, ketik .login lalu balas password, atau kirim .login <password>. Password disembunyikan. **Pengguna** |
 | `.logout`, `.lock` | Mengunci sesi admin. | `.logout` | Kirim di DM admin, termasuk saat membatalkan permintaan password. **Pengguna** |
+| `.repo` | Membaca metadata dan lisensi repositori publik. | `.repo` | Owner yang sudah login mengirim URL GitHub lengkap melalui DM. **DM admin terverifikasi** |
 | `.status` | Memeriksa kesiapan layanan bot. | `.status` | Buka di DM admin. **DM admin terverifikasi** |
 | `.system` | Melihat penggunaan sumber daya server. | `.system` | Buka di DM admin. **DM admin terverifikasi** |
 | `.dashboard` | Melihat ringkasan operasional kelas dan bot. | `.dashboard` | Buka di DM admin. **DM admin terverifikasi** |
@@ -3270,6 +3344,12 @@ Silakan balas pesan ini dengan password admin Anda:
 🔒 Sesi admin telah dikunci. Ketika Anda chat kembali, bot akan meminta password admin.
 ~~~~
 
+**.repo**
+
+~~~~text
+Kirim URL repositori lengkap, misalnya https://github.com/organisasi/proyek.
+~~~~
+
 **.status**
 
 ~~~~text
@@ -3362,7 +3442,8 @@ Belum ada kejadian yang sesuai sejak proses dimulai.
 **.audit**
 
 ~~~~text
-📋 Belum ada entri audit log.
+📋 *Audit Log Terbaru (1)*
+• 2026-11-09T00:30:00.000Z | workflow.audit | started (2414013f65)
 ~~~~
 
 **.backup status**
@@ -3831,7 +3912,8 @@ Untuk mengirim ke grup utama, jalankan `.send REV-1` (memerlukan konfirmasi nonc
 **.admin audit**
 
 ~~~~text
-📋 Belum ada entri audit log.
+📋 *Audit Log Terbaru (1)*
+• 2026-11-09T00:30:00.000Z | workflow.audit | started (2ecbd83811)
 ~~~~
 
 **.admin backup**
@@ -3890,6 +3972,7 @@ Ganti `hedy` dengan alias yang didaftarkan. Mulai dari DM atau grup. Kirim krede
 | `.lms hedy materi kirim <ID>` | Mengunduh dan mengirim lampiran ke DM sendiri | Alias .lms hedy materi download <ID>. Tambahkan nomor file jika ada beberapa lampiran. |
 | `.lms hedy tugas` | Mendaftar tugas akademik | Tambahkan matkul, pending, selesai, atau terbaru sebagai filter. |
 | `.lms hedy tugas cari makalah` | Mencari tugas | Ganti makalah dengan kata kunci. |
+| `.lms hedy materi pdf gerontik page 1` | Mengirim PDF materi ke DM jika akun masih memiliki akses | Pilih nama mata kuliah dan halaman. Maksimal empat berkas per halaman. |
 | `.lms hedy tugas detail <ID>` | Membuka rincian tugas | Gunakan ID dari daftar tugas. |
 | `.lms hedy deadline` | Melihat tenggat dari LMS | Hanya tugas dengan tenggat yang terbaca yang ditampilkan. |
 | `.lms hedy kuis aktif` | Mencari evaluasi di LMS | Gunakan kuis, kuis terbaru, kuis <matkul>, atau kuis detail <ID>. |
@@ -3971,8 +4054,8 @@ Ke kelas-uji@g.us
 
 Perubahan jadwal praktikum besok pukul 10.00 WIB.
 
-.relay kirim e99e20ca9ba07dde
-.relay tolak e99e20ca9ba07dde
+.relay kirim 17712427d9c84252
+.relay tolak 17712427d9c84252
 Atau kutip pesan ini dan balas ya atau tidak.
 ~~~~
 

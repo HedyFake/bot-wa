@@ -251,13 +251,16 @@ export class GroupIntelligenceService {
     string,
     { name: string; paused: boolean; reliability: 'official' | 'officer' | 'member'; autoRelayToClassA?: boolean }
   >();
-  private readonly processedMsgKeys = new Set<string>();
+  private readonly processedMsgKeys = new Map<string,number>();
+  private readonly retainedUntil = new WeakMap<AnalyzedGroupMessage,number>();
+  private readonly retentionMs:number;
   private readonly inbox: AnalyzedGroupMessage[] = [];
   private readonly reviewQueue = new Map<string, ReviewQueueItem>();
   private primaryGroupJid?: string;
   private seq = 0;
 
-  constructor(opts: { primaryGroupJid?: string } = {}) {
+  constructor(opts: { primaryGroupJid?: string; retentionDays?:number } = {}) {
+    this.retentionMs=(opts.retentionDays??7)*86_400_000;
     this.primaryGroupJid = opts.primaryGroupJid;
   }
 
@@ -321,20 +324,39 @@ export class GroupIntelligenceService {
   }
 
   /** Ingest pesan grup sumber; mengembalikan `null` jika grup tidak diizinkan atau duplikat. */
-  ingest(msg: InboundMessage): AnalyzedGroupMessage | null {
+  private prune() {
+    const now=Date.now();
+    while (this.inbox.length && (this.retainedUntil.get(this.inbox[0]!)! <= now || this.inbox.length >= 5000)) {
+      const first=this.inbox.shift()!;
+      this.processedMsgKeys.delete(first.source_group_id+'|'+first.source_message_id);
+    }
+    for (const [key,review] of this.reviewQueue) if ((this.retainedUntil.get(review.analysis)??0)<=now) this.reviewQueue.delete(key);
+  }
+  ingest(msg: InboundMessage, category?: ClassificationCategory): AnalyzedGroupMessage | null {
     if (msg.chatType !== 'group') return null;
 
     const src = this.activeSources.get(msg.chatJid);
     if (!src || src.paused) return null;
+    this.prune();
 
     const dedupeKey = `${msg.chatJid}|${msg.providerMessageId}`;
     if (this.processedMsgKeys.has(dedupeKey)) return null;
-    this.processedMsgKeys.add(dedupeKey);
+    const until=Date.now()+this.retentionMs;
+    this.processedMsgKeys.set(dedupeKey,until);
 
     const text = (msg.text ?? '').trim();
     const injection = detectPromptInjection(text);
 
     const analysis = this.classifyHeuristic(msg, src.reliability, injection);
+    if (category && !injection && !msg.isForwarded && analysis.quality!=='buruk') {
+      analysis.category=category;
+      const review=['URGENT','IMPORTANT','REVIEW'].includes(category);
+      analysis.significance=review?'inti_penting':category==='LOW'?'tidak_penting':'biasa';
+      analysis.requires_confirmation=review;
+      analysis.recommended_action=review?'review_by_admin':category==='LOW'?'ignore':'digest_only';
+      analysis.status=review?'pending_review':'ignored';
+    }
+    this.retainedUntil.set(analysis,until);
     this.inbox.push(analysis);
 
     if (
@@ -357,6 +379,7 @@ export class GroupIntelligenceService {
           analysis,
           fields,
         });
+      if(this.reviewQueue.size>=5000) this.reviewQueue.delete(this.reviewQueue.keys().next().value!);
       this.reviewQueue.set(id, {
         id,
         analysis,
@@ -579,15 +602,17 @@ export class GroupIntelligenceService {
   }
 
   listPendingReviews(): ReviewQueueItem[] {
+    this.prune();
     return [...this.reviewQueue.values()].filter((r) => r.status === 'pending_review');
   }
 
   getReviewItem(id: string): ReviewQueueItem | undefined {
+    this.prune();
     return this.reviewQueue.get(id.toUpperCase());
   }
 
   approve(id: string, actorJid: string): ReviewQueueItem | null {
-    const item = this.reviewQueue.get(id.toUpperCase());
+    const item = this.getReviewItem(id);
     if (!item || item.status !== 'pending_review') return null;
     item.status = 'approved';
     item.analysis.status = 'approved';
@@ -597,7 +622,7 @@ export class GroupIntelligenceService {
   }
 
   reject(id: string, actorJid: string, reason = 'Ditolak oleh admin'): ReviewQueueItem | null {
-    const item = this.reviewQueue.get(id.toUpperCase());
+    const item = this.getReviewItem(id);
     if (!item || item.status !== 'pending_review') return null;
     item.status = 'rejected';
     item.analysis.status = 'rejected';

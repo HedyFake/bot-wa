@@ -1,3 +1,4 @@
+import { readBaileys } from './baileys-media.js';
 import QRCode from 'qrcode';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -11,6 +12,7 @@ import type {
 
 export interface BaileysAdapterOptions {
   authDir: string;
+  maxMediaBytes?:number;
   allowExperimental: boolean;
   pairingPhoneE164?: string;
   onPairingCode?: (code: string) => void;
@@ -28,7 +30,7 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
   private msgHandlers: Array<(m: InboundMessage) => Promise<void> | void> = [];
   private stateHandlers: Array<(s: ConnectionState) => void> = [];
   private sock: {
-    sendMessage: (jid: string, content: { text: string }) => Promise<{ key?: { id?: string } } | undefined>;
+    sendMessage: (jid: string, content: Record<string,unknown>) => Promise<{ key?: { id?: string } } | undefined>;
     end?: (err?: Error) => void;
   } | null = null;
 
@@ -65,7 +67,7 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
         on: (event: string, cb: (arg: Record<string, unknown>) => void) => void;
       };
       requestPairingCode?: (phone: string) => Promise<string>;
-      sendMessage: (jid: string, content: { text: string }) => Promise<{ key?: { id?: string } } | undefined>;
+      sendMessage: (jid: string, content: Record<string,unknown>) => Promise<{ key?: { id?: string } } | undefined>;
       end?: (err?: Error) => void;
     };
 
@@ -105,30 +107,15 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
       }
     });
 
-    sock.ev.on('messages.upsert', (ev: Record<string, unknown>) => {
-      const messages = (ev.messages as Array<Record<string, unknown>> | undefined) ?? [];
-      for (const raw of messages) {
-        const key = (raw.key as Record<string, unknown> | undefined) ?? {};
-        if (key.fromMe) continue;
-        const remoteJid = String(key.remoteJid ?? '');
-        if (!remoteJid || remoteJid === 'status@broadcast') continue;
-        const isGroup = remoteJid.endsWith('@g.us');
-        const senderJid = isGroup ? String(key.participant ?? '') : remoteJid;
-        const msgObj = (raw.message as Record<string, unknown> | undefined) ?? {};
-        const extText = (msgObj.extendedTextMessage as Record<string, unknown> | undefined)?.text;
-        const text = String(msgObj.conversation ?? extText ?? '');
-        if (!text.trim()) continue;
-
-        const inbound: InboundMessage = {
-          providerMessageId: String(key.id ?? `${Date.now()}`),
-          chatJid: remoteJid,
-          chatType: isGroup ? 'group' : 'private',
-          senderJid,
-          pushName: typeof raw.pushName === 'string' ? raw.pushName : undefined,
-          text,
-          receivedAt: new Date(),
-        };
-        for (const h of this.msgHandlers) void h(inbound);
+    const download=baileys.downloadContentFromMessage as Parameters<typeof readBaileys>[1];
+    sock.ev.on('messages.upsert', async (ev: Record<string,unknown>)=>{
+      for(const raw of (ev.messages as Array<Record<string,unknown>>|undefined)??[]) {
+        try {
+          const msg=await readBaileys(raw,download,this.opts.maxMediaBytes??25*1024*1024);
+          if(msg){const own=(sock as {user?:{id?:string}}).user?.id?.replace(/:\d+@/,'@');
+            msg.isBotMentioned=!!own && !!msg.mentionedJids?.some(j=>j.replace(/:\d+@/,'@')===own);
+            for(const h of this.msgHandlers)await h(msg);}
+        } catch {console.warn('[WA] Pesan Baileys belum dapat diproses.');}
       }
     });
   }
@@ -155,9 +142,18 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider {
     if (!this.sock || this._state !== 'connected') {
       return { ok: false, error: `not_connected:${this._state}` };
     }
-    if (msg.media) return { ok: false, error: 'media_unsupported' };
     try {
-      const res = await this.sock.sendMessage(msg.chatJid, { text: msg.text });
+      const m=msg.media;
+      let content:Record<string,unknown>={text:msg.text};
+      if (m) {
+        if(m.asSticker) content={sticker:m.data};
+        else if(!m.asDocument && m.mimeType.startsWith('image/')) content={image:m.data,caption:msg.text};
+        else if(!m.asDocument && m.mimeType.startsWith('video/')) content={video:m.data,caption:msg.text,mimetype:m.mimeType};
+        else if(!m.asDocument && m.mimeType.startsWith('audio/')) content={audio:m.data,ptt:!!m.asVoice,mimetype:m.mimeType};
+        else content={document:m.data,fileName:m.filename||'dokumen',mimetype:m.mimeType,caption:msg.text};
+      }
+      if(msg.mentionedJids?.length) content.mentions=msg.mentionedJids;
+      const res = await this.sock.sendMessage(msg.chatJid, content);
       return res?.key?.id ? { ok: true, providerMessageId: res.key.id } : { ok: false, error: 'send_failed' };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.name : 'send_failed' };
