@@ -47,6 +47,8 @@ describe('LMS privat',()=>{
     expect(info).toContain('chat pribadi');
     expect(handle).toHaveBeenLastCalledWith(expect.objectContaining({chatType:'private',chatJid:'6281234567890@s.whatsapp.net'}),'hedy',false);
     expect(wa.sent.at(-1)?.text).not.toContain('LMS privat');
+    await bot.handleInbound({...base,chatType:'group',chatJid:'kelas@g.us',providerMessageId:'g3',text:'.lms hedy  .dashboard'});
+    expect(handle).toHaveBeenLastCalledWith(expect.objectContaining({chatType:'private'}),'hedy  .dashboard',false);
     expect(ai).not.toHaveBeenCalled();
   });
   it('memvalidasi struktur PPTX dan DOCX serta tanggal Indonesia dalam WIB',async()=>{
@@ -189,7 +191,18 @@ describe('LMS privat',()=>{
     expect(await send('namaasing')).toContain('hubungkan-nim');
     expect(await send('hedy hubungkan salah')).toContain('belum terverifikasi');
     expect(create).not.toHaveBeenCalled();
-    expect(await send('hedy hubungkan fixture')).toContain('Dashboard LMS');
+    expect(await send('daftar hedy')).toContain('Hubungkan akun LMS sekali');
+    const prompt=wa.sent.at(-1)!;
+    const reply={chatType:'private' as const,chatJid:phone,senderJid:phone,text:'fixture',receivedAt:new Date(),providerMessageId:'reply',
+      quoted:{providerMessageId:prompt.providerMessageId,text:prompt.text}};
+    expect(service.isLinkReply(reply)).toBe(true);
+    const bare={...reply,providerMessageId:'bare',quoted:undefined};
+    expect(service.isLinkReply(bare)).toBe(true);
+    expect(await service.linkReply(bare)).toContain('Gunakan Balas');
+    expect(create).not.toHaveBeenCalled();
+    expect(await service.linkReply({...reply,senderJid:'6281234567000@c.us',chatJid:'6281234567000@c.us'})).toContain('berakhir');
+    expect(await service.linkReply(reply)).toContain('Dashboard LMS');
+    expect(service.isLinkReply(reply)).toBe(false);
     const saved=create.mock.calls[0]![0].data;
     expect(saved).toMatchObject({phone,nim,alias:'hedy'});
     expect(saved.autoLogin).toBeTruthy();expect(JSON.stringify(saved)).not.toContain('fixture');

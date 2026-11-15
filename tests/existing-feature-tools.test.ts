@@ -69,6 +69,24 @@ it('mengirim DOCX dan menggunakan draf yang sama untuk PPTX tanpa menyilang pemi
   expect(complete).toHaveBeenCalledTimes(1);
 });
 
+it('melanjutkan kasus askep anak dan mengirim ulang draf yang ditolak WhatsApp',async()=>{
+  const draft={title:'Askep Anak dengan Pneumonia',sections:[{heading:'Pendahuluan',body:'Contoh draf untuk diskusi kelas.'},{heading:'Pembahasan',body:'Tujuan materi pembelajaran.'}]};
+  const complete=vi.fn(async()=>({content:JSON.stringify(draft)}));
+  const {send,wa}=await bot(new ModelRouter({openai:{complete}}));
+  expect(await send('coba buatkan makalah askep anak')).toContain('Kasus apa');
+  expect(complete).not.toHaveBeenCalled();
+  const deliver=wa.send.bind(wa);
+  const failed=vi.spyOn(wa,'send').mockImplementation(msg=>msg.media?Promise.resolve({ok:false,error:'send_failed'}):deliver(msg));
+  const reply=await send('pneumonia');
+  expect(reply).toContain('Lampiran belum terkirim');
+  expect(reply).toContain('Contoh draf untuk diskusi kelas');
+  failed.mockRestore();
+  expect(await send('.doc makalah terakhir',other)).toContain('Belum ada draf');
+  expect(await send('.doc makalah terakhir')).toContain('Askep Anak dengan Pneumonia');
+  expect(wa.sent.at(-1)?.media?.data.includes('word/document.xml')).toBe(true);
+  expect(complete).toHaveBeenCalledTimes(1);
+});
+
 it('memilih jurnal yang telah ditampilkan, menggunakan kembali nomor tanpa pencarian baru',async()=>{
   const fun=new FunAndUtilityService();
   const items=['Satu','Dua'].map(title=>({title,authors:'Penulis uji',year:'2026',journalName:'Jurnal uji',doiOrUrl:'https://doi.org/10.1234/fixture',snippet:''}));

@@ -18,6 +18,7 @@ Kirim pesan langsung ke bot. Di grup, tag bot atau awali pesan dengan “HdyBot�
 | Cek jadwal besok serta tugas hari ini | Saat model mengenali kedua permintaan, bot membaca data masing-masing dan membalas dalam satu pesan. Maksimal tiga pemeriksaan informasi per pesan. |
 | Carikan jurnal tentang diabetes → Kirim nomor dua | Bot menggunakan daftar terakhir peminta. PDF dilampirkan jika sumber dan lisensi yang didukung dapat diverifikasi. Jika tidak, bot mengirim tautan publikasi. |
 | Buatkan makalah tentang komunikasi terapeutik → Buatkan PPT dari makalah tersebut | Permintaan pertama membuat draf DOCX. Permintaan kedua memakai kembali isinya untuk membuat PPTX. Perintah titiknya adalah `.doc makalah <topik>` dan `.doc ppt`. |
+| Coba buatkan makalah askep anak → pneumonia | Bot menanyakan kasus, lalu menyiapkan DOCX dari jawabanmu. Jika pengiriman gagal, bot menampilkan cuplikan. Ketik `.doc makalah terakhir` dalam 30 menit di percakapan yang sama untuk mengirim ulang. |
 | Ambil semua PDF materi Gerontik | Bot mencari materi di akun LMS yang terhubung dengan nomor pengirim. Lampiran dikirim ke DM dalam halaman berisi maksimal empat calon dokumen. Gunakan petunjuk pada balasan untuk halaman selanjutnya. |
 | Periksa repo https://github.com/organisasi/proyek | Owner yang sudah login dapat memeriksa cabang utama, bahasa, status arsip dan lisensi repositori publik. Gunakan URL proyek yang sebenarnya. |
 

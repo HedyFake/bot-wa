@@ -13,7 +13,7 @@ import type { FileVault } from './vault.js';
 import { inspect,readSections,retrieve,type Attachment } from './inspect.js';
 import { recording,stamp,type Recording } from './recording.js';
 
-const reference=/\b(file|berkas|dokumen|gambar|foto|slide|ppt|pdf|halaman|rekaman|transkrip|video|sheet|tabel|jurnal tadi|bagian metode|lampiran|subtitle)\b/i;
+const reference=/\b(file|berkas|dokumen|gambar|foto|slide|ppt|pdf|halaman|rekaman|transkrip|video|sheet|tabel|jurnal tadi|bagian metode|lampiran|subtitle)\b|^(?:ini apa|apa ini)[?.!]*$/i;
 const sensitive=/\b(?:rekam medis|nama pasien|NIK pasien|no\.?\s*rm|pasien bernama)\s*[:=#]\s*\S/i;
 const personal=/\b(?:foto pasien|rekam medis|pasien saya|wajah pasien|identitas pasien)\b/i;
 const clear=/^(?:hapus|lupakan)\s+(?:semua\s+)?(?:file|berkas|lampiran)(?:\s+(?:saya|tadi))?[.!]?$/i;

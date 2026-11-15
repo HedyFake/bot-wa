@@ -9,9 +9,10 @@ let client: EventEmitter;
 let emitQr = true;
 let socketState: ((state: unknown) => Promise<void>) | undefined;
 const phone = vi.fn(async () => { client.emit('code', 'ABCD1234'); return 'ABCD1234'; });
+const sendMessage=vi.fn(async (_chat:string,_content:unknown,_options:unknown)=>({id:{_serialized:'sent-document'}}));
 vi.mock('whatsapp-web.js', () => ({
   default: {
-    MessageMedia: class {},
+    MessageMedia: class { constructor(readonly mimetype:string,readonly data:string,readonly filename?:string,readonly filesize?:number){} },
     LocalAuth: class {},
     Client: class extends EventEmitter {
       constructor() { super(); client = this; }
@@ -23,6 +24,7 @@ vi.mock('whatsapp-web.js', () => ({
       async inject() {}
       async initialize() { await this.inject(); if (emitQr) this.emit('qr', 'pairing-fixture'); }
       requestPairingCode = phone;
+      sendMessage=sendMessage;
       async getContactLidAndPhone(lid:string) {
         return [{lid: '81234567890@lid',pn:'628123456789@c.us'}];
       }
@@ -51,6 +53,23 @@ it('menampilkan QR privat lalu menandai sesi siap dan memproses teks tanpa penca
       client.emit('message_create',{id:{_serialized:from},from,body:'.login'});
       await expect(incoming).resolves.toMatchObject({senderJid:expected});
     }
+    const fresh={id:{_serialized:'attachment'},from:'628123456789@c.us',type:'document',hasMedia:true,_data:{filename:'catatan.txt',mimetype:'text/plain'},
+      downloadMedia:vi.fn(async()=>({data:Buffer.from('Isi dokumen').toString('base64')}))};
+    const receivedFile=new Promise(resolve=>provider.onMessage(resolve));
+    client.emit('message_create',{...fresh,hasMedia:false,downloadMedia:vi.fn(async()=>undefined),reload:vi.fn(async()=>fresh)});
+    await expect(receivedFile).resolves.toMatchObject({media:{data:Buffer.from('Isi dokumen'),filename:'catatan.txt',mimeType:'text/plain'}});
+    expect(fresh.downloadMedia).toHaveBeenCalledOnce();
+    const protectedFile=new Promise(resolve=>provider.onMessage(resolve));
+    const secretRead=vi.fn();
+    const protectedMsg={...fresh,id:{_serialized:'private-media'},hasMedia:false,downloadMedia:vi.fn(async()=>undefined)};
+    client.emit('message_create',{...protectedMsg,reload:async()=>({...protectedMsg,isViewOnce:true,downloadMedia:secretRead})});
+    await expect(protectedFile).resolves.toMatchObject({media:{error:expect.stringContaining('sekali lihat')}});
+    expect(secretRead).not.toHaveBeenCalled();
+    const sent=await provider.send({chatJid:'628123456789@s.whatsapp.net',text:'Catatan',idempotencyKey:'send-1',
+      media:{mimeType:'text/plain',data:Buffer.from('Isi dokumen'),filename:'catatan.txt'}});
+    expect(sent).toMatchObject({ok:true,providerMessageId:'sent-document'});
+    expect(sendMessage).toHaveBeenLastCalledWith('628123456789@c.us',expect.objectContaining({filename:'catatan.txt',filesize:11}),
+      expect.objectContaining({sendMediaAsDocument:true,caption:'Catatan'}));
     const getChat = vi.fn(async () => ({name:'Kelas',participants:[]}));
     const getQuotedMessage = vi.fn();
     for (const id of ['cmd-2','cmd-3']) {

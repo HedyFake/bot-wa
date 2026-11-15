@@ -93,7 +93,8 @@ it('meneruskan cuplikan sebagai masukan pengguna tanpa memberikan akses tool ke 
     expect(invoke.mock.calls[0]?.[0].tools).toBeUndefined();
     expect(invoke.mock.calls[0]?.[0].messages[0]?.content).not.toContain('Pelajaran seni');
     expect(wa.sent.every(s=>s.chatJid===msg.chatJid)).toBe(true);
-    await files.handle({...msg,providerMessageId:'next',text:'Jelaskan file tadi'});
+    expect(await files.handle({...msg,providerMessageId:'next',text:'ini apa'})).toContain('materi.txt');
+    expect(await files.handle({...msg,providerMessageId:'other',senderJid:'s2',text:'ini apa'})).toBeUndefined();
     expect(invoke).toHaveBeenCalledTimes(2);
     const pii=payload(Buffer.from('Nama pasien: Contoh Uji'),'x.txt','text/plain');
     expect(await files.handle({...msg,providerMessageId:'pii',media:pii})).toContain('Identitas pasien');

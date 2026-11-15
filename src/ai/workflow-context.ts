@@ -25,6 +25,8 @@ export class WorkflowContext {
   askCity(key:string, period:string) { this.put('city:'+key,period); }
   takeCity(key:string) { const value=this.get('city:'+key); this.entries.delete('city:'+key); return typeof value==='string' ? value : undefined; }
   saveDraft(key:string,draft:StudyDraft) { this.put('draft:'+key,draft); }
+  askTopic(key:string,subject:string) { this.put('topic:'+key,subject); }
+  takeTopic(key:string) { const value=this.get('topic:'+key); this.entries.delete('topic:'+key); return typeof value==='string' ? value : undefined; }
   draft(key:string) { const v=this.get('draft:'+key); return v && typeof v==='object' && !Array.isArray(v) ? v : undefined; }
-  clear(key:string) { this.entries.delete('draft:'+key); this.entries.delete('city:'+key); this.entries.delete('research:'+key); }
+  clear(key:string) { this.entries.delete('draft:'+key); this.entries.delete('city:'+key); this.entries.delete('research:'+key); this.entries.delete('topic:'+key); }
 }

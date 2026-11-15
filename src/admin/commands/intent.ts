@@ -39,8 +39,10 @@ export function greeting(input: string) {
 
 /** Permintaan lampiran dengan isi eksplisit, diarahkan ke generator lokal. */
 export function artifactIntent(input: string) {
-  const text = input.trim().replace(/^(?:tolong\s+)?(?:buat(?:kan)?|bikin(?:kan)?)\s+/i, '');
+  const text = input.trim().replace(/^(?:(?:coba|tolong)\s+)*(?:buat(?:kan)?|bikin(?:kan)?)\s+/i, '');
   if (text === input.trim()) return undefined;
+  const draft = /^(makalah|ppt|powerpoint|presentasi)(?:\s+(?:tentang\s+)?(.+))?$/i.exec(text);
+  if (draft) return parseCommand('.doc ' + (draft[1]!.toLowerCase()==='makalah' ? 'makalah ' : 'ppt ') + (draft[2]??''));
   const qr = /^qr(?:\s+code)?(?:\s+(?:untuk|berisi|bertuliskan|dari))?\s*[:\s]\s*([\s\S]+)$/i.exec(text);
   if (qr) return parseCommand('.qr ' + qr[1]);
   const pdf = /^(?:dokumen\s+)?pdf\s+(?:berjudul\s+)?([^|\n]+?)(?:\s*\|\s*|\s+dengan isi\s*[:\s]\s*)([\s\S]+)$/i.exec(text);
@@ -54,10 +56,8 @@ export function directIntent(input: string) {
   if (clean.startsWith('.')) return parseCommand(clean);
   const coursePdfs=/^(?:tolong\s+)?(?:ambil|kirim(?:kan)?)\s+semua\s+pdf\s+materi\s+(.+?)[.!?]*$/i.exec(clean);
   if (coursePdfs) return parseCommand('.lms materi pdf '+coursePdfs[1]);
-  const artifact = artifactIntent(input.trim().replace(/^(?:@\d+(?::\d+)?|@?hdybot|@?bot|hdy)\b[,:!\s-]*/i, ''));
+  const artifact = artifactIntent(clean);
   if (artifact) return artifact;
-  const draft = /^(?:tolong\s+)?(?:buat(?:kan)?|bikin(?:kan)?)\s+(makalah|ppt|powerpoint|presentasi)(?:\s+(?:tentang\s+)?(.+))?$/i.exec(clean);
-  if (draft) return parseCommand('.doc ' + (draft[1]!.toLowerCase()==='makalah' ? 'makalah ' : 'ppt ') + (draft[2]??''));
   const repo = /^(?:tolong\s+)?(?:periksa|cek|inspeksi|install|pasang)\s+(?:repo(?:sitor[y i])?\s+)?(https:\/\/github\.com\/\S+)$/i.exec(clean);
   if (repo) return parseCommand('.repo ' + repo[1]);
   const weather = /^(?:(?:apa|bagaimana|gimana|tolong|cek|periksa|lihat|prakiraan|ramalan|coba|kondisi)\s+)*(?:cuaca|weather)(?:nya)?\b(.*)$/i.exec(clean);

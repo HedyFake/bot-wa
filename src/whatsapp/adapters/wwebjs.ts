@@ -98,7 +98,7 @@ interface WWebMessageLike {
   isForwarded?: boolean;
   timestamp?: number;
   mentionedIds?: string[];
-  _data?: { notifyName?: string; mentionedJidList?: string[]; isEphemeral?:boolean; isViewOnce?:boolean; ephemeralDuration?:number; size?:number; mimetype?:string };
+  _data?: { notifyName?: string; mentionedJidList?: string[]; isEphemeral?:boolean; isViewOnce?:boolean; ephemeralDuration?:number; size?:number; mimetype?:string; filename?:string; caption?:string };
   getContact?: () => Promise<{ number?: string; id?: { user?: string; _serialized?: string } }>;
   getChat?: () => Promise<{
     name?: string;
@@ -110,6 +110,7 @@ interface WWebMessageLike {
     }>;
   }>;
   downloadMedia?: () => Promise<WWebDownloadedMedia | undefined>;
+  reload?: () => Promise<WWebMessageLike | null>;
   getQuotedMessage?: () => Promise<WWebMessageLike | undefined>;
 }
 
@@ -129,7 +130,7 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
   private msgHandlers: Array<(m: InboundMessage) => Promise<void> | void> = [];
   private stateHandlers: Array<(s: ConnectionState) => void> = [];
   private readonly botSentIds = new Set<string>();
-  private MessageMediaCtor: (new (mimetype: string, data: string, filename?: string) => unknown) | null = null;
+  private MessageMediaCtor: (new (mimetype: string, data: string, filename?: string, filesize?:number) => unknown) | null = null;
   private connectingPromise: Promise<void> | null = null;
   private qrCount = 0;
   private qrOnly = false;
@@ -649,30 +650,48 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
     });
 
     const isProtected = (msgObj: WWebMessageLike) => msgObj.isEphemeral || msgObj.isViewOnce || msgObj._data?.isEphemeral || msgObj._data?.isViewOnce || Number(msgObj._data?.ephemeralDuration)>0 || /view_once|ephemeral/i.test(msgObj.type??'');
+    const hasAttachment=(m:WWebMessageLike)=>m.hasMedia || ['document','image','audio','ptt','video','sticker'].includes(m.type??'');
     const extractMedia = async (msgObj: WWebMessageLike): Promise<InboundMediaPayload | undefined> => {
       const protectedMedia=isProtected(msgObj);
-      if (!msgObj.hasMedia && !protectedMedia) return undefined;
+      if (!hasAttachment(msgObj) && !protectedMedia) return undefined;
       const failure=(error:string):InboundMediaPayload=>({kind:'document',mimeType:msgObj._data?.mimetype??'',sizeBytes:0,error});
       if(protectedMedia)return failure('Media sekali lihat atau pesan sementara tidak dapat diproses.');
       const limit=this.opts.maxMediaBytes??25*1024*1024;
       if((msgObj._data?.size??0)>limit)return failure('Lampiran melebihi batas ukuran bot.');
       if(typeof msgObj.downloadMedia!=='function')return failure('Media tidak tersedia dari WhatsApp.');
-      try {
-        const downloaded = await msgObj.downloadMedia();
-        if (!downloaded?.data || !downloaded?.mimetype) return failure('Media tidak tersedia dari WhatsApp.');
+      let expired=false;
+      const unavailable='WhatsApp belum menyediakan isi lampiran. Kirim ulang file asli sebagai dokumen.';
+      const read=async()=>{
+        let downloaded = await msgObj.downloadMedia?.().catch(()=>undefined);
+        if (!downloaded?.data && !expired && msgObj.reload) {
+          const fresh=await msgObj.reload();
+          if(!fresh || expired || fresh.id?._serialized!==msgObj.id?._serialized)return failure(unavailable);
+          if(isProtected(fresh))return failure('Media sekali lihat atau pesan sementara tidak dapat diproses.');
+          if((fresh._data?.size??0)>limit)return failure('Lampiran melebihi batas ukuran bot.');
+          msgObj=fresh;
+          downloaded=await fresh.downloadMedia?.();
+        }
+        const mime=downloaded?.mimetype || msgObj._data?.mimetype;
+        if (!downloaded?.data || !mime) return failure(unavailable);
         if (downloaded.data.length > Math.ceil(limit / 3) * 4) return failure('Lampiran melebihi batas ukuran bot.');
         const buf = Buffer.from(downloaded.data, 'base64');
         if(buf.length>limit)return failure('Lampiran melebihi batas ukuran bot.');
         return {
-          mimeType: downloaded.mimetype,
+          mimeType: mime,
           sizeBytes: buf.byteLength,
-          kind: classifyMimeKind(downloaded.mimetype, msgObj.type),
+          kind: classifyMimeKind(mime, msgObj.type),
           data: buf,
-          filename: downloaded.filename,
+          filename: downloaded.filename || msgObj._data?.filename,
         };
+      };
+      let timer:ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([read(),new Promise<InboundMediaPayload>(resolve=>{
+          timer=setTimeout(()=>{expired=true;resolve(failure('Unduhan WhatsApp melewati batas waktu. Coba kirim ulang file asli.'));},45_000);
+        })]);
       } catch {
-        return failure('WhatsApp gagal mengunduh lampiran.');
-      }
+        return failure(unavailable);
+      } finally { clearTimeout(timer); }
     };
 
     const groupNames = new Map<string, { name: string; until: number }>();
@@ -684,8 +703,8 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
       const msgId = String(m.id?._serialized ?? `${Date.now()}`);
       if (this.botSentIds.has(msgId)) return;
 
-      const text = String(m.body ?? '').trim();
-      if (!text && !m.hasMedia && !isProtected(m)) return;
+      const text = String(hasAttachment(m) && !m.hasMedia ? m._data?.caption ?? '' : m.body ?? '').trim();
+      if (!text && !hasAttachment(m) && !isProtected(m)) return;
 
       // Pesan keluar (termasuk isi relay) tidak boleh masuk kembali sebagai perintah.
       if (m.fromMe) return;
@@ -899,8 +918,9 @@ export class WWebJsWhatsAppProvider implements WhatsAppProvider {
           msg.media.mimeType,
           msg.media.data.toString('base64'),
           msg.media.filename,
+          msg.media.data.length,
         );
-        if (msg.media.asDocument) options.sendMediaAsDocument = true;
+        if (msg.media.asDocument || /^(application|text)\//i.test(msg.media.mimeType)) options.sendMediaAsDocument = true;
         if (msg.media.asSticker) {
           options.sendMediaAsSticker = true;
           options.stickerAuthor = 'HdyBot — Nursing Class A';

@@ -1,4 +1,4 @@
-import { LmsService, lmsHelp } from '../../modules/lms/service.js';
+import { LmsService, lmsHelp, lmsLinkPrompt } from '../../modules/lms/service.js';
 import { z } from 'zod';
 import { conversationTools } from '../../ai/tool-registry.js';
 import { existingFeatureTools } from '../../ai/existing-feature-tools.js';
@@ -325,7 +325,7 @@ export class CommandDispatcher {
           media: out.media,
           idempotencyKey: `grp-reply-${msg.providerMessageId}`,
         });
-        if (out.media && !delivery.ok) { if (parsedGroup.command==='download') await this.recordDelivery(msg,parsedGroup.args[0]!,delivery); return this.failedAttachment(msg); }
+        if (out.media && !delivery.ok) { if (parsedGroup.command==='download') await this.recordDelivery(msg,parsedGroup.args[0]!,delivery); return this.failedAttachment(msg,delivery.error,out.draft); }
         if (out.draft && delivery.ok && !delivery.dryRun) this.workflows.saveDraft(conversationKey(msg),out.draft);
         if (out.researchItems && delivery.ok && !delivery.dryRun) this.workflows.saveResearch(conversationKey(msg), out.researchItems);
         if (parsedGroup.command === 'download' && out.media) await this.recordDelivery(msg, parsedGroup.args[0]!, delivery);
@@ -554,10 +554,17 @@ export class CommandDispatcher {
     }
 
     // Jalur privat ini mendahului AI, histori grup, konfirmasi admin dan pencatatan perintah mentah.
+    if (msg.quoted?.text?.startsWith(lmsLinkPrompt) || this.deps.lms?.isLinkReply?.(msg)) {
+      if (msg.chatType!=='private') return null;
+      if (this.deps.lms) return this.deps.lms.linkReply(msg);
+      const text='LMS belum aktif. Coba lagi setelah layanan tersedia.';
+      await this.replyPrivate(msg,text);
+      return text;
+    }
     const addressed = msg.chatType==='private' || msg.isBotMentioned || /^@?(?:hdybot|bot)\b/i.test(msg.text);
     const lmsMatch = msg.text.trim().match(/^(?:\.lms|(?:@(?:\d+(?::\d+)?|hdybot|bot)|hdybot|bot)\s+(?:buka\s+)?\.?lms|(?:buka\s+)?lms)(?:\s+([\s\S]*))?$/i);
     if (lmsMatch && (addressed || /^\.lms\b/i.test(msg.text.trim()) || /\b(?:login|hubungkan|hubungkan-nim)\b/i.test(msg.text))) {
-      const input=lmsMatch[1]??'help';
+      const input=(lmsMatch[1]??'help').trim().replace(/^daftar\s+([a-z][a-z0-9_-]*)$/i,'$1');
       if (msg.chatType === 'group') {
         // Jangan teruskan kredensial, kutipan, atau media grup ke alur privat.
         if (/\b(?:login|hubungkan|hubungkan-nim|daftar)\b/i.test(input)) return null;
@@ -565,7 +572,7 @@ export class CommandDispatcher {
         const phone = normalizeE164(msg.senderJid);
         const [alias, operation = 'dashboard'] = input.toLowerCase().trim().split(/\s+/);
         const readOnly = !['daftar','sync'].includes(alias ?? '') &&
-          ['dashboard','status','matkul','detail','dosen','materi','tugas','deadline','kuis','cari'].includes(operation);
+          ['dashboard','status','matkul','detail','dosen','materi','tugas','deadline','kuis','cari'].includes(operation.replace(/^\./,''));
         let notice = '🎓 Buka chat pribadi bot dan ketik .lms <nama> dari nomor WhatsApp milikmu.';
         if (phone && readOnly && this.deps.lms) {
           const dm = e164ToJid(phone);
@@ -736,7 +743,7 @@ export class CommandDispatcher {
     const out = await this.executePublicOrAdmin(parsed, msg, decision.actorJid);
     if (out) {
       const delivery = await this.replyPrivate(msg, out.text, out.media);
-      if (out.media && !delivery.ok) { if (parsed.command==='download') await this.recordDelivery(msg,parsed.args[0]!,delivery); return this.failedAttachment(msg); }
+      if (out.media && !delivery.ok) { if (parsed.command==='download') await this.recordDelivery(msg,parsed.args[0]!,delivery); return this.failedAttachment(msg,delivery.error,out.draft); }
       if (out.draft && delivery.ok && !delivery.dryRun) this.workflows.saveDraft(conversationKey(msg),out.draft);
       if (out.researchItems && delivery.ok && !delivery.dryRun) this.workflows.saveResearch(conversationKey(msg), out.researchItems);
       if (parsed.command === 'download' && out.media) await this.recordDelivery(msg, parsed.args[0]!, delivery);
@@ -744,8 +751,14 @@ export class CommandDispatcher {
     return out?.text ?? null;
   }
 
-  private async failedAttachment(msg:InboundMessage) {
-    const text='Lampiran belum terkirim. Periksa ukuran, format, atau koneksi WhatsApp.';
+  private async failedAttachment(msg:InboundMessage,reason?:string,draft?:StudyDraft) {
+    let text='Lampiran belum terkirim. '+(reason==='invalid_or_oversized_attachment'?'Ukuran atau format berkas ditolak oleh bot.':
+      reason?.startsWith('not_connected')?'WhatsApp bot sedang terputus.':'WhatsApp belum mengonfirmasi pengiriman berkas.');
+    if(draft){
+      this.workflows.saveDraft(conversationKey(msg),draft);
+      const preview=draft.sections.map(s=>'*'+s.heading+'*\n'+s.body).join('\n\n');
+      text+='\n\nKetik .doc makalah terakhir untuk mengirim ulang draf di percakapan ini.\n\n📄 *'+draft.title+'*\n\n'+preview.slice(0,2800);
+    }
     this.recordAudit(msg.senderJid,'media.delivery','failed',msg.providerMessageId);
     await this.deps.outbound.send({chatJid:msg.chatJid,text,quotedMessageId:msg.providerMessageId,idempotencyKey:'delivery-error:'+msg.providerMessageId},{isAdminPrivateReply:msg.chatType==='private' && this.deps.auth.evaluate(msg).allowed});
     return text;
@@ -789,6 +802,11 @@ export class CommandDispatcher {
 
   private async resolveIntent(msg: InboundMessage, raw: string) {
     const key = conversationKey(msg);
+    const subject = this.workflows.takeTopic(key);
+    const topic=raw.replace(/^(?:@\d+|@?hdybot|@?bot)\s+/i,'').trim();
+    if(subject!==undefined && /^[\p{L}\p{N}][\p{L}\p{N} ,()-]{0,99}$/u.test(topic) && !directIntent(raw) && !greeting(raw) &&
+       !/^(?:batal|jangan|apa|kenapa|bagaimana|tolong|kirim|buka)\b/i.test(topic))
+      return parseCommand('.doc makalah '+[subject,topic].filter(Boolean).join(' — '));
     const period = this.workflows.takeCity(key);
     const city = raw.replace(/^(?:@\d+|@?hdybot|@?bot)\s+/i,'').replace(/^di\s+/i,'').trim();
     if (period !== undefined && /^[\p{L}][\p{L} .'-]{0,60}$/u.test(city) && !directIntent(raw) && !greeting(raw) && city.split(/\s+/).length <= 4 && !/\b(tolong|kirim|buka|saya|aku|batal|jangan|kenapa|apa|bagaimana)\b/i.test(city))
@@ -1703,10 +1721,14 @@ export class CommandDispatcher {
       case 'doc.study': {
         const slides = parsed.args[0]?.toLowerCase()==='ppt';
         const topic = parsed.args.slice(1).join(' ').trim();
-        const previous = slides && (!topic || /^(?:dari\s+)?(?:makalah|draf|dokumen)(?:\s+(?:itu|tersebut|tadi))?[.!]?$/i.test(topic));
+        if (!slides && (!topic || /^(?:askep|asuhan keperawatan) anak[.!]?$/i.test(topic))) {
+          this.workflows.askTopic(conversationKey(msg),topic);
+          return textOnly(topic?'Kasus apa untuk makalah askep anak? Balas dengan topiknya, misalnya pneumonia.':'Makalah tentang topik apa yang ingin kamu buat?');
+        }
+        const previous = topic==='terakhir' || (slides && (!topic || /^(?:dari\s+)?(?:makalah|draf|dokumen)(?:\s+(?:itu|tersebut|tadi))?[.!]?$/i.test(topic)));
         try {
           const draft = previous ? this.workflows.draft(conversationKey(msg)) : topic ? await composeDraft(router,topic) : undefined;
-          if (!draft) return textOnly(previous ? 'Belum ada draf makalah di percakapan ini. Presentasi tentang topik apa?' : 'Makalah tentang topik apa yang ingin kamu buat?');
+          if (!draft) return textOnly('Belum ada draf makalah di percakapan ini. Ketik buatkan makalah tentang topik yang kamu pilih.');
           let media: OutboundMediaPayload;
           try {
             media = await renderDraft(draft,slides,config.MEDIA_MAX_MB * 1024 * 1024);

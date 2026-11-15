@@ -11,7 +11,8 @@ import { documentPayload } from './document.js';
 import { lmsDate } from './dates.js';
 import { CLASS_MEMBERS_5A } from '../fun/fun-utility-service.js';
 
-export const lmsHelp='🎓 *LMS mahasiswa*\n\nKetik .lms <nama> di DM atau grup, misalnya .lms hedy. Bot membalas ke nomor pengirim. Saat pertama kali, ikuti petunjuk di DM.\n\n.lms <nama> dashboard | matkul | materi | tugas | deadline | kuis\n.lms <nama> materi kirim <ID> [nomor file]\n.lms <nama> sync | status | logout\n\nTambahkan page 2 untuk halaman berikutnya.';
+export const lmsHelp='🎓 *LMS mahasiswa*\n\nKetik .lms hedy (ganti hedy dengan nama panggilanmu). Pada akses pertama, hubungkan akun sendiri sekali lewat chat pribadi. Setelah itu perintah yang sama langsung membuka dashboard.\n\n.lms <nama> matkul | materi | tugas | deadline | kuis\n.lms <nama> materi kirim <ID>\n.lms <nama> logout';
+export const lmsLinkPrompt='🎓 *Hubungkan akun LMS sekali*';
 interface State {cookie:string; dashboard:string; logout?:boolean; catalog:Catalog; seen:string[]; alerts:string[]; history:string[]}
 const stamp=(date:string|Date)=>new Date(date).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB';
 const match=(i:Item,q:string)=>[i.title,i.course,...Object.values(i.fields)].join(' ').toLowerCase().includes(q.toLowerCase());
@@ -29,6 +30,7 @@ export function listItems(items:Item[],page:number,title:string) {
 
 export class LmsService {
   private busy=new Set<string>();
+  private prompts=new Map<string,{alias:string;needsNim:boolean;id:string;until:number}>();
   private shutdown=new AbortController();
   constructor(private db:PrismaClient,private key:Buffer,private router:ModelRouter,private outbound:OutboundGate,
     private interval:number,private maxBytes:number,private client=(cookie:string,signal?:AbortSignal)=>new LmsClient(cookie,fetch,signal),
@@ -49,6 +51,42 @@ export class LmsService {
     return {cookie:client.cookie,dashboard:first.url,logout:first.logout,catalog,alerts:[],seen:[],history:[stamp(catalog.checked)+' · login']};
   }
 
+  private async promptLink(msg:InboundMessage,phone:string,alias:string,needsNim:boolean) {
+    const fields=needsNim?'<NIM sendiri> <password LMS>':'<password LMS>';
+    const command='.lms '+alias+' '+(needsNim?'hubungkan-nim ':'hubungkan ')+fields;
+    const text=lmsLinkPrompt+'\n\nGunakan Balas pada pesan ini, lalu kirim '+fields+'. Atau ketik '+command+
+      '.\n\nDengan menghubungkan akun, kamu mengizinkan bot menyimpan login terenkripsi untuk akses berikutnya. Ketik .lms batal untuk menutup permintaan, atau .lms '+alias+' logout untuk mencabut akses.';
+    const result=await this.outbound.send({chatJid:msg.chatJid,text,idempotencyKey:'lms-link:'+msg.providerMessageId});
+    if(result.ok && !result.dryRun && result.providerMessageId){
+      this.prompts.delete(phone);
+      if(this.prompts.size>=512)this.prompts.delete(this.prompts.keys().next().value!);
+      this.prompts.set(phone,{alias,needsNim,id:result.providerMessageId,until:Date.now()+600000});
+    }
+    return text;
+  }
+  isLinkReply(msg:InboundMessage) {
+    const phone=normalizeE164(msg.senderJid), id=msg.quoted?.providerMessageId;
+    const prompt=phone?this.prompts.get(phone):undefined;
+    if (!prompt) return false;
+    if (id===prompt.id) return true;
+    return msg.chatType==='private' && !id && prompt.until>=Date.now() && !/^\s*\.lms\b/i.test(msg.text);
+  }
+  async linkReply(msg:InboundMessage) {
+    if(msg.chatType==='private' && /^\s*\.lms\s+batal\s*$/i.test(msg.text))return this.handle(msg,'batal',false);
+    const phone=normalizeE164(msg.senderJid);
+    const prompt=phone?this.prompts.get(phone):undefined;
+    if(msg.chatType==='private' && prompt && prompt.until>=Date.now() && !msg.quoted?.providerMessageId){
+      const text='Gunakan Balas pada pesan Hubungkan akun LMS sekali, atau ketik .lms batal untuk kembali mengobrol.';
+      await this.outbound.send({chatJid:msg.chatJid,text,idempotencyKey:'lms-reply:'+msg.providerMessageId});
+      return text;
+    }
+    if(msg.chatType!=='private' || !phone || !prompt || prompt.until<Date.now() || msg.quoted?.providerMessageId!==prompt.id){
+      const text='Permintaan login sudah berakhir. Ketik .lms <nama> di chat pribadi untuk memulai kembali.';
+      if(msg.chatType==='private')await this.outbound.send({chatJid:msg.chatJid,text,idempotencyKey:'lms-expired:'+msg.providerMessageId});
+      return text;
+    }
+    return this.handle(msg,prompt.alias+' '+(prompt.needsNim?'hubungkan-nim ':'hubungkan ')+msg.text,false);
+  }
   private async linkStudent(phone:string,alias:string,input:string) {
     if(!/^[a-z][a-z0-9_-]{0,30}$/.test(alias) || ['help','sync','daftar'].includes(alias)) {
       return 'Ketik .lms <nama panggilan>, misalnya .lms hedy.';
@@ -72,6 +110,7 @@ export class LmsService {
     const account=await this.db.lmsAccount.create({data:{phone,nim,alias,consentAt:new Date(),
       autoLogin:seal(this.key,'login|'+identity,password),encrypted:seal(this.key,identity,state),
       nextSyncAt:new Date(Date.now()+(state.catalog.partial?60_000:this.interval))}});
+    this.prompts.delete(phone);
     return this.dashboard(account,state.catalog);
   }
   private async save(a:LmsAccount,state:State) {
@@ -118,8 +157,10 @@ export class LmsService {
       if(chatPhone || msg.chatJid.endsWith('@lid')) await send(notice);
       return notice;
     }
-    let words=input.trim().split(/\s+/);
+    input=input.trim().replace(/^daftar\s+([a-z][a-z0-9_-]*)$/i,'$1');
+    let words=input.split(/\s+/);
     const alias=words.shift()?.toLowerCase();
+    if(alias==='batal'){this.prompts.delete(phone);const text='Permintaan menghubungkan akun ditutup.';await send(text);return text;}
     if(alias==='help' || !alias){await send(lmsHelp);return lmsHelp;}
     if(this.busy.has(phone)){await send('Proses LMS sedang berjalan. Coba sebentar lagi.');return '';}
     if(this.busy.size>=4){await send('LMS sedang melayani permintaan lain. Coba sebentar lagi.');return '';}
@@ -135,15 +176,22 @@ export class LmsService {
         return answer('Identitas LMS terdaftar. Mahasiswa dapat memberikan izin melalui DM sendiri.');
       }
       account=await this.db.lmsAccount.findUnique({where:{phone}});
-      if(!account) return answer(await this.linkStudent(phone,alias,input));
-      if(alias!==account.alias && !(alias==='sync' && (words[0]===account.alias || ['status','now','pause','resume','history'].includes(words[0]??''))))
-        return answer('Akun belum terdaftar untuk identitas ini. Hubungi owner melalui DM.');
+      const members=CLASS_MEMBERS_5A.filter(m=>m.name.toLowerCase().split(/\s+/).includes(alias));
+      if(!account){
+        if(/^[a-z][a-z0-9_-]{0,30}$/.test(alias) && !['sync','setuju','masuk','logout'].includes(alias) && !/^hubungkan(?:-nim)?$/i.test(words[0]??''))
+          return await this.promptLink(msg,phone,alias,members.length!==1);
+        if(['sync','setuju','masuk','logout'].includes(alias))return answer('Mulai dengan .lms <nama>, misalnya .lms hedy.');
+        return answer(await this.linkStudent(phone,alias,input));
+      }
+      if(alias!==account.alias.toLowerCase() && !(members.length===1 && members[0]!.nim===account.nim) && !(alias==='sync' && (words[0]===account.alias || ['status','now','pause','resume','history'].includes(words[0]??''))))
+        return answer('Nomor WhatsApp ini terhubung dengan nama '+account.alias+'. Untuk membuka akunmu, ketik .lms '+account.alias+'.');
       const a=account;
       if(alias==='sync' && words[0]===a.alias) words.shift();
       if(alias==='sync') words.unshift('sync');
-      const op=words.shift()?.toLowerCase()||'dashboard', sub=words[0]?.toLowerCase()??'';
+      const op=words.shift()?.replace(/^\./,'').toLowerCase()||'dashboard', sub=words[0]?.toLowerCase()??'';
       await this.db.auditLog.create({data:{actor:phone,action:'lms.command',target:a.nim,result:['login','setuju','logout','sync','materi','tugas','kuis','dashboard','ask','summarize','flashcard'].includes(op)?op:'akses'}});
       if(['logout','cabut','hapus'].includes(op)){
+        this.prompts.delete(phone);
         let old: State | undefined;
         try { if(a.encrypted)old=this.state(a); } catch { /* Tetap cabut cache bila kunci berubah. */ }
         await this.db.lmsAccount.update({where:{phone},data:{consentAt:null,aiConsent:false,encrypted:null,autoLogin:null,paused:true,notify:false,failures:0,revision:{increment:1}}});
@@ -154,7 +202,8 @@ export class LmsService {
         await this.db.lmsAccount.update({where:{phone},data:{consentAt:new Date()}});
         return answer('Izin baca LMS dicatat. Ketik .lms '+a.alias+' login <password LMS> di DM ini. Hapus pesan berisi password dari WhatsApp setelah login.');
       }
-      if(!a.consentAt && op!=='hubungkan') return answer('Di DM ini, ketik .lms '+a.alias+' hubungkan <password LMS> untuk mengizinkan akses dan login ulang dengan kredensial terenkripsi. Untuk memakai sesi saja, ketik .lms '+a.alias+' setuju.');
+      if(op==='dashboard' && (!a.consentAt || (!a.encrypted && !a.autoLogin))) return await this.promptLink(msg,phone,a.alias,false);
+      if(!a.consentAt && op!=='hubungkan') return answer('Ketik .lms '+a.alias+' hubungkan <password LMS> di DM ini untuk menghubungkan akun, atau .lms '+a.alias+' setuju untuk login sekali.');
       if(op==='status' || (op==='sync' && sub==='status')) return answer('🎓 *Status LMS*\n\nSesi tersimpan: '+(a.encrypted?'ya':'belum')+'\nSinkronisasi: '+(a.paused?'dijeda':'aktif')+'\nNotifikasi: '+(a.notify?'aktif':'mati')+'\nAI: '+(a.aiConsent?'diizinkan':'mati'));
       if(op==='ai' || op==='notif' || (op==='sync' && ['pause','resume'].includes(sub))) {
         if(op!=='sync' && !['on','off'].includes(sub)) return answer('Gunakan ai on/off, notif on/off atau sync pause/resume.');
@@ -185,6 +234,7 @@ export class LmsService {
           autoLogin:op==='hubungkan'?seal(this.key,'login|'+keyFor(a),password):renew?a.autoLogin:null,
           loginAttempts:0,loginAfter:null,failures:0,paused:false,nextSyncAt:new Date(Date.now()+(session.catalog.partial?60_000:this.interval))}});
         if(!saved.count) throw new LmsError('Status akun berubah. Ulangi perintah.');
+        this.prompts.delete(phone);
         return answer(this.dashboard(a,session.catalog));
       }
       if(!a.encrypted) return answer(a.autoLogin?'Sesi perlu diperbarui. Ketik .lms '+a.alias+' untuk login otomatis.':'Belum ada sesi. Untuk login otomatis, ketik .lms '+a.alias+' hubungkan <password LMS> di DM. Untuk memakai sesi saja, ketik .lms '+a.alias+' login <password LMS>.');
@@ -294,7 +344,12 @@ export class LmsService {
       return body;
     } catch(e) {
       if(e instanceof SessionExpired && account) await this.expire(account);
-      const text=e instanceof LmsError?e.message:'Permintaan LMS belum berhasil. Periksa akun, izin, format dokumen, atau koneksi LMS. Gunakan .lms help.';
+      const code=e && typeof e==='object' && 'code' in e ? e.code : undefined;
+      const text=e instanceof LmsError?e.message:
+        code==='P2002'?'Nomor atau akun LMS sudah terhubung. Ketik .lms <nama> dari nomor yang terhubung.':
+        code==='P2021'||code==='P2022'?'Struktur database LMS perlu diperbarui di server.':
+        code==='P1001'||code==='P1002'?'Database LMS belum dapat dijangkau. Coba lagi sebentar.':
+        'Permintaan LMS belum berhasil. Periksa akun, izin, format dokumen, atau koneksi LMS. Gunakan .lms help.';
       await send(text);return text;
     } finally {this.busy.delete(phone);}
   }
